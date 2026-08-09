@@ -1,25 +1,14 @@
+<p align="center">
+  <img src="Image/logo.svg" alt="WebWindowUI" width="128">
+</p>
+
 # WebWindowUI
 
 C# 后端 + WebView 渲染 + Vue 前端 的跨平台桌面应用框架。
 
 前后端通信使用 **MVVM 模式**，从 .NET 模型自动生成通信协议（protobuf），通信使用**二进制交互**提升效率。
 
-```
-┌────────────────────────────────────────────────┐
-│  前端（Vue3 + Vite）                             │
-│  src/window/<窗口路径>/  →  webwindowui-bridge    │
-└──────────────┬─────────────────────────────────┘
-               │ 二进制 protobuf（快照 / 增量 update / 集合 patch / 命令 invoke / 回写 set）
-┌──────────────▼─────────────────────────────────┐
-│  .NET 模型（WebWindowModel）                     │
-│  源生成器：字段 → proto 消息 + 写回代码 + descriptor│
-│  命令： [RelayCommand] 方法 → 前端可调用          │
-└──────────────┬─────────────────────────────────┘
-               │ 跨平台窗口
-   ┌───────────┼─────────────┐
- Windows       Linux         macOS
- WebView2    WebKit2GTK     WKWebView
-```
+![架构](Image/architecture.svg)
 
 ## 特性
 

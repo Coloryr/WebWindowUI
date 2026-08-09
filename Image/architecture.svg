@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 620" font-family="Segoe UI, 'Microsoft YaHei', sans-serif">
+  <defs>
+    <linearGradient id="box" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#eef2f7"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 背景 -->
+  <rect x="0" y="0" width="900" height="620" rx="16" fill="#0f172a"/>
+  <rect x="10" y="10" width="880" height="600" rx="12" fill="none" stroke="#1e40af" stroke-width="2"/>
+
+  <!-- ============ 左：后端（.NET 模型库） ============ -->
+  <rect x="40" y="50" width="320" height="300" rx="10" fill="#1e293b" stroke="#334155"/>
+  <text x="200" y="78" text-anchor="middle" fill="#93c5fd" font-size="15" font-weight="600">后端（.NET 模型库）</text>
+
+  <!-- 模型类 -->
+  <rect x="58" y="96" width="284" height="84" rx="8" fill="url(#box)" stroke="#3b82f6"/>
+  <text x="200" y="120" text-anchor="middle" fill="#1d4ed8" font-size="13" font-weight="600">模型类 *Model.cs</text>
+  <text x="200" y="142" text-anchor="middle" fill="#475569" font-size="11">WebWindowModel · 集合属性</text>
+  <text x="200" y="162" text-anchor="middle" fill="#475569" font-size="11">[RelayCommand] 命令</text>
+
+  <!-- 源生成器 -->
+  <rect x="58" y="194" width="284" height="140" rx="8" fill="url(#box)" stroke="#3b82f6"/>
+  <text x="200" y="218" text-anchor="middle" fill="#1d4ed8" font-size="13" font-weight="600">源生成器（Roslyn）</text>
+  <text x="200" y="240" text-anchor="middle" fill="#475569" font-size="11">Proto.g.cs（protobuf 消息）</text>
+  <text x="200" y="260" text-anchor="middle" fill="#475569" font-size="11">WriteBack.g.cs（写回 / POCO）</text>
+  <text x="200" y="280" text-anchor="middle" fill="#475569" font-size="11">bridge/*.json（descriptor）</text>
+  <text x="200" y="300" text-anchor="middle" fill="#475569" font-size="11">models/*.ts（TS 镜像 + 助手）</text>
+
+  <!-- ============ 中间：生成流箭头（后端 → 前端） ============ -->
+  <line x1="362" y1="264" x2="536" y2="264" stroke="#fbbf24" stroke-width="3"/>
+  <polygon points="540,264 529,257 529,271" fill="#fbbf24"/>
+  <text x="450" y="246" text-anchor="middle" fill="#fbbf24" font-size="12" font-weight="600">生成（构建期）</text>
+  <text x="450" y="290" text-anchor="middle" fill="#94a3b8" font-size="11">descriptor + TS</text>
+
+  <!-- ============ 右：前端（Vue3 + Vite） ============ -->
+  <rect x="540" y="50" width="320" height="300" rx="10" fill="#1e293b" stroke="#334155"/>
+  <text x="700" y="78" text-anchor="middle" fill="#93c5fd" font-size="15" font-weight="600">前端（Vue3 + Vite）</text>
+
+  <!-- 消费生成物 -->
+  <rect x="558" y="96" width="284" height="84" rx="8" fill="url(#box)" stroke="#3b82f6"/>
+  <text x="700" y="120" text-anchor="middle" fill="#1d4ed8" font-size="13" font-weight="600">src/models/*.ts</text>
+  <text x="700" y="142" text-anchor="middle" fill="#475569" font-size="11">生成的 TS 模型镜像 · 强类型</text>
+  <text x="700" y="162" text-anchor="middle" fill="#475569" font-size="11">双向绑定（v-model 回写）</text>
+
+  <!-- 桥 -->
+  <rect x="558" y="194" width="284" height="140" rx="8" fill="url(#box)" stroke="#3b82f6"/>
+  <text x="700" y="218" text-anchor="middle" fill="#1d4ed8" font-size="13" font-weight="600">webwindowui-bridge</text>
+  <text x="700" y="240" text-anchor="middle" fill="#475569" font-size="11">bridge/*.json（descriptor）</text>
+  <text x="700" y="260" text-anchor="middle" fill="#475569" font-size="11">快照 / 增量 / 集合 patch</text>
+  <text x="700" y="280" text-anchor="middle" fill="#475569" font-size="11">命令 invoke / 回写 set</text>
+  <text x="700" y="300" text-anchor="middle" fill="#475569" font-size="11">Root.fromJSON · bindModel</text>
+
+  <!-- ============ 运行时通道（双向） ============ -->
+  <line x1="200" y1="350" x2="200" y2="376" stroke="#60a5fa" stroke-width="3"/>
+  <polygon points="200,382 193,372 207,372" fill="#60a5fa"/>
+  <line x1="700" y1="350" x2="700" y2="376" stroke="#60a5fa" stroke-width="3"/>
+  <polygon points="700,382 693,372 707,372" fill="#60a5fa"/>
+
+  <rect x="40" y="384" width="820" height="56" rx="10" fill="url(#box)" stroke="#3b82f6" stroke-width="2"/>
+  <text x="450" y="407" text-anchor="middle" fill="#1d4ed8" font-size="14" font-weight="700">运行时 · 二进制 protobuf（双向）</text>
+  <text x="450" y="428" text-anchor="middle" fill="#475569" font-size="12">快照 snapshot · 增量 update · 集合 patch · 命令 invoke · 回写 set</text>
+
+  <!-- ============ 跨平台窗口 ============ -->
+  <line x1="450" y1="440" x2="450" y2="460" stroke="#60a5fa" stroke-width="3"/>
+  <polygon points="450,466 443,456 457,456" fill="#60a5fa"/>
+
+  <rect x="40" y="468" width="820" height="118" rx="10" fill="#1e293b" stroke="#334155"/>
+  <text x="450" y="494" text-anchor="middle" fill="#93c5fd" font-size="15" font-weight="600">跨平台窗口（WebWindow）</text>
+  <rect x="60" y="510" width="240" height="42" rx="8" fill="url(#box)" stroke="#3b82f6"/>
+  <text x="180" y="536" text-anchor="middle" fill="#1d4ed8" font-size="13">Windows · WebView2</text>
+  <rect x="330" y="510" width="240" height="42" rx="8" fill="url(#box)" stroke="#3b82f6"/>
+  <text x="450" y="536" text-anchor="middle" fill="#1d4ed8" font-size="13">Linux · WebKit2GTK</text>
+  <rect x="600" y="510" width="240" height="42" rx="8" fill="url(#box)" stroke="#3b82f6"/>
+  <text x="720" y="536" text-anchor="middle" fill="#1d4ed8" font-size="13">macOS · WKWebView</text>
+  <text x="450" y="574" text-anchor="middle" fill="#64748b" font-size="11">前端与 .NET 模型经桥双向绑定，窗口是承载层</text>
+</svg>
