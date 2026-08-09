@@ -1,0 +1,163 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #f5f6f8;
+  color: #1f2430;
+}
+
+.shell {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+}
+
+.header h1 {
+  font-size: 22px;
+}
+
+.subtitle {
+  color: #5a6472;
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e3e6ea;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 14px;
+}
+
+.card h2 {
+  font-size: 15px;
+  margin-bottom: 10px;
+}
+
+.gauge {
+  margin-bottom: 12px;
+}
+
+.gauge-label {
+  display: block;
+  font-size: 13px;
+  color: #5a6472;
+  margin-bottom: 5px;
+}
+
+.bar {
+  height: 14px;
+  background: #eef1f5;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+.muted {
+  color: #5a6472;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.toolbar h2 {
+  margin-bottom: 0;
+}
+
+.hint {
+  color: #a5adb8;
+  font-size: 11px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th {
+  text-align: left;
+  color: #5a6472;
+  font-weight: 600;
+  padding: 6px 8px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #f5f6f8;
+}
+
+.mono {
+  font-family: Consolas, monospace;
+  color: #5a6472;
+}
+
+.pill {
+  display: inline-block;
+  min-width: 34px;
+  text-align: center;
+  color: #fff;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+}
+
+.empty {
+  color: #a5adb8;
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+.settings {
+  list-style: none;
+  padding: 0;
+}
+
+.settings li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid #f5f6f8;
+  font-size: 13px;
+}
+
+.settings li span {
+  color: #5a6472;
+}
+
+.settings li code {
+  font-family: Consolas, monospace;
+  background: #f0f4ff;
+  color: #2563eb;
+  padding: 2px 8px;
+  border-radius: 5px;
+}

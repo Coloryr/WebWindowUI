@@ -1,0 +1,190 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #f5f6f8;
+  color: #1f2430;
+}
+
+.shell {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+}
+
+.header h1 {
+  font-size: 22px;
+}
+
+.subtitle {
+  color: #5a6472;
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e3e6ea;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.card h2 {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+
+.card p {
+  color: #5a6472;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0;
+}
+
+.row span {
+  width: 180px;
+  color: #5a6472;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #c9d0d8;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.btn {
+  margin-top: 12px;
+  padding: 8px 18px;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn:hover {
+  background: #1d4ed8;
+}
+
+.btn.ghost {
+  background: #fff;
+  color: #2563eb;
+  border: 1px solid #c9d0d8;
+}
+
+.btn.ghost:hover {
+  background: #f0f4ff;
+}
+
+.btn.small {
+  margin-top: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.add-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.add-row .btn {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.status {
+  color: #2e7d32;
+  font-size: 12px;
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.toolbar h2 {
+  margin-bottom: 0;
+}
+
+.hint {
+  color: #a5adb8;
+  font-size: 11px;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+}
+
+.note {
+  padding: 12px 10px;
+  border-bottom: 1px solid #f0f2f5;
+}
+
+.note:last-child {
+  border-bottom: none;
+}
+
+.note-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.author {
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.time {
+  color: #a5adb8;
+  font-size: 11px;
+}
+
+.note .text {
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+  margin-bottom: 8px;
+}
+
+.empty {
+  color: #a5adb8;
+  font-size: 13px;
+  padding: 16px 0;
+  text-align: center;
+}

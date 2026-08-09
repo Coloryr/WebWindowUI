@@ -1,0 +1,43 @@
+<Solution>
+  <Folder Name="/Core/">
+    <Project Path="WebWindowUI.Backend/WebWindowUI.Backend.csproj" />
+    <Project Path="WebWindowUI.Frontend/WebWindowUI.Frontend.csproj" />
+    <Project Path="WebWindowUI/WebWindowUI.csproj" />
+  </Folder>
+  <Folder Name="/Demos/" />
+  <Folder Name="/Demos/Monitor/">
+    <Project Path="Demos/WebWindowUI.Demo.Monitor/WebWindowUI.Demo.Monitor.Backend/WebWindowUI.Demo.Monitor.Backend.csproj" />
+    <Project Path="Demos/WebWindowUI.Demo.Monitor/WebWindowUI.Demo.Monitor.Frontend/WebWindowUI.Demo.Monitor.Frontend.csproj" />
+    <Project Path="Demos/WebWindowUI.Demo.Monitor/WebWindowUI.Demo.Monitor/WebWindowUI.Demo.Monitor.csproj" />
+  </Folder>
+  <Folder Name="/Demos/SharedNotes/">
+    <Project Path="Demos/WebWindowUI.Demo.SharedNotes/WebWindowUI.Demo.SharedNotes.Backend/WebWindowUI.Demo.SharedNotes.Backend.csproj" />
+    <Project Path="Demos/WebWindowUI.Demo.SharedNotes/WebWindowUI.Demo.SharedNotes.Frontend/WebWindowUI.Demo.SharedNotes.Frontend.csproj" />
+    <Project Path="Demos/WebWindowUI.Demo.SharedNotes/WebWindowUI.Demo.SharedNotes/WebWindowUI.Demo.SharedNotes.csproj" />
+  </Folder>
+  <Folder Name="/Demos/ImageGallery/">
+    <Project Path="Demos/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery.Backend/WebWindowUI.Demo.ImageGallery.Backend.csproj" />
+    <Project Path="Demos/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery.Frontend/WebWindowUI.Demo.ImageGallery.Frontend.csproj" />
+    <Project Path="Demos/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery.csproj" />
+  </Folder>
+  <Folder Name="/Demos/Todo/">
+    <Project Path="Demos/WebWindowUI.Demo.Todo/WebWindowUI.Demo.Todo.Backend/WebWindowUI.Demo.Todo.Backend.csproj" />
+    <Project Path="Demos/WebWindowUI.Demo.Todo/WebWindowUI.Demo.Todo.Frontend/WebWindowUI.Demo.Todo.Frontend.csproj" />
+    <Project Path="Demos/WebWindowUI.Demo.Todo/WebWindowUI.Demo.Todo/WebWindowUI.Demo.Todo.csproj" />
+  </Folder>
+  <Folder Name="/Generator/">
+    <Project Path="WebWindowUI.Generator.SourceGen/WebWindowUI.Generator.SourceGen.csproj" />
+    <Project Path="WebWindowUI.Generator/WebWindowUI.Generator.csproj" />
+  </Folder>
+  <Folder Name="/Sample/">
+    <Project Path="Sample/WebWindowUI.Sample.Backend/WebWindowUI.Sample.Backend.csproj" />
+    <Project Path="Sample/WebWindowUI.Sample.Frontend/WebWindowUI.Sample.Frontend.csproj" />
+    <Project Path="Sample/WebWindowUI.Sample/WebWindowUI.Sample.csproj" />
+  </Folder>
+  <Folder Name="/Templates/">
+    <Project Path="WebWindowUI.Templates/WebWindowUI.Templates.csproj" />
+  </Folder>
+  <Folder Name="/Test/">
+    <Project Path="WebWindowUI.Tests/WebWindowUI.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,55 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 平台选择（TFM + WINDOWS/LINUX/MACOS 编译符号）集中在 WebWindowUI.Platform.props -->
+  <Import Project="WebWindowUI.Platform.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <PackageId>WebWindowUI</PackageId>
+    <Description>WebWindowUI 核心库：跨平台 WebView 窗口（Windows 用 WebView2，Linux 用 libwebkit2gtk-4.1，macOS 用 WKWebView）+ protobuf 模型协议 + 静态资源解析。附带共享构建目标（模型 → proto 生成、前端构建编排、wwwroot 直产产物目录）与模型生成器。</Description>
+    <PackageTags>webwindowui;webview2;webkit2gtk;protobuf;vue;desktop;linux;macos</PackageTags>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\artifacts</PackageOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="protobuf-net" />
+  </ItemGroup>
+  <!-- Windows 专用：WebView2 运行时 -->
+  <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows'">
+    <PackageReference Include="Microsoft.Web.WebView2" />
+  </ItemGroup>
+  <!-- Linux 专用：只留 GirCore.GLib-2.0（消息循环用，纯托管，运行时才加载原生库）。
+       libwebkit2gtk-4.1（GTK3 端口）与 GTK3 窗口层均无托管绑定，用仓库内手写 P/Invoke
+       （Platforms/Linux/Native/WebKit2Native.cs + GtkNative.cs + GtkWindowHost.cs + WebKit2Events.cs） -->
+  <ItemGroup Condition="'$(WWUIPlatform)' == 'Linux'">
+    <PackageReference Include="GirCore.GLib-2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WebWindowUI.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WebWindowUI.Generator\WebWindowUI.Generator.csproj" ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="WebWindowUI.targets" Pack="true" PackagePath="build\;buildTransitive\" />
+  </ItemGroup>
+	
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_PackGeneratorTools</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <Target Name="_PackGeneratorTools">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="..\WebWindowUI.Generator\bin\$(Configuration)\net10.0\**"
+                              Exclude="..\WebWindowUI.Generator\bin\$(Configuration)\net10.0\*\*">
+        <PackagePath>tools/net10.0/</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
+
+</Project>

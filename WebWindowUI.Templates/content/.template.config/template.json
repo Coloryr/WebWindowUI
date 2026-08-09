@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Color_yr",
+  "classifications": [ "Web", "Desktop", "Vue" ],
+  "identity": "WebWindowUI.Templates.App",
+  "name": "WebWindowUI 桌面应用（.NET 模型 + Vue 前端）",
+  "shortName": "webwindowui",
+  "description": "WebWindowUI 三工程骨架：Backend（.NET 模型库，模型→descriptor/TS 生成）+ Frontend（Vue/Vite 前端）+ App（跨平台可执行，Windows=WebView2 / Linux=WebKitGTK / macOS=WKWebView）。单窗口，模型双向绑定 + MVVM 命令。",
+  "tags": {
+    "language": "C#",
+    "type": "project"
+  },
+  "sourceName": "WebWindowUI.Sample",
+  "preferNameDirectory": true,
+  "primaryOutputs": [
+    { "path": "WebWindowUI.Sample.csproj" }
+  ]
+}

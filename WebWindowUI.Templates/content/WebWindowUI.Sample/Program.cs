@@ -1,0 +1,28 @@
+namespace WebWindowUI.Sample;
+
+/// <summary>
+/// 主窗口：绑定 MainModel（模型双向绑定 + MVVM 命令）。对应前端 src/window/main/。
+/// </summary>
+internal sealed class MainWindow : WebWindow
+{
+    public MainWindow(MainModel model)
+        : base("main", "WebWindowUI 应用", width: 800, height: 600)
+    {
+        Model = model;
+    }
+}
+
+internal static class Program
+{
+    [STAThread]
+    private static void Main()
+    {
+        // 单窗口骨架：创建主窗口并运行消息循环。
+        // 前端页面 src/window/main/（Vue + Vite 产物经 BuildFrontend 直产本工程 wwwroot）。
+        MainWindow window = new(new MainModel());
+        window.Show();
+
+        // 运行当前平台的消息循环（Windows 上是 Win32），直到最后一个窗口关闭
+        WebWindow.RunMessageLoop();
+    }
+}

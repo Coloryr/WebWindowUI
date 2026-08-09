@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 平台选择（TFM 与核心库一致）集中在 WebWindowUI.Platform.props（随模板生成） -->
+  <Import Project="WebWindowUI.Platform.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <EnableDefaultItems>false</EnableDefaultItems>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WebWindowUI.Frontend" />
+    <ProjectReference Include="..\WebWindowUI.Sample.Backend\WebWindowUI.Sample.Backend.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="src\**\*" />
+    <None Include="public\**\*" />
+    <None Include="package.json" />
+    <None Include="package-lock.json" />
+    <None Include="tsconfig.json" />
+    <None Include="vite.config.ts" />
+  </ItemGroup>
+
+</Project>

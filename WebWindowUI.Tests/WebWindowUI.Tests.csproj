@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 平台选择与框架一致：Windows 上 net10.0-windows（WINDOWS 符号，跑真 WebView2 集成测试），
+       Linux/macOS 上 net10.0 / net10.0-macos（无 WINDOWS 符号 → WebView2/STA 相关文件被 #if 排除，
+       只编译运行纯逻辑测试）。 -->
+  <Import Project="..\WebWindowUI\WebWindowUI.Platform.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="protobuf-net" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WebWindowUI\WebWindowUI.csproj" />
+    <ProjectReference Include="..\WebWindowUI.Generator.SourceGen\WebWindowUI.Generator.SourceGen.csproj" />
+    <ProjectReference Include="..\Sample\WebWindowUI.Sample.Backend\WebWindowUI.Sample.Backend.csproj" />
+    <ProjectReference Include="..\Sample\WebWindowUI.Sample\WebWindowUI.Sample.csproj" />
+  </ItemGroup>
+
+</Project>

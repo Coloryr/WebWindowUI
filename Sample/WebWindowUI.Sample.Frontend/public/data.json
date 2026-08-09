@@ -1,0 +1,5 @@
+{
+  "source": "app://localhost/data.json",
+  "message": "这个 JSON 由 WebResourceLocator 从 wwwroot 提供",
+  "framework": "Vue 3 + Vite"
+}

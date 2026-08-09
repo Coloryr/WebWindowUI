@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="WebWindowUI.Demo.SharedNotes/WebWindowUI.Demo.SharedNotes.csproj" />
+  <Project Path="WebWindowUI.Demo.SharedNotes.Backend/WebWindowUI.Demo.SharedNotes.Backend.csproj" />
+  <Project Path="WebWindowUI.Demo.SharedNotes.Frontend/WebWindowUI.Demo.SharedNotes.Frontend.csproj" />
+</Solution>

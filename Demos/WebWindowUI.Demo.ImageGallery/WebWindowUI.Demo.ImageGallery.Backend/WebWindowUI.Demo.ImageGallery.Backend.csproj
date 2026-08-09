@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 平台选择（TFM 与核心库一致）集中在 WebWindowUI.Platform.props -->
+  <Import Project="..\..\..\WebWindowUI\WebWindowUI.Platform.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- 系统原生文件选择对话框（Microsoft.Win32.OpenFileDialog 来自 WPF）；仅 Windows 启用，
+         Linux/macOS 编译时关闭（TFM 非 -windows，模型内 #if WINDOWS 分支也不引用）。 -->
+    <UseWPF Condition="'$(WWUIPlatform)' == 'Windows'">true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WebWindowUI.Backend" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+  </ItemGroup>
+
+</Project>

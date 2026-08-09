@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- TFM 必须与核心库一致（net10.0 引用不了 net10.0-windows），平台选择集中在 WebWindowUI.Platform.props -->
+  <Import Project="..\WebWindowUI\WebWindowUI.Platform.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>WebWindowUI.Backend</PackageId>
+    <Description>WebWindowUI 后端角色标记库：模型库工程引用本包即声明角色，WebWindowUI.targets 据此识别并触发模型→proto 生成。引用本包自动带回 WebWindowUI 核心（共享构建目标 + 生成器）。</Description>
+    <PackageTags>webwindowui;webview2;protobuf;desktop</PackageTags>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\artifacts</PackageOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WebWindowUI\WebWindowUI.csproj" />
+    <ProjectReference Include="..\WebWindowUI.Generator.SourceGen\WebWindowUI.Generator.SourceGen.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_PackSourceGenAnalyzer</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <Target Name="_PackSourceGenAnalyzer">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="..\WebWindowUI.Generator.SourceGen\bin\$(Configuration)\netstandard2.0\WebWindowUI.Generator.SourceGen.dll">
+        <PackagePath>analyzers/dotnet/cs/</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
+
+</Project>

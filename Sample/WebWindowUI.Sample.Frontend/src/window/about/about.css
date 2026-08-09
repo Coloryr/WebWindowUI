@@ -1,0 +1,93 @@
+:root {
+  --bg: #f3f5f9;
+  --card: #ffffff;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --primary: #2563eb;
+  --border: #e5e7eb;
+  --code-bg: #f9fafb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.shell {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 20px 48px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.logo {
+  width: 56px;
+  height: 56px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.subtitle code {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.9em;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.card h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+}
+
+.info {
+  margin: 0;
+  font-size: 14px;
+}
+
+.info dt {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.info dt:first-child {
+  margin-top: 0;
+}
+
+.info dd {
+  margin: 2px 0 0;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+}

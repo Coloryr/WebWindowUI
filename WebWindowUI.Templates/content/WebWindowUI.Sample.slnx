@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="WebWindowUI.Sample/WebWindowUI.Sample.csproj" />
+  <Project Path="WebWindowUI.Sample.Backend/WebWindowUI.Sample.Backend.csproj" />
+  <Project Path="WebWindowUI.Sample.Frontend/WebWindowUI.Sample.Frontend.csproj" />
+</Solution>

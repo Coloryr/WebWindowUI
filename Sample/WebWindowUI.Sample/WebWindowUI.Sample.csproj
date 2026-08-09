@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- 平台选择（TFM + WINDOWS/LINUX/MACOS 编译符号）集中在 WebWindowUI.Platform.props -->
+  <Import Project="..\..\WebWindowUI\WebWindowUI.Platform.props" />
+
+  <PropertyGroup>
+    <!-- Windows 用 WinExe（无控制台窗口）；Linux/macOS 用普通 Exe（终端启动） -->
+    <OutputType Condition="'$(WWUIPlatform)' == 'Windows'">WinExe</OutputType>
+    <OutputType Condition="'$(WWUIPlatform)' != 'Windows'">Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WebWindowUI.Sample.Backend\WebWindowUI.Sample.Backend.csproj" />
+    <ProjectReference Include="..\WebWindowUI.Sample.Frontend\WebWindowUI.Sample.Frontend.csproj" />
+    <ProjectReference Include="..\..\WebWindowUI\WebWindowUI.csproj" />
+  </ItemGroup>
+	
+  <Import Project="..\..\WebWindowUI\WebWindowUI.targets" />
+
+</Project>

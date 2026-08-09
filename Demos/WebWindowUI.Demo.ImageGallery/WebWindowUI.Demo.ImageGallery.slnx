@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery.csproj" />
+  <Project Path="WebWindowUI.Demo.ImageGallery.Backend/WebWindowUI.Demo.ImageGallery.Backend.csproj" />
+  <Project Path="WebWindowUI.Demo.ImageGallery.Frontend/WebWindowUI.Demo.ImageGallery.Frontend.csproj" />
+</Solution>

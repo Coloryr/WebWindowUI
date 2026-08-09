@@ -1,0 +1,140 @@
+# WebWindowUI
+
+跨平台桌面应用框架：.NET 模型库（WebWindowModel）用 Roslyn 源生成器产出 proto 消息/写回代码，Vue3+Vite 前端通过 `webwindowui-bridge` 双向绑定，Windows=WebView2 / Linux=WebKit2GTK（GTK3）/ macOS=WKWebView。**内存全部来自本仓库的迭代踩坑，遇到不理解的构建行为先查这里。**
+
+## 三工程结构（核心约定）
+
+每个应用是**三个子工程**（目录 = 工程名）：
+
+```
+<App>/                      → 应用 exe（WinExe，Program.cs + 窗口类，产出 <App>.exe）
+<App>.Backend/              → 模型库（*Model.cs 模型类 + DataProvider），引用 WebWindowUI.Backend
+<App>.Frontend/             → 纯 Vue（真实 .csproj，EnableDefaultItems=false），引用 WebWindowUI.Frontend
+```
+
+- **角色判定（取代内容启发式）**：工程引用哪个标记类库即证明角色——`WebWindowUI.Backend`（触发模型→proto/descriptor/TS 生成）、`WebWindowUI.Frontend`（激活本工程 vite 目标）、都不引用 = 应用（构建前端 + wwwroot 传递复制）。**ProjectReference 按 %(Filename) 精确匹配；PackageReference 按 %(Identity) 精确匹配**（包名无扩展名时 %(Filename) 会把 `.Backend` 剥成 `WebWindowUI`）。精确匹配保证 `Foo.Backend` 这类名字带关键字但不引用标记的工程不误判。
+- **前端工程定位**：targets 对每个 ProjectReference 跑 `_WWUI_ReportFrontend`（前端工程自识别自己引了 `WebWindowUI.Frontend` 标记并回传全路径），`_WWUI_DiscoverFrontend` 捕获 TargetOutputs → `WebWindowUIFrontendProject`。显式声明的 `WebWindowUIFrontendProject` 仍优先。Backend 不 ProjectReference 前端，`WebWindowUIBridgeDir` 默认按「去掉 .Backend 后缀的兄弟前端工程」布局约定推导。
+- **模型发现**：targets 的 `ModelProtoFile Include="**\*Model.cs" Exclude="obj\**\*Model.cs;bin\**\*Model.cs"` **递归**扫后端工程（含 `Items\` 子目录），**文件名即类名、必须 `*Model.cs` 结尾**（`MonitorSettings.cs` 不命中、`MonitorSettingsModel.cs` 才命中）。ProtoBase 由类名推导（PascalCase → snake_case）。
+- **根命名空间自动推断**：生成器 `--all-models` 收全部模型文件，取最长公共段前缀作根；剩余段小写进 TS 子路径（`WebWindowUI.Sample.Users` → `src/models/users/`）。**想调整 TS 目录布局只需改 C# 命名空间**，无任何配置。
+
+## 构建链路（按配置分叉）
+
+- **Debug**：应用 `BuildFrontend` 调前端工程（`Targets="WebWindowUIBuildFrontend"`，`WwwrootDir=$(TargetDir)wwwroot`）→ vite **直产应用 bin/wwwroot**；`AddWebWindowUIResourcesCopy` 把 bin/wwwroot 经 ContentWithTargetPath 注入（wwwroot 求值期不存在，不能走 Content→AssignTargetPaths）。测试工程经 ProjectReference 传递复制。
+- **Release**：应用两个目标都短路，改由**前端工程自驱动**——`_WWUI_FrontendSelfDrive` 在 CoreCompile 前跑 vite 到前端工程 `obj/<Config>/<TFM>/wwwroot`，`_WWUI_EmbedWwwroot` 把它注入 EmbeddedResource **编进前端 dll**（LogicalName=`wwwroot\相对路径`）；应用对前端 ProjectReference 的 `ReferenceOutputAssembly` 由 targets 按配置注入（Debug=false 不复制空 dll、Release=true 复制带资源 dll）。
+- **前端增量**：`FrontendInput`（src/public/package.json/vite.config/tsconfig）vs `FrontendOutput`（`$(WwwrootDir)\window\**\index.html` + `.frontend-stamp` Touch 标记）。**node_modules 不在 FrontendInput** → 改桥后 `dotnet build` 会跳过 vite 重建（bundle 是旧的，坑）；强制重建须 touch 一个 FrontendInput 文件。
+- **vite 产物按配置压缩**：经 `WWUI_CONFIGURATION=$(Configuration)` 传给 vite.config.ts，Release minify / Debug 不压缩 + inline sourcemap。**vite 8 是 rolldown 内核，`minify` 写 `true` 不能写 `'esbuild'`**（会去加载未安装的 esbuild 报错）。
+- **GenerateModelProto 不设 Inputs/Outputs，每次构建都执行**：生成器幂等写（内容相同不写、保持 mtime），descriptor/TS 缺失时必重建，内容不变时 mtime 不动、不触发 vite 重建。
+
+### Release 内嵌 MSBuild 坑（durable）
+
+- `$(IntermediateOutputPath)` 由 Sdk.targets 在 csproj 正文**之后**才定义 → 正文里拼它得到空串、`WwwrootDir` 塌缩成裸 `wwwroot`。须用 `$(BaseIntermediateOutputPath)$(Configuration)\$(TargetFramework)\wwwroot`。
+- **元数据函数在项元数据值里不展开**：`%(RecursiveDir.Replace(...))` 会被当字面量。只用普通元数据引用（`wwwroot\%(_WWUI_EmbedFiles.RecursiveDir)%(Filename)%(Extension)`）。
+- **注入点挂 `BeforeTargets="_GenerateCompileInputs"`**（不是 CoreCompile——SDK 在 `_GenerateCompileInputs` 才把 EmbeddedResource 组装成 Csc 的 Resources 参数），须显式给 `Type=Non-Resx`、`WithCulture=false` 元数据。
+- **Release 内嵌资源名是反斜杠**：`wwwroot\window\main\index.html`，反射查内嵌资源须按 `wwwroot\*` 匹配，正斜杠过滤会漏查。
+- **MSBuild XML 注释不能含 `--`**（写 `--all-models` 报 MSB4024）；提 CLI 参数去掉一个短横线。
+
+### MSBuild 求值限制（直接踩坑换来的）
+
+- 求值期 PropertyGroup 条件**不能引用 item 列表/元数据**（MSB4099/MSB4190/MSB4191）→ 角色判定放 ItemGroup 用 `WithMetadataValue` 过滤，Target 条件（exec 期）才用 `'@(Item)' != ''`。
+- **属性函数参数不展开 item 引用**：`GetDirectoryName('$(P)')` 在 P=`@(Item)` 时收到字面量。目录一律在 item 层 `%(Directory)` 派生。
+- **`%(Directory)` 不含 RootDir**：对绝对路径返回去盘符部分，必须拼 `%(RootDir)%(Directory)` 才是绝对目录，否则生成器 Exec 以相对路径落盘到错误位置。
+- **Outputs/Inputs 是 item 感知上下文**，item 引用拼字符串会 MSB4012 → 桥 descriptor 目录（=@(Item)）不能进 Outputs。
+- **targets 批处理作用域坑**：以 `%(Identity)` 批处理的目标体内，对 @(ModelProtoFile) 的 transform 会被限定到当前批次——`--all-models` 要先在独立目标（无批处理元数据引用）把全量路径 transform 转成项、再裸 `@(Item)` 进属性，Exec 里引用属性。
+- **targets 内 Condition 在自身 DependsOnTargets 前求值** → 探测结果（`_WWUI_DiscoverFrontend`）不能用进 target Condition，只能放 body 的 ItemGroup/MSBuild 守卫里。
+- **ReferenceOutputAssembly 注入时序**：SDK 在 `AssignProjectConfiguration` 里已把空 ROA 默认 true、快照进 `_MSBuildProjectReferenceExistent`——注入目标必须 `BeforeTargets="AssignProjectConfiguration;_SplitProjectReferencesByFileExistence;ResolveProjectReferences"`，挂后两个已太晚。
+- **Exe 工程 ProjectReference 的 apphost 泄漏**：`ReferenceOutputAssembly="false"` 拦不住 apphost.exe + runtimeconfig/deps 经 GetCopyToOutputDirectoryItems 透传复制（SDK 透传条件 `%(_MSBuildProjectReferenceExistent.Private) != 'false'`）——须**同时**加 `Private="false"`。
+
+## WebResourceResolver（wwwroot 两来源、内嵌优先）
+
+先查程序集嵌入资源再回退磁盘（Debug 磁盘、Release 内嵌，互斥存在）。内嵌查找名 = `wwwroot\` + 相对路径（`/`→`\`）。内嵌程序集**懒发现**（单例缓存）：扫 AppDomain 已加载程序集 + `AppContext.BaseDirectory\*.dll`（`Assembly.Load` 按名先试、失败 `LoadFrom`），只留含 `wwwroot\` 前缀资源的程序集。Release 下前端 dll 虽在 deps.json/产物目录但应用不引用其类型、不会自动 Load，全靠发现。Program.cs 图标也走同一 resolver。
+
+## 数据绑定 / 推送 / 集合
+
+- **单属性变化自动推送**：快照/补丁走 protobuf，页面加载完成后推完整快照；前端回写（ModelSet）写回属性。**同一模型实例绑多窗口 = 共享广播**（多订阅者 `List<Action<byte[]>>`）；远程回写应用后 `BroadcastPropertyUpdate(property, exclude=源窗口)` 排除源窗口。
+- **ObservableCollection 原地增删自动推送**：.NET 侧 `.Add()/.Remove()` 即自动整列表推送（不必整体替换列表属性；List 原地 Add 不触发 PropertyChanged 的旧坑绕开）。集合属性**免 [ObservableProperty]**（get-only 也双向）。
+- **集合差量补丁 CollectionPatch**：ObservableCollection 增删走**差量**（`WebMessage` oneof `patch`，action Insert/Remove/Replace/Move/Reset）；`Reset`（如 .Clear）不带元素无法差量 → 回退整列表补丁。补丁自包含。前端 `applyPatch` 对响应式数组**原地 splice**。
+- **typed repeated（List\<已知模型\>）**：生成器产 `repeated SomeModel`（descriptor `"type":"SomeModel"`、TS `SomeModel[]`）。**typed 元素 ModelValue 对象 map 键是真实 int（proto 字段号，声明顺序 1..N）而非属性名**——落在 `ModelValueMap.OrdinalFields`（map<int32,ModelValue>），与 name 键 `fields`（generic object/Dictionary）并存。前端 watch 回写 typed-repeated 用 `{ object: { ordinalFields: { [String(num)]: jsToModelValue(el[fieldName]) } } }`，.NET `ConvertFromModelValue` `foreach (kv in v.OrdinalFields) switch (kv.Key) { case 1: }`（int 键直接数字字面量）。字段号单一来源 `CollectFieldNumbers` → descriptor 与桥两侧无漂移。generic object/Dictionary/未注册 POCO 维持 name 键。前端收敛成命名键（`fullModelEntries` 只收敛根层 typed repeated；元素内嵌套 typed repeated 全量快照可读，但**整列表重推后嵌套成员退化为序数键** `[{ "1": name }]`，模板用容错访问器 `tag.name ?? tag['1']`）。
+- **ObservableDictionary 原地自动推送**：.NET 侧原地改（dict[k]=v / Add / Remove / Clear）抛 CollectionChanged → 框架**整属性重推**（name 键对象 map，非 typed → 不收敛序数键），前端对象整体替换。前端原地改经深 watch 整字典 name 键回写 .NET（`TryConvertObject` 的 `ObservableDictionary<,>` 分支重建同类实例）。**durable 大坑：readonly struct 字段 + 防御性复制 → 死循环**——`DictionaryEntryEnumerator._inner` 若 `readonly`，`MoveNext()` 每次 true、枚举字典无限循环（--blame-hang 拿 .dmp 定位）；须去 readonly。非泛型 `IDictionary` 的 `GetEnumerator()` 返回 `IDictionaryEnumerator`（不能 yield，`Reset()` 抛 NotSupportedException）。
+- **字段初始化器在基类构造之后执行**：基类 ctor 扫描看不到初始集合，集合订阅须在 `BuildSnapshotEnvelope` 首次推送时武装（`ArmCollectionSubscriptions`），属性被替换时切订阅，`_isApplyingRemoteWrite` 期间不推送。
+- **单订阅者快路径 + 空订阅者短路**（`PushEnvelope`）：`Count==1` 直接调、免 ToArray；`Count==0` 直接 return。最后订阅者解绑自动 `UnbindCollections()`。
+
+## MVVM 命令（[RelayCommand] → 前端命令方法）
+
+模型类里 `[RelayCommand]` 方法（CommunityToolkit.Mvvm）源生成 ICommand 属性 `{方法名}Command`。链路：
+- **协议加 invoke**：`ModelInvoke{ command, value }`（command=命令方法名 PascalCase、value=ModelValue 可空）挂 WebMessage oneof。
+- **生成器** `CollectCommands` 收集 `[RelayCommand]` 方法，TS 镜像继承桥的 `ModelCommandHost` 基类 + 产出命令方法（无参 / 带参），wire 发 .NET 方法名。
+- **桥** `ModelCommandHost` 只承载 `protected _commandChannel?` 类型契约；`bindModel` 对命令模型用 `Object.defineProperty` 注入**不可枚举** `_commandChannel`（不污染 `Object.keys` 响应式 watch 循环）。无命令的模型不继承、桥不注入。
+- **.NET** `WebWindowModel.TryInvokeCommand(command, value)`：按「命令名+Command」属性找 ICommand，参数类型取 **`RelayCommand<T>` 泛型参数**（有参命令），`CanExecute` 门控**拒绝执行**、`Execute(arg)`。
+- **事件出口**：命令方法要驱动窗口/宿主时用**公开事件**（`public event Action<string>? OpenRequested`）——事件非 [ObservableProperty] 字段、不进快照，宿主订阅开窗。
+- 命令方法里的属性变化照常走增量推送（Invoke 不在 `_isApplyingRemoteWrite` 抑制内）。
+
+## 写回源生成器（WebWindowUI.Generator.SourceGen）
+
+netstandard2.0、`IsRoslynComponent=true`，**两个 IIncrementalGenerator**（都内存产出、都 partial，合并进同一类型）：
+
+- **WriteBackGenerator** — 每个 `WebWindowModel` 子类产 `{Model}.WriteBack.g.cs`（5 个成员）：`TrySetGeneratedProperty`/`TryGetGeneratedProperty`（switch(name)）、`TryInvokeGeneratedCommand`（CanExecute 门控，无参命令按 `typeof(object)`）、`SubscribeGeneratedCollections`、`ConvertFromModelValue`/`ConvertToModelValue` + `[ModuleInitializer] __WWUI_RegisterPocoConverter`（注册进 `_pocoConverters`/`_pocoSerializers`，**反射兜底已移除**）。
+- **ProtoGenerator** — 产 `{Model}Proto.g.cs`（原 console C# 部分改造，逻辑本体 `ModelProtoGenerator` namespace 保持 `WebWindowUI.Generator`，console 与测试经普通引用调用，命名空间不变零改名）。console 瘦身只写 descriptor/TS（`--model/--json-out/--ts-out-dir/--all-models/--root-namespace`，`--cs-out` 已删）。
+- **序数键**：POCO 序列化/反序列化按 proto 字段号 int 键（非属性名），`PropInfo.Number`=0（解析失败）跳过。序列化器用 `m.Props`（全可读属性），反序列化器只用 WritableProps（未知序数键跳过）。`ModelValueMap` 加 `[ProtoMember(2)] OrdinalFields(Dictionary<int,ModelValue>)`。
+- **durable 坑**：
+  - 生成器跑在**未加生成源码的初始编译**上，属性名只能从 `[ObservableProperty]` **字段符号**推（剥**一个**前导 `_` 再 PascalCase，`__name→_Name`），命令属性名从 `[RelayCommand]` **方法符号**推。
+  - 生成的 partial 是**派生类**：基类 `EnsureCollectionSubscribed` 必须 `private`→`protected`；生成代码只经 `ApplyRemoteWrite(Action setter)`（抑制回声）/`EnsureCollectionSubscribed` 间接碰私有成员。
+  - POCO 注册用 `[ModuleInitializer]` 而非 static ctor（static ctor 可能还没跑）；`delegate bool PocoConvertFunc(ModelValueMap, out object?)`（`Func` 无法区分「失败」与「null POCO」）。
+  - netstandard2.0 API 缺口：无 `IReadOnlySet<T>`（用 `IReadOnlyCollection`）、无 `ToHashSet()`（用 `new HashSet<T>(...)`）、无单字符 `string.Split(char, StringSplitOptions)`（用 `Split(new[]{'/'}, ...)`）。
+- **增量重构（#6）**：WriteBack 按模型注册输出（`RegisterSourceOutput` 替代 `Collect`，单模型变化只重产该模型）；Proto 解析一次 + 值相等上下文（`EquatableArray` 的「类名→命名空间」表——改其它模型字段时 Roslyn 短路、`models.Combine(allNamespaces)` 独立缓存，typed-repeated 检测只依赖命名空间表）。`EquatableArray<T>` 提升为顶层 internal。
+- **测试**：`CSharpGeneratorDriver` + `.AsSourceGenerator()`；`parseOptions` 必须与输入树一致（默认 Latest、输入用 Preview 抛不一致）；「无输出」断言不能 `Assert.Empty(run)`（Proto 对无 [ObservableProperty] 的 EmptyModel 也产 Proto.g.cs）——按 hint 名断言 WriteBack 缺席。`-p:EmitCompilerGeneratedFiles=true` 才落盘检查。
+- **WebView2 E2E 全挂的诊断坑**：全部 `WaitBridgeReadyAsync` 超时 → 先查测试 bin 的 wwwroot 是否为空目录（`.frontend-stamp` 在但 vite 产物缺失时 MSBuild 误判 up-to-date 跳过 vite）；修复：删 `app bin\...\wwwroot` 重建。
+- **`using WebWindowUI.Sample;` 不能当冗余删**：测试文件在 `namespace WebWindowUI.Tests`，C# 命名空间解析只走当前+外层——`WebWindowUI.Sample` 是 `WebWindowUI` 的**兄弟**子命名空间，不在链上。`using WebWindowUI;` 才是真冗余。子命名空间不反向解析：用到 `WebWindowUI.Sample.Items` 类型须加 `using WebWindowUI.Sample.Items;`（外层不含它），模型 doc 注释 `<see cref>` 指外层类型也要全限定（CS1574）。
+- **残留 TS 剪枝由 console 生成器精确做**（`PruneStaleTs`，按「类名 → 期望子路径」，`--all-models` 缺失跳过）；targets 的 `_WWUI_CleanBridgeOutputs` 只剪平铺 bridge JSON。只剪孤儿、不整删（保幂等写 mtime）。
+
+## NuGet 打包（四个包）
+
+- **`WebWindowUI`**：lib/ 核心库 + `build/WebWindowUI.targets` **和 `buildTransitive/WebWindowUI.targets` 各一份**（`PackagePath="build\;buildTransitive\"`）+ `tools/net10.0/` 模型生成器。**必须 buildTransitive 也打**：NuGet 只对直接引用者自动导入 build/ 的 targets，透过标记包引用的模型库只吃到 buildTransitive/。
+- **`WebWindowUI.Backend` / `WebWindowUI.Frontend`（角色标记包）**：各一个空标记类，依赖核心包。一条 `PackageReference` 即带回 targets+生成器。Backend 包额外内嵌写回/Proto 源生成器到 `analyzers/dotnet/cs/`。
+- **`WebWindowUI.Templates`**（`PackageType=Template`）：`content/` 三子工程骨架，`sourceName=WebWindowUI.Sample`，`preferNameDirectory: true`，`primaryOutputs=[WebWindowUI.Sample.csproj]`。**不可加 restore postActions**（多 csproj 模板 `B17581D1` 每次生成都报「无法确定哪个项目文件要添加引用」）。**模板 slnx 坑**：`<Folder Name="/">` 根文件夹抛 MSB4025，模板骨架用裸 `<Project Path=.../>` 平铺。
+- **CPM 集中版本**：`Directory.Packages.props`（`ManagePackageVersionsCentrally=true`）。所有 PackageReference 裸写（无 Version）。**PackageVersion 不许浮动版本**（`3.2.*` 抛 NU1011，钉死 protobuf-net 3.2.56 / System.Text.Json 8.0.6）。
+- **打包纪律**：`dotnet pack -c Release -o artifacts/`；**重复打包同一版本必须清缓存** `dotnet nuget locals global-packages --clear`（或删 `%USERPROFILE%\.nuget\packages\webwindowui*`）——同版本号不改缓存，消费方会恢复旧 dll 编译出 CS0115。
+- 本地源见仓库根 `NuGet.config`（artifacts 目录）。
+
+## 平台拆分（Windows=WebView2 / Linux=WebKit2GTK（GTK3）/ macOS=WKWebView）
+
+- `WebWindowUI.Platform.props` 集中平台选择：`$(WWUIPlatform)`（Windows/Linux/MacOS，默认按宿主 OS）驱动 TFM（net10.0-windows / net10.0 / net10.0-macos）与 `WINDOWS/LINUX/MACOS` DefineConstants。**所有条件键控 WWUIPlatform 而非裸 `IsOSPlatform`**（否则 `-p:WWUIPlatform=Linux` 在 Windows 上双定义符号）。标记库 TFM 必须镜像核心。targets 里的 npm/vite 命令用 `IsOSPlatform`（跟构建宿主走）。App 工程 OutputType 条件化 WinExe/Exe。桥 JS `resolveChannel()` 自适应 `chrome.webview`（Windows）→ `window.webkit.messageHandlers.wwui`（WebKit）。
+- **Linux = WebKit2GTK 4.1（GTK3 端口）**，不是 WebKitGTK 6.0/GTK4。GirCore 只发布 WebKitGTK 6.0（GTK4）与 GLib 绑定，无 GTK3/WebKit2 4.1 托管绑定，故窗口壳 + WebKit 绑定全部手写 P/Invoke（`Platforms/Linux/Native/`：`WebKit2Native.cs`（libwebkit2gtk-4.1.so.0 + libjavascriptcoregtk-4.1.so.0 + gobject/glib/gio）+ `GtkNative.cs`/`GtkWindowHost.cs`（libgtk-3.so.0））。Linux 只引 `GirCore.GLib-2.0`（消息循环，纯托管，运行时才加载原生库 → 支持 Windows 上编译检查）。运行前提 Ubuntu `libwebkit2gtk-4.1-0`。
+- **GirCore 信号坑**：事件用 `+=` 订阅（不是 `add_OnXxx`，合成 add 访问器 CS0571）。delegate：`GObject.SignalHandler<T>` = `void(T sender, EventArgs args)`。文件头 `#pragma warning disable CA1416`。歧义：`using Action = System.Action;`（Gio.Action）与 `using Exception = System.Exception;`（JavaScriptCore.Exception）。
+- **MSBuild 条件坑**：嵌套单引号 `'$([MSBuild]::IsOSPlatform('Windows'))' == 'true'` → MSB4092。裸函数调用 `Condition="$([MSBuild]::IsOSPlatform('Windows'))"`，取反 `!$([MSBuild]::IsOSPlatform('Windows'))`。
+- **macOS = 盲写**（Windows 编译不了）：NSWindow + WKWebView + 四个 `[Export]` NSObject 子类。绑定事实：`NSDictionary.FromObjectsAndKeys(objects, keys, count)` 对象在前、`NSHttpUrlResponse(NSUrl, nint, string, NSDictionary?)`、`NSData.FromArray(byte[])`、`EvaluateJavaScriptAsync(string)`→`Task<NSObject>`。需 Mac + `dotnet workload install macos` 验证。
+- 平台限制：Linux/macOS `SetIcon` no-op、Linux scheme 无 Cache-Control、ExecuteScriptAsync JSON best-effort。
+
+## 单文件发布（PublishSingleFile）
+
+- `PublishSingleFile` + `SelfContained` 只管托管侧（DLL/运行时全打进 exe）；**WPF 原生 DLL（D3DCompiler_47_cor3 / PresentationNative_cor3 / wpfgfx_cor3 / vcruntime140_cor3 / PenImc_cor3）+ WebView2Loader 必须 `IncludeNativeLibrariesForSelfExtract=true` 才内嵌**；`IncludeAllContentForSelfExtract=true` 收内容文件；`EnableCompressionInSingleFile=true` 把 133MB 压到 ~65MB。
+- **PDB 内嵌**：不要 `DebugType=none`（发布版丢符号），也不要靠 pubxml 删 .pdb——统一在仓库根 `Directory.Build.props` 设 `DebugType=embedded`（Release 条件，所有工程含库继承），符号随程序集打进 exe，无独立 .pdb 文件。
+- **单文件下 WebResourceResolver 磁盘回退失效**（BaseDirectory 无 dll），内嵌 wwwroot 靠「已加载程序集」扫描命中。发布 exe 启动即建 `.exe.WebView2` 用户数据目录属正常（跑过就会留，清理发布目录时注意）。
+
+## Demo 应用
+
+`Demos/` 下四个**有功能的真实 Demo**（都加进仓库根 `WebWindowUI.slnx` `/Demos/` 文件夹，包模式生成 = 包模式端到端验证样本）：
+
+- **`WebWindowUI.Demo.Todo`（待办）**：TodoItemModel + TodoListModel（get-only ObservableCollection Items + NewTitle/Status + 命令 AddTitle/Toggle/Remove/ClearCompleted，持久化 `%LocalAppData%\...\todos.json` 用私有 DTO 规避序列化基类状态）。单窗口 main。
+- **`WebWindowUI.Demo.SharedNotes`（双屏共享便签）**：NotesModel，App 用**同一个实例**开 main 编辑窗 + monitor 只读墙 → 任一窗口操作全广播、其余实时跟随（多订阅者 + 远程回写排除源）。
+- **`WebWindowUI.Demo.Monitor`（系统监控）**：嵌套模型 MonitorSettingsModel + MonitorModel（采样 Timer 线程池线程跨线程推送）；设置窗口绑 `model.Settings` 同一子实例（master-detail，改 PollIntervalMs 主窗口订阅重建定时器立即生效）。主窗口展示嵌套 settings 用序数键翻译（`{ "1": pollIntervalMs, ... }`）。
+- **`WebWindowUI.Demo.ImageGallery`（图片画廊，2026-08）**：byte[] 在 typed repeated 元素里下发图片 + 双模式上传 + 列表查看。条目 `ImageItemModel` 带 `byte[]? Data`（生成器映射 bytes→Uint8Array）+ `string Path`（存储完整路径，卡片/lightbox 灰字展示）。存储 `%LocalAppData%\WebWindowUI.Demo.ImageGallery\images`。
+  - **双模式上传（两个按钮）**：共用 `UploadFile` DTO + 共用 `StoreBytes` 落盘。`UploadBytes`（字节）：前端 `<input type="file">` 读成 byte[] 回传 `{ name, data, path }`（path 是 WebView2 非标准 File.path）；`PickFile`（路径）：前端点按钮 → 后端 `#if WINDOWS` 弹系统原生 `Microsoft.Win32.OpenFileDialog`（WPF）→ 自读源文件拷入存储目录，前端不再发 `{name,path}`。Backend 加 `<UseWPF Condition="'$(WWUIPlatform)' == 'Windows'">true</UseWPF>`。
+  - **坑：UseWPF 后 SDK 桌面隐式 using 不含 `System.IO`/`System.Net.Http`**——模型里 `File`/`Path`/`FileInfo` 报 CS0246，须显式 `using System.IO;`。命令在 WebView2 UI 线程（STA）执行，`ShowDialog()` 弹模态对话框安全。
+  - 命令参数对象 `{ name, data, path }` → 生成代码 `ModelProtocol.TryFromModelValue(value, typeof(UploadFile))` 走**反射路径**重建（关键约束：DTO 须参数化 ctor + 可写属性名与 camelCase 前端键忽略大小写匹配；`_pocoConverters` 只有 WebWindowModel 才注册）。TS 的 `new Blob([bytes])` 在 TS5.7+ 报 `Uint8Array<ArrayBufferLike>` 不满足 `BlobPart`——须 `new Blob([new Uint8Array(bytes)])` 拷贝。前端 WeakMap<item, blob URL> 缓存渲染（不把 url 存进条目对象，防深 watch 序列化回 .NET）。
+
+## 验证纪律
+
+- **跑完示例应用必须关掉**：`taskkill //F //IM <App>.exe`，等待后确认无残留。进程会锁定 bin 下输出文件导致后续构建 MSB3027；测试遗留进程干扰下一次观察。**绝不要结束 Windows SearchHost 的 msedgewebview2.exe 进程**。
+- Git Bash 的 taskkill 会把 `/IM` 当路径 → 须 `cmd //c "taskkill /IM xxx.exe /F"` 包。
+- `tasklist` 把镜像名截到 25 字符（`WebWindowUI.Demo.Monito`），别 grep 全名，用前缀 grep。
+- 应用进程由 bash `&` 启动时，其宿主 shell 一结束进程就死——启动验证用 Start-Process 或保持 shell。
+- 仓库级回归：`dotnet build WebWindowUI.slnx -c Debug/-c Release`（0 错，MSB3277 WebView2 WindowsBase 无害警告）+ `dotnet test WebWindowUI.slnx -c Debug`（124/124）。`dotnet test` 会把 demo 一起编 = 回归包模式链路。
+- 前端调试：桥改动要**物理拷进** `node_modules/webwindowui-bridge`（npm link 符号链接被 rolldown 解析到真实路径、无依赖报 `Failed to resolve import "protobufjs"`）+ touch `vite.config.ts` 强制 vite 重建，再 grep bundle 验证。
+
+## 样例（Sample/，2026-08-09 从仓库根 WebWindowUI.Sample/ 改名）
+
+三工程同构（命名空间 `WebWindowUI.Sample` 不变，文件系统路径引用它的代码全断——测试 helper 的仓库根标记、`Driver.RunOnSampleModels` 的 backendDir 等硬编码路径须跟着改；残留空壳目录可直接删）。样例是**每窗口一功能**：main（双向绑定）/ todos（List\<Model\> 一一对应）/ resources（app:// 资源 + appbin:// 数据通道）/ multi（共享/独立模型）/ nested（单模型嵌套 + 子窗口 master-detail）/ nested-list（列表元素嵌套 + 元素内再嵌套 tags/meta）/ settings / about。launcher 入口按需开窗（`LauncherModel.request` 回写 + `Task.Run` 延迟清空——同步清空落在回声抑制窗口内 null 推不回前端、同按钮二次点击失效）。`bindXxx()` 绑定助手在模型 TS 镜像末尾（封装 bindModel + descriptor import）。
+
+## 桥协议（descriptor 自包含）
+
+生成器把 9 个基础信封消息（WebMessage 信封 + ModelValue/ModelValueList/ModelValueMap + ModelReady/ModelUpdate/ModelSet/ModelSnapshot/GeneratedModel + ModelInvoke + CollectionPatch）**内联进每个模型 descriptor**。桥 `bindModel(model, generatedJson)` 的 `generatedJson` 必填，`Root.fromJSON` 直接解析。漂移测试 `BaseEnvelope_InlineInEveryDescriptor_MatchesCompiledDto` 锁 descriptor ↔ `ModelProtocol.cs` `[ProtoMember]`。`npm install` 必须在 `<App>.Frontend/` 跑（依赖和 vite 二进制在该层 node_modules）。

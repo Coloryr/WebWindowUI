@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>WebWindowUI.Templates</PackageId>
+    <PackageType>Template</PackageType>
+    <Title>WebWindowUI 桌面应用模板</Title>
+    <Description>dotnet new 模板：WebWindowUI 桌面应用（.NET 模型库 + Vue/Vite 前端 + 跨平台应用：Windows=WebView2 / Linux=WebKitGTK / macOS=WKWebView）三工程骨架。单窗口，模型双向绑定 + MVVM 命令。</Description>
+    <PackageTags>webwindowui;template;webview2;webkitgtk;vue;desktop;linux;macos</PackageTags>
+    <TargetFramework>net10.0</TargetFramework>
+    <IncludeContentInPack>true</IncludeContentInPack>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+    <NoDefaultExcludes>true</NoDefaultExcludes>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\artifacts</PackageOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="content\**" Exclude="content\**\bin\**;content\**\obj\**;content\**\node_modules\**"
+             Pack="true" PackagePath="content\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

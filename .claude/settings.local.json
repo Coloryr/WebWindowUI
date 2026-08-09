@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(dotnet test *)",
+      "Bash(dotnet build *)",
+      "Bash(powershell -NoProfile -Command ' *)",
+      "Bash(git mv *)"
+    ]
+  }
+}
