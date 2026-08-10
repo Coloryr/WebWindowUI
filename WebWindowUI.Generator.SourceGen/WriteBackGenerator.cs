@@ -281,14 +281,15 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
 
     private static void EmitTryInvokeCommand(CodeWriter w, ModelInfo m)
     {
-        w.Line("protected override bool TryInvokeGeneratedCommand(string command, global::WebWindowUI.Core.Protocol.ModelValue? value)");
+        // commandId = [RelayCommand] 方法声明序（0 起），与 ModelProtoGenerator.CollectCommands 一致。
+        w.Line("protected override bool TryInvokeGeneratedCommand(int commandId, global::WebWindowUI.Core.Protocol.ModelValue? value)");
         w.Open("{");
-        w.Line("switch (command)");
+        w.Line("switch (commandId)");
         w.Open("{");
         int i = 0;
         foreach (CmdInfo c in m.Commands)
         {
-            w.Line($"case \"{c.Name}\":");
+            w.Line($"case {i}:");
             w.Open("{");
             w.Line("object? arg = null;");
             w.Line($"if (value is not null && global::WebWindowUI.Core.Protocol.ModelProtocol.TryFromModelValue(value, typeof({c.ParamType ?? "global::System.Object"}), out object? c{i}))");

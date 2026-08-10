@@ -560,8 +560,8 @@
             },
             "ModelUpdate": {
               "fields": {
-                "messageName": {
-                  "type": "string",
+                "modelId": {
+                  "type": "int32",
                   "id": 1
                 },
                 "payload": {
@@ -584,8 +584,8 @@
             },
             "ModelInvoke": {
               "fields": {
-                "command": {
-                  "type": "string",
+                "commandId": {
+                  "type": "int32",
                   "id": 1
                 },
                 "value": {
@@ -605,8 +605,8 @@
             },
             "GeneratedModel": {
               "fields": {
-                "messageName": {
-                  "type": "string",
+                "modelId": {
+                  "type": "int32",
                   "id": 1
                 },
                 "payload": {

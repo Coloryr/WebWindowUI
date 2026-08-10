@@ -30,10 +30,9 @@ public class GeneratorTests
         Assert.Contains("webwindowui.model.ModelValue config = 11;", result.ProtoText); // object 兜底
         Assert.Contains("message SettingsModelUpdate {", result.ProtoText);
 
-        // C#：可空 DTO、字段号与 proto 一致、更新编码器接线
-        Assert.Contains("webwindowui.model.generated.SettingsModel", result.CsCode);
-        Assert.Contains("webwindowui.model.generated.SettingsModelUpdate", result.CsCode);
-        Assert.Contains("protected override string UpdateMessageName", result.CsCode);
+        // C#：可空 DTO、字段号与 proto 一致、更新编码器接线；模型序号代替消息名
+        Assert.Contains("protected override int ModelId =>", result.CsCode);
+        Assert.DoesNotContain("webwindowui.model.generated.SettingsModel", result.CsCode); // 消息名不下发
         Assert.Contains("[ProtoMember(5)] public long TotalBytes", result.CsCode);
         Assert.Contains("[ProtoMember(9)] public ModelValue? SyncMode", result.CsCode);
         Assert.Contains("[ProtoMember(10)] public List<string> Tags", result.CsCode);
@@ -64,8 +63,8 @@ public class GeneratorTests
         Assert.Contains("repeated string features = 6;", result.ProtoText);     // string[]
         Assert.Contains("bytes iconHash = 7;", result.ProtoText);               // byte[]
         Assert.Contains("webwindowui.model.ModelValue metadata = 8;", result.ProtoText); // object 兜底
-        Assert.Contains("webwindowui.model.generated.AboutModelUpdate", result.CsCode);
-        Assert.Contains("protected override string UpdateMessageName", result.CsCode);
+        Assert.Contains("protected override int ModelId =>", result.CsCode);
+        Assert.DoesNotContain("webwindowui.model.generated.AboutModelUpdate", result.CsCode); // 消息名不下发
         Assert.Contains("[ProtoMember(7)] public byte[]? IconHash", result.CsCode);
 
         // TS：byte[] → Uint8Array、repeated → T[]、object 兜底 → Record<string, unknown>
@@ -93,12 +92,18 @@ public class GeneratorTests
 
         // [RelayCommand] 方法 → TS 命令方法：无参 openWindow()、带参 commandWithArg(arg: string)，
         // 类继承 webwindowui-bridge 的 ModelCommandHost（命令通道类型契约在上层库，由 bindModel 注入为
-        // 不可枚举实例属性，不再重复声明在模型里）；线缆 command id = .NET 方法名 PascalCase。
+        // 不可枚举实例属性，不再重复声明在模型里）；线缆 commandId = [RelayCommand] 方法声明序
+        //（OpenWindow=0、CommandWithArg=1，与 .NET 生成代码 switch 同序）。
         Assert.Contains("import { bindModel, ModelCommandHost } from 'webwindowui-bridge';", result.TsCode);
         Assert.Contains("export class LauncherModel extends ModelCommandHost {", result.TsCode);
         Assert.DoesNotContain("private _commandChannel", result.TsCode); // 通道声明归上层库，模型不再重复
-        Assert.Contains("openWindow(): void { this._commandChannel?.('OpenWindow') }", result.TsCode);
-        Assert.Contains("commandWithArg(arg: string): void { this._commandChannel?.('CommandWithArg', arg) }", result.TsCode);
+        Assert.Contains("openWindow(): void { this._commandChannel?.(0) }", result.TsCode);
+        Assert.Contains("commandWithArg(arg: string): void { this._commandChannel?.(1, arg) }", result.TsCode);
+
+        // 线缆协议契约：modelId 代替消息名 + descriptor 解码类型名，静态字符串字面量键 ['__protocol']
+        Assert.Contains("static ['__protocol'] = { modelId: ", result.TsCode);
+        Assert.Contains("full: 'webwindowui.model.generated.LauncherModel'", result.TsCode);
+        Assert.Contains("update: 'webwindowui.model.generated.LauncherModelUpdate'", result.TsCode);
 
         // OpenRequested 事件不是模型字段：不进 TS 镜像（非 [ObservableProperty] 字段、非公开只读属性）
         Assert.DoesNotContain("openRequested", result.TsCode);
@@ -146,7 +151,7 @@ public class GeneratorTests
     }
 
     [Fact]
-    public void SettingsDescriptor_UpdateCarrier_UsesMessageNamePayload()
+    public void SettingsDescriptor_UpdateCarrier_UsesModelIdPayload()
     {
         string? src = ReadRepoSource("SettingsModel.cs");
         Assert.NotNull(src); // 测试运行于仓库内，样例源码必须存在

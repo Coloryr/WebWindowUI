@@ -42,13 +42,13 @@ public class ModelTests
     }
 
     [Fact]
-    public void Update_Carrier_CarriesMessageNameAndPayload()
+    public void Update_Carrier_CarriesModelIdAndPayload()
     {
         var msg = new WebMessage
         {
             Update = new ModelUpdate
             {
-                MessageName = "webwindowui.model.generated.MainWindowModelUpdate",
+                ModelId = 42,
                 Payload = new byte[] { 0x10, 0x05 }, // 字段2 varint 5（Count=5）
             },
         };
@@ -56,7 +56,7 @@ public class ModelTests
         WebMessage? back = ModelProtocol.Decode(ModelProtocol.Encode(msg));
 
         Assert.NotNull(back?.Update);
-        Assert.Equal("webwindowui.model.generated.MainWindowModelUpdate", back.Update.MessageName);
+        Assert.Equal(42, back.Update.ModelId);
         Assert.Equal(new byte[] { 0x10, 0x05 }, back.Update.Payload);
     }
 
@@ -75,7 +75,7 @@ public class ModelTests
         Assert.NotNull(msg);
         Assert.Null(msg.Snapshot);
         Assert.NotNull(msg.Full);
-        Assert.Equal("webwindowui.model.generated.MainWindowModel", msg.Full.MessageName);
+        Assert.NotEqual(0, msg.Full.ModelId); // 模型序号（完整消息名哈希）代替消息名
 
         var snap = Serializer.Deserialize<MainWindowModelSnapshot>(new MemoryStream(msg.Full.Payload!));
         Assert.Equal("abc", snap.Name);
@@ -110,7 +110,7 @@ public class ModelTests
         Assert.NotNull(pushed);
         WebMessage? msg = ModelProtocol.Decode(pushed!);
         Assert.NotNull(msg?.Update);
-        Assert.Equal("webwindowui.model.generated.MainWindowModelUpdate", msg.Update.MessageName);
+        Assert.NotEqual(0, msg.Update.ModelId);
 
         var upd = Serializer.Deserialize<MainWindowModelUpdate>(new MemoryStream(msg.Update.Payload!));
         Assert.Equal("abc", upd.Name);
@@ -322,13 +322,13 @@ public class ModelTests
         Assert.Contains("string message = 3;", result.ProtoText);
         Assert.Contains("webwindowui.model.ModelValue extra = 4;", result.ProtoText);
 
-        // C# DTO：字段号与 proto 一致；object → ModelValue；增量 update 消息名
+        // C# DTO：字段号与 proto 一致；object → ModelValue；模型序号代替消息名
         Assert.Contains("[ProtoMember(1)] public string Name", result.CsCode);
         Assert.Contains("[ProtoMember(2)] public int Count", result.CsCode);
         Assert.Contains("[ProtoMember(4)] public ModelValue? Extra", result.CsCode);
         Assert.Contains("ModelProtocol.ToModelValue(model.Extra)", result.CsCode);
-        Assert.Contains("webwindowui.model.generated.MainWindowModel", result.CsCode);
-        Assert.Contains("webwindowui.model.generated.MainWindowModelUpdate", result.CsCode);
+        Assert.Contains("protected override int ModelId =>", result.CsCode);
+        Assert.DoesNotContain("MessageName", result.CsCode); // 消息名不下发，C# 只烘焙序号
 
         // descriptor JSON：MainWindowModel 字段结构与类型引用
         using JsonDocument json = JsonDocument.Parse(result.DescriptorJson);
@@ -568,7 +568,7 @@ public class ModelTests
         Assert.NotNull(pushed);
         WebMessage? msg = ModelProtocol.Decode(pushed!);
         Assert.NotNull(msg?.Update);
-        Assert.Equal("webwindowui.model.generated.NestedListModelUpdate", msg.Update.MessageName);
+        Assert.NotEqual(0, msg.Update.ModelId);
 
         // Counts 是 ModelValue 兜底（非 typed repeated）→ name 键对象 map 整体替换前端对象
         var upd = Serializer.Deserialize<NestedListModelUpdate>(new MemoryStream(msg.Update.Payload!));
@@ -675,7 +675,7 @@ public class ModelTests
         string? opened = null;
         model.OpenRequested += p => opened = p;
 
-        Assert.True(model.TryInvokeCommand("OpenWindow", null)); // 无参命令：value 缺省
+        Assert.True(model.TryInvokeCommand(0, null)); // 无参命令（声明序 0）：value 缺省
         Assert.Equal("main", opened);
     }
 
@@ -687,7 +687,7 @@ public class ModelTests
         string? opened = null;
         model.OpenRequested += p => opened = p;
 
-        Assert.True(model.TryInvokeCommand("CommandWithArg", ModelProtocol.ToModelValue("todos")));
+        Assert.True(model.TryInvokeCommand(1, ModelProtocol.ToModelValue("todos")));
         Assert.Equal("todos", opened);
     }
 
@@ -698,11 +698,11 @@ public class ModelTests
         string? opened = null;
         model.OpenRequested += p => opened = p;
 
-        Assert.False(model.TryInvokeCommand("CommandWithArg", ModelProtocol.ToModelValue("todos")));
+        Assert.False(model.TryInvokeCommand(1, ModelProtocol.ToModelValue("todos")));
         Assert.Null(opened); // 门控拒绝，命令方法不执行
 
         model.ButtonEnable = true; // 开启门控源
-        Assert.True(model.TryInvokeCommand("CommandWithArg", ModelProtocol.ToModelValue("todos")));
+        Assert.True(model.TryInvokeCommand(1, ModelProtocol.ToModelValue("todos")));
         Assert.Equal("todos", opened);
     }
 
@@ -710,6 +710,6 @@ public class ModelTests
     public void TryInvokeCommand_UnknownCommand_ReturnsFalse()
     {
         var model = new LauncherModel();
-        Assert.False(model.TryInvokeCommand("NoSuchCommand", null));
+        Assert.False(model.TryInvokeCommand(99, null));
     }
 }

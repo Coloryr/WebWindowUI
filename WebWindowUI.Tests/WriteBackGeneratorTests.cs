@@ -38,12 +38,16 @@ public class WriteBackGeneratorTests
         Assert.Contains("switch (kv.Key)", main);                     // case 直接数字字面量
 
         // ---- LauncherModel：命令（无参 typeof(object) + 带参 string），CanExecute 门控 ----
+        // commandId = [RelayCommand] 方法声明序（OpenWindow=0、CommandWithArg=1），与 ModelProtoGenerator
+        // CollectCommands 的 TS 镜像调用序号一致（同读源声明序）。
         var launcher = run["LauncherModel.WriteBack.g.cs"];
-        Assert.Contains("case \"OpenWindow\":", launcher);
+        Assert.Contains("protected override bool TryInvokeGeneratedCommand(int commandId, global::WebWindowUI.Core.Protocol.ModelValue? value)", launcher);
+        Assert.Contains("switch (commandId)", launcher);
+        Assert.Contains("case 0:", launcher);
         Assert.Contains("typeof(global::System.Object)", launcher); // 无参命令按 object 转
         Assert.Contains("if (!OpenWindowCommand.CanExecute(arg)) return false;", launcher);
         Assert.Contains("OpenWindowCommand.Execute(arg);", launcher);
-        Assert.Contains("case \"CommandWithArg\":", launcher);
+        Assert.Contains("case 1:", launcher);
         Assert.Contains("typeof(string)", launcher);
         Assert.Contains("if (!CommandWithArgCommand.CanExecute(arg)) return false;", launcher);
 
@@ -195,8 +199,8 @@ public class WriteBackGeneratorTests
         ImmutableDictionary<string, string> run = Driver.RunOnSampleModels();
 
         var main = run["MainWindowModelProto.g.cs"];
-        Assert.Contains("protected override string FullMessageName", main);
-        Assert.Contains("webwindowui.model.generated.MainWindowModel", main);
+        Assert.Contains("protected override int ModelId =>", main);
+        Assert.DoesNotContain("webwindowui.model.generated.MainWindowModel", main); // 消息名不下发，只烘焙序号
         Assert.Contains("[ProtoMember(1)] public string Name", main);
         Assert.Contains("case \"Name\": u.Name =", main); // 增量编码器 switch
 

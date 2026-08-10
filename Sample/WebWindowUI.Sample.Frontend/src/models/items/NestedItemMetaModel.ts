@@ -8,6 +8,9 @@
 import { bindModel } from 'webwindowui-bridge';
 import descriptorJson from '../../bridge/nested_item_meta_model.json';
 export class NestedItemMetaModel {
+  /** 线缆协议契约（构建期定死、桥直接读取）：modelId = 模型序号（线缆上代替消息名），
+      full/update = descriptor 消息类型名（解码用）。字符串字面量键：压缩器不改写。 */
+  static ['__protocol'] = { modelId: 284652667, full: 'webwindowui.model.generated.NestedItemMetaModel', update: 'webwindowui.model.generated.NestedItemMetaModelUpdate' }
   /** author：作者（proto 字段号 1）。 */
   author: string = ''
 

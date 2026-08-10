@@ -57,13 +57,13 @@ public sealed class ModelReady
 
 /// <summary>
 /// .NET → 前端：单字段增量更新。payload 是生成器为模型产出的 update 消息
-/// （如 MainWindowModelUpdate）的 protobuf 字节，messageName 供前端按名解码；
-/// 载荷里只编码被修改的字段，前端据此增量应用。
+/// （如 MainWindowModelUpdate）的 protobuf 字节，modelId = 模型序号（由生成器烘焙进
+/// descriptor 与 TS 镜像的 __protocol，前端据此校验并解码）；载荷里只编码被修改的字段。
 /// </summary>
 [ProtoContract]
 public sealed class ModelUpdate
 {
-    [ProtoMember(1)] public string MessageName { get; set; } = "";
+    [ProtoMember(1)] public int ModelId { get; set; }
     [ProtoMember(2)] public byte[]? Payload { get; set; }
 }
 
@@ -76,15 +76,15 @@ public sealed class ModelSet
 }
 
 /// <summary>
-/// 前端 → .NET：执行模型命令（MVVM Command）。command = 命令方法名（[RelayCommand]
-/// 方法名，如 "OpenWindow"/"CommandWithArg"），.NET 侧按「命令名 + Command」属性
-/// （如 OpenWindowCommand）查找 ICommand 并执行；value 为命令参数（可空，无参命令缺省），
+/// 前端 → .NET：执行模型命令（MVVM Command）。commandId = 命令序号（[RelayCommand] 方法
+/// 声明序，与生成器烘焙进 TS 镜像的调用序号一致），.NET 侧按序号命中「命令名 + Command」
+/// 属性（如 OpenWindowCommand）查找 ICommand 并执行；value 为命令参数（可空，无参命令缺省），
 /// 按命令方法的参数类型转换（有参命令生成泛型 RelayCommand&lt;T&gt;，T 即参数类型）。
 /// </summary>
 [ProtoContract]
 public sealed class ModelInvoke
 {
-    [ProtoMember(1)] public string Command { get; set; } = "";
+    [ProtoMember(1)] public int CommandId { get; set; }
     [ProtoMember(2)] public ModelValue? Value { get; set; }
 }
 
@@ -95,11 +95,12 @@ public sealed class ModelSnapshot
     [ProtoMember(1)] public Dictionary<string, ModelValue> Data { get; set; } = [];
 }
 
-/// <summary>完整模型（生成器产出）：payload 是生成消息的 protobuf 字节，messageName 供前端按名解码。</summary>
+/// <summary>完整模型（生成器产出）：payload 是生成消息的 protobuf 字节，modelId = 模型序号
+/// （同 ModelUpdate，前端校验并解码）。</summary>
 [ProtoContract]
 public sealed class GeneratedModel
 {
-    [ProtoMember(1)] public string MessageName { get; set; } = "";
+    [ProtoMember(1)] public int ModelId { get; set; }
     [ProtoMember(2)] public byte[]? Payload { get; set; }
 }
 

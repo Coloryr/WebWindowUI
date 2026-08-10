@@ -8,6 +8,9 @@
 import { bindModel, ModelCommandHost } from 'webwindowui-bridge';
 import descriptorJson from '../bridge/nested_parent_model.json';
 export class NestedParentModel extends ModelCommandHost {
+  /** 线缆协议契约（构建期定死、桥直接读取）：modelId = 模型序号（线缆上代替消息名），
+      full/update = descriptor 消息类型名（解码用）。字符串字面量键：压缩器不改写。 */
+  static ['__protocol'] = { modelId: 2133376449, full: 'webwindowui.model.generated.NestedParentModel', update: 'webwindowui.model.generated.NestedParentModelUpdate' }
   /** title：父窗口标题（普通字段，双向绑定）。 */
   title: string = ''
 
@@ -15,7 +18,7 @@ export class NestedParentModel extends ModelCommandHost {
   detail: Record<string, unknown> = {}
 
   /** OpenDetail */
-  openDetail(): void { this._commandChannel?.('OpenDetail') }
+  openDetail(): void { this._commandChannel?.(0) }
 }
 
 /** 绑定 NestedParentModel：创建实例并经 webwindowui-bridge 连接 .NET 双向绑定（descriptor 已含基础信封）。 */

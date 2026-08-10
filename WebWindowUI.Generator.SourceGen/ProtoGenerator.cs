@@ -11,7 +11,7 @@ namespace WebWindowUI.Generator.SourceGen;
 /// <summary>
 /// 为每个 <c>WebWindowModel</c> 子类在内存内产出 <c>{Model}Proto.g.cs</c> partial：快照 DTO
 /// <c>{Model}Snapshot</c>、增量 DTO <c>{Model}Update</c>、以及 partial class 的
-/// <c>FullMessageName</c>/<c>EncodeFullSnapshot</c>/<c>UpdateMessageName</c>/<c>EncodePropertyUpdate</c> override。
+/// <c>ModelId</c>/<c>EncodeFullSnapshot</c>/<c>EncodePropertyUpdate</c> override。
 ///
 /// 纯逻辑在 <see cref="ModelProtoGenerator.Generate"/>（本程序集内，namespace WebWindowUI.Generator），
 /// 与 descriptor JSON + TS 镜像同源同逻辑——前端解码与 .NET 编码共用同一份字段映射。

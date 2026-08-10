@@ -15,17 +15,21 @@ import * as protobuf from 'protobufjs'
  *
  * 消息（webwindowui.model.WebMessage 信封，oneof 同时命中一个成员）：
  *   .NET → JS：
- *     full     初始快照：GeneratedModel{ messageName, payload }，payload 用生成器消息类型解码（如 MainWindowModel）
+ *     full     初始快照：GeneratedModel{ modelId, payload }，payload 用生成器消息类型解码（如 MainWindowModel）
  *     snapshot 通用完整快照回退（无生成编码器的模型）：map<property, ModelValue>
- *     update   单属性增量：ModelUpdate{ messageName, payload }，payload 用生成器为模型单独产出的
+ *     update   单属性增量：ModelUpdate{ modelId, payload }，payload 用生成器为模型单独产出的
  *              update 消息类型解码（如 MainWindowModelUpdate），只编码被修改的字段
  *     patch    集合增删差量：CollectionPatch{ action, property, index, count, items, fromIndex }，
  *              对响应式数组原地 splice（Insert/Remove/Replace/Move）；Reset 时 items 承载整列表整体替换
  *   JS → .NET：
  *     ready    ModelReady：页面脚本就绪，请求补发快照
  *     set      ModelSet{ property, value }：本地修改回写
- *     invoke   ModelInvoke{ command, value }：执行 .NET 命令（[RelayCommand] 生成的 ICommand），
- *              command = 命令方法名（如 "OpenWindow"），value 为参数（可空）
+ *     invoke   ModelInvoke{ commandId, value }：执行 .NET 命令（[RelayCommand] 生成的 ICommand），
+ *              commandId = 命令序号（[RelayCommand] 方法声明序），value 为参数（可空）
+ *
+ * modelId / commandId 代替冗长的消息名/命令名：modelId 是生成器对完整消息名算的 FNV-1a 哈希，
+ * 桥按模型镜像类烘焙的 ['__protocol']（构建期定死的字符串字面量键）校验并取解码类型名；commandId
+ * 是 [RelayCommand] 方法声明序（.NET 生成代码 switch 同名序，见 WriteBackGenerator）。
  *
  * 命名：.NET 属性名 PascalCase，前端模型 camelCase（首字母小写），本桥负责互转。
  * 类型：.NET 值经 ModelValue 一码归一码（number/text/flag/list/object/blob），
@@ -129,12 +133,12 @@ interface ModelValueLike {
 interface WebMessageLike {
   ready?: object
   /** 增量更新：payload 是生成器为模型产出的 update 消息（如 MainWindowModelUpdate）字节。 */
-  update?: { messageName?: string; payload?: Uint8Array }
+  update?: { modelId?: number; payload?: Uint8Array }
   set?: { property?: string; value?: ModelValueLike }
   snapshot?: { data?: Record<string, ModelValueLike> }
-  full?: { messageName?: string; payload?: Uint8Array }
-  /** 命令执行（前端 → .NET）：command = 命令方法名，value = 参数（可空）。 */
-  invoke?: { command?: string; value?: ModelValueLike }
+  full?: { modelId?: number; payload?: Uint8Array }
+  /** 命令执行（前端 → .NET）：commandId = 命令序号，value = 参数（可空）。 */
+  invoke?: { commandId?: number; value?: ModelValueLike }
   /** 集合增删差量补丁（.NET → 前端）：前端对响应式数组原地 splice。action 为枚举数值。 */
   patch?: {
     action?: number
@@ -267,13 +271,13 @@ function toPascalCase(key: string): string {
 /**
  * 命令执行宿主基类：带 [RelayCommand] 的模型生成的 TS 类继承它（如
  * `class LauncherModel extends ModelCommandHost`），命令方法经 `this._commandChannel`
- * 把命令调用发给 .NET（ModelInvoke { command, value }）。
+ * 把命令调用发给 .NET（ModelInvoke { commandId, value }）。
  * 通道本身由 {@link bindModel} 注入为不可枚举实例属性（不进响应式 watch、不落快照键），
  * 本类只承载类型契约，让各生成模型不必重复声明同一字段。
  */
 export class ModelCommandHost {
   /** 命令执行通道：bindModel 注入，调用即触发 .NET 侧 ICommand 执行。 */
-  protected _commandChannel?: (name: string, value?: unknown) => void
+  protected _commandChannel?: (id: number, value?: unknown) => void
 }
 
 /**
@@ -320,15 +324,22 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
     for (const [prop, byNumber] of Object.entries(baked)) typedElemFields.set(prop, byNumber)
   }
 
+  // 线缆协议契约：模型序号（modelId，线缆上代替消息名）+ descriptor 解码类型名（full/update）。
+  // 生成器烘焙成镜像类的静态字符串字面量键 ['__protocol']（构建期定死）——同上不做运行时
+  // constructor.name → lookupType 反射（压缩器改 class 名会失真），桥直接读取本键校验 modelId
+  // 并取解码类型。
+  const protocol = (model as unknown as { constructor: { readonly ['__protocol']?: { modelId?: number; full?: string; update?: string } } })
+    .constructor['__protocol']
+
   // 命令通道：生成器为带 [RelayCommand] 方法的模型产出的命令方法（openWindow()/commandWithArg(arg)）
-  // 通过它把命令调用发给 .NET 执行（ModelInvoke { command, value }）。定义为不可枚举属性 →
+  // 通过它把命令调用发给 .NET 执行（ModelInvoke { commandId, value }）。定义为不可枚举属性 →
   // 不进响应式 watch 循环、不落快照键；无命令的模型此通道永不使用（生成器不产出命令方法）。
   Object.defineProperty(model, '_commandChannel', {
     enumerable: false,
     configurable: false,
     writable: true,
-    value: (name: string, value?: unknown): void => {
-      sendEnvelope({ invoke: { command: name, ...(value === undefined ? {} : { value: jsToModelValue(value) }) } })
+    value: (id: number, value?: unknown): void => {
+      sendEnvelope({ invoke: { commandId: id, ...(value === undefined ? {} : { value: jsToModelValue(value) }) } })
     },
   })
 
@@ -347,12 +358,12 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
 
   /** 解码完整模型消息，整理成 [属性名, JS 值] 序列（ModelValue 兜底字段转 JS）。 */
   const fullModelEntries = (full: WebMessageLike['full']): Array<[string, unknown]> => {
-    if (!full?.messageName) return []
+    if (!full?.modelId || !protocol || full.modelId !== protocol.modelId || !protocol.full) return []
     let type: protobuf.Type
     try {
-      type = root.lookupType(full.messageName)
+      type = root.lookupType(protocol.full)
     } catch {
-      return [] // 消息名未注册（descriptor 缺失/漂移）：无法解码，忽略本条
+      return [] // 解码类型未注册（descriptor 缺失/漂移）：无法解码，忽略本条
     }
     const decoded = type.decode(full.payload as Uint8Array) as unknown as Record<string, unknown>
     const entries: Array<[string, unknown]> = []
@@ -397,12 +408,12 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
    * 天然有 presence，同样按 own property 判断。
    */
   const updateEntries = (update: WebMessageLike['update']): Array<[string, unknown]> => {
-    if (!update?.messageName) return []
+    if (!update?.modelId || !protocol || update.modelId !== protocol.modelId || !protocol.update) return []
     let type: protobuf.Type
     try {
-      type = root.lookupType(update.messageName)
+      type = root.lookupType(protocol.update)
     } catch {
-      return [] // 消息名未注册：无法解码，忽略本条
+      return [] // 解码类型未注册：无法解码，忽略本条
     }
     const decoded = type.decode(update.payload as Uint8Array) as unknown as Record<string, unknown>
     const entries: Array<[string, unknown]> = []
@@ -494,7 +505,7 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
     }
 
     // protobufjs decode 未设置的 oneof 成员是 null 而非 undefined，分支必须用 truthy 判断
-    if (msg.update && msg.update.messageName) {
+    if (msg.update && msg.update.modelId) {
       applyRemote(updateEntries(msg.update))
     } else if (msg.patch) {
       applyPatch(msg.patch)

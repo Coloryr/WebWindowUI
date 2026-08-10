@@ -54,6 +54,7 @@
 ## 数据绑定 / 推送 / 集合
 
 - **单属性变化自动推送**：快照/补丁走 protobuf，页面加载完成后推完整快照；前端回写（ModelSet）写回属性。**同一模型实例绑多窗口 = 共享广播**（多订阅者 `List<Action<byte[]>>`）；远程回写应用后 `BroadcastPropertyUpdate(property, exclude=源窗口)` 排除源窗口。
+- **线缆无消息名（ModelId/CommandId 代替字符串）**：`ModelUpdate`/`GeneratedModel` 只发 `int32 modelId`（= 完整消息名 FNV-1a 哈希，生成器 `ModelIdFor` 单一来源、.NET 与 TS 两侧同函数产出）+ `payload`，`ModelInvoke` 只发 `int32 commandId`（= `[RelayCommand]` 方法声明序，`ModelProtoGenerator.CollectCommands` 与 `WriteBackGenerator` 同读源声明序）。`WebWindowModel.ModelId` 非 0 表示有生成编码器（0 回退通用 ModelSnapshot）。**durable 坑：前端解码类型靠生成器烘焙进 TS 镜像类的 `static ['__protocol'] = { modelId, full, update }`**（字符串字面量键，同 `__repeatedFields`——别用运行时 `constructor.name` 反射，Release minify 会改 class 绑定名）。`ModelSet.Property`/`CollectionPatch.Property` 仍留字符串（属性名按名回写，未纳入序号化）。
 - **ObservableCollection 原地增删自动推送**：.NET 侧 `.Add()/.Remove()` 即自动整列表推送（不必整体替换列表属性；List 原地 Add 不触发 PropertyChanged 的旧坑绕开）。集合属性**免 [ObservableProperty]**（get-only 也双向）。
 - **集合差量补丁 CollectionPatch**：ObservableCollection 增删走**差量**（`WebMessage` oneof `patch`，action Insert/Remove/Replace/Move/Reset）；`Reset`（如 .Clear）不带元素无法差量 → 回退整列表补丁。补丁自包含。前端 `applyPatch` 对响应式数组**原地 splice**。
 - **typed repeated（List\<已知模型\>）**：生成器产 `repeated SomeModel`（descriptor `"type":"SomeModel"`、TS `SomeModel[]`）。**typed 元素 ModelValue 对象 map 键是真实 int（proto 字段号，声明顺序 1..N）而非属性名**——落在 `ModelValueMap.OrdinalFields`（map<int32,ModelValue>），与 name 键 `fields`（generic object/Dictionary）并存。前端 watch 回写 typed-repeated 用 `{ object: { ordinalFields: { [String(num)]: jsToModelValue(el[fieldName]) } } }`，.NET `ConvertFromModelValue` `foreach (kv in v.OrdinalFields) switch (kv.Key) { case 1: }`（int 键直接数字字面量）。字段号单一来源 `CollectFieldNumbers` → descriptor 与桥两侧无漂移。generic object/Dictionary/未注册 POCO 维持 name 键。前端收敛成命名键（`fullModelEntries` 只收敛根层 typed repeated；元素内嵌套 typed repeated 全量快照可读，但**整列表重推后嵌套成员退化为序数键** `[{ "1": name }]`，模板用容错访问器 `tag.name ?? tag['1']`）。
@@ -65,10 +66,10 @@
 ## MVVM 命令（[RelayCommand] → 前端命令方法）
 
 模型类里 `[RelayCommand]` 方法（CommunityToolkit.Mvvm）源生成 ICommand 属性 `{方法名}Command`。链路：
-- **协议加 invoke**：`ModelInvoke{ command, value }`（command=命令方法名 PascalCase、value=ModelValue 可空）挂 WebMessage oneof。
-- **生成器** `CollectCommands` 收集 `[RelayCommand]` 方法，TS 镜像继承桥的 `ModelCommandHost` 基类 + 产出命令方法（无参 / 带参），wire 发 .NET 方法名。
+- **协议加 invoke**：`ModelInvoke{ commandId, value }`（commandId=命令序号、value=ModelValue 可空）挂 WebMessage oneof。
+- **生成器** `CollectCommands` 收集 `[RelayCommand]` 方法，TS 镜像继承桥的 `ModelCommandHost` 基类 + 产出命令方法（无参 / 带参），wire 发命令序号（`[RelayCommand]` 声明序 0 起，`.NET` switch 同序）。
 - **桥** `ModelCommandHost` 只承载 `protected _commandChannel?` 类型契约；`bindModel` 对命令模型用 `Object.defineProperty` 注入**不可枚举** `_commandChannel`（不污染 `Object.keys` 响应式 watch 循环）。无命令的模型不继承、桥不注入。
-- **.NET** `WebWindowModel.TryInvokeCommand(command, value)`：按「命令名+Command」属性找 ICommand，参数类型取 **`RelayCommand<T>` 泛型参数**（有参命令），`CanExecute` 门控**拒绝执行**、`Execute(arg)`。
+- **.NET** `WebWindowModel.TryInvokeCommand(commandId, value)`：按「命令名+Command」属性找 ICommand，参数类型取 **`RelayCommand<T>` 泛型参数**（有参命令），`CanExecute` 门控**拒绝执行**、`Execute(arg)`。
 - **事件出口**：命令方法要驱动窗口/宿主时用**公开事件**（`public event Action<string>? OpenRequested`）——事件非 [ObservableProperty] 字段、不进快照，宿主订阅开窗。
 - 命令方法里的属性变化照常走增量推送（Invoke 不在 `_isApplyingRemoteWrite` 抑制内）。
 
@@ -156,4 +157,4 @@ netstandard2.0、`IsRoslynComponent=true`，**两个 IIncrementalGenerator**（�
 
 ## 桥协议（descriptor 自包含）
 
-生成器把 9 个基础信封消息（WebMessage 信封 + ModelValue/ModelValueList/ModelValueMap + ModelReady/ModelUpdate/ModelSet/ModelSnapshot/GeneratedModel + ModelInvoke + CollectionPatch）**内联进每个模型 descriptor**。桥 `bindModel(model, generatedJson)` 的 `generatedJson` 必填，`Root.fromJSON` 直接解析。漂移测试 `BaseEnvelope_InlineInEveryDescriptor_MatchesCompiledDto` 锁 descriptor ↔ `ModelProtocol.cs` `[ProtoMember]`。`npm install` 必须在 `<App>.Frontend/` 跑（依赖和 vite 二进制在该层 node_modules）。
+生成器把 9 个基础信封消息（WebMessage 信封 + ModelValue/ModelValueList/ModelValueMap + ModelReady/ModelUpdate/ModelSet/ModelSnapshot/GeneratedModel + ModelInvoke + CollectionPatch）**内联进每个模型 descriptor**。桥 `bindModel(model, generatedJson)` 的 `generatedJson` 必填，`Root.fromJSON` 直接解析。信封字段：`ModelUpdate`/`GeneratedModel` = `{ modelId: int32, payload: bytes }`（无 messageName）、`ModelInvoke` = `{ commandId: int32, value }`（无 command 字符串）。漂移测试 `BaseEnvelope_InlineInEveryDescriptor_MatchesCompiledDto` 锁 descriptor ↔ `ModelProtocol.cs` `[ProtoMember]`。`npm install` 必须在 `<App>.Frontend/` 跑（依赖和 vite 二进制在该层 node_modules）。

@@ -8,6 +8,9 @@
 import { bindModel } from 'webwindowui-bridge';
 import descriptorJson from '../bridge/nested_detail_model.json';
 export class NestedDetailModel {
+  /** 线缆协议契约（构建期定死、桥直接读取）：modelId = 模型序号（线缆上代替消息名），
+      full/update = descriptor 消息类型名（解码用）。字符串字面量键：压缩器不改写。 */
+  static ['__protocol'] = { modelId: 298082498, full: 'webwindowui.model.generated.NestedDetailModel', update: 'webwindowui.model.generated.NestedDetailModelUpdate' }
   /** name：名称（proto 字段号 1）。 */
   name: string = ''
 

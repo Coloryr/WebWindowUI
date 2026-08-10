@@ -64,13 +64,13 @@ public class ModelProtoTests
     {
         var msg = new WebMessage
         {
-            Update = new ModelUpdate { MessageName = "x.Y", Payload = new byte[] { 1, 2, 3 } },
+            Update = new ModelUpdate { ModelId = 42, Payload = new byte[] { 1, 2, 3 } },
         };
 
         WebMessage? back = ModelProtocol.Decode(ModelProtocol.Encode(msg));
 
         Assert.NotNull(back?.Update);
-        Assert.Equal("x.Y", back.Update.MessageName);
+        Assert.Equal(42, back.Update.ModelId);
         Assert.Equal(new byte[] { 1, 2, 3 }, back.Update.Payload);
     }
 
@@ -94,13 +94,13 @@ public class ModelProtoTests
     {
         var msg = new WebMessage
         {
-            Invoke = new ModelInvoke { Command = "CommandWithArg", Value = new ModelValue { Text = "todos" } },
+            Invoke = new ModelInvoke { CommandId = 1, Value = new ModelValue { Text = "todos" } },
         };
 
         WebMessage? back = ModelProtocol.Decode(ModelProtocol.Encode(msg));
 
         Assert.NotNull(back?.Invoke);
-        Assert.Equal("CommandWithArg", back.Invoke!.Command);
+        Assert.Equal(1, back.Invoke!.CommandId);
         Assert.Equal("todos", back.Invoke.Value!.Text);
     }
 
@@ -123,13 +123,13 @@ public class ModelProtoTests
     {
         var msg = new WebMessage
         {
-            Full = new GeneratedModel { MessageName = "webwindowui.model.generated.MainWindowModel", Payload = new byte[] { 0x0A, 0x03, 0x61, 0x62, 0x63 } },
+            Full = new GeneratedModel { ModelId = 42, Payload = new byte[] { 0x0A, 0x03, 0x61, 0x62, 0x63 } },
         };
 
         WebMessage? back = ModelProtocol.Decode(ModelProtocol.Encode(msg));
 
         Assert.NotNull(back?.Full);
-        Assert.Equal("webwindowui.model.generated.MainWindowModel", back.Full.MessageName);
+        Assert.Equal(42, back.Full.ModelId);
         Assert.Equal(new byte[] { 0x0A, 0x03, 0x61, 0x62, 0x63 }, back.Full.Payload);
     }
 

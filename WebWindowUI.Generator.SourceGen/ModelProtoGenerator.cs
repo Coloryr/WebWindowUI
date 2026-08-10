@@ -89,6 +89,7 @@ public static class ModelProtoGenerator
     internal static ModelProtoResult GenerateParsed(ModelParsed model, IReadOnlyDictionary<string, ModelParsed> all, string rootNs)
     {
         var fullMessageName = $"{GeneratedPackage}.{model.ClassName}";
+        var modelId = ModelIdFor(fullMessageName);
         var descriptorJson = all.Count > 0
             ? BuildDescriptor(BuildAllModelFields(all))
             : BuildDescriptor(new[] { new KeyValuePair<string, List<ProtoField>>(model.ClassName, model.Fields) });
@@ -98,11 +99,26 @@ public static class ModelProtoGenerator
             allNamespaces[kv.Key] = kv.Value.Namespace;
 
         return new ModelProtoResult(
-            CsCode: BuildCs(model.Namespace, model.ClassName, fullMessageName, model.Fields),
+            CsCode: BuildCs(model.Namespace, model.ClassName, modelId, model.Fields),
             ProtoText: BuildProto(model.ClassName, model.Fields),
             DescriptorJson: descriptorJson,
-            TsCode: BuildTs(model.ClassName, model.Fields, model.Commands, model.Namespace, rootNs, allNamespaces, all),
+            TsCode: BuildTs(model.ClassName, model.Fields, model.Commands, model.Namespace, rootNs, allNamespaces, all, modelId, fullMessageName),
             Namespace: model.Namespace);
+    }
+
+    /// <summary>模型序号：完整消息名（package + 类名）的 FNV-1a 32 位哈希，掩到非负 int32。
+    /// 线缆上代替冗长的消息名——.NET 的 ModelUpdate/GeneratedModel 只发它，前端经生成器烘焙进
+    /// TS 镜像的 __protocol 校验并解码。两侧都由此函数产出（同一生成器），一致性在本模型内即可
+    /// （每窗口单模型，前端按自己烘焙的 modelId 解码），跨模型唯一性不要求。</summary>
+    private static int ModelIdFor(string fullMessageName)
+    {
+        uint hash = 2166136261;
+        foreach (byte b in Encoding.UTF8.GetBytes(fullMessageName))
+        {
+            hash ^= b;
+            hash *= 16777619;
+        }
+        return (int)(hash & 0x7FFFFFFF);
     }
 
     /// <summary>全模型「类名 → 命名空间」表（typed repeated 元素解析用）。null 输入 → null。</summary>
@@ -189,9 +205,10 @@ public static class ModelProtoGenerator
     internal sealed record ModelCommand(string Name, string? ParamType, string Doc);
 
     /// <summary>
-    /// 收集模型的 [RelayCommand] 命令方法（MVVM Command）。方法名即线缆 command id；
-    /// .NET 侧由源生成器产出同名 ICommand 属性「{方法名}Command」，本生成器把方法映射成
-    /// 前端 TS 方法（camelCase，经桥发 ModelInvoke 调用 .NET 命令）。
+    /// 收集模型的 [RelayCommand] 命令方法（MVVM Command）。命令按源声明序编号（0 起，即线缆
+    /// commandId——与 WriteBackGenerator 的 switch 同序）；.NET 侧由源生成器产出同名 ICommand
+    /// 属性「{方法名}Command」，本生成器把方法映射成前端 TS 方法（camelCase，经桥发 ModelInvoke
+    /// 调用 .NET 命令）。
     /// </summary>
     private static List<ModelCommand> CollectCommands(string sourceText, string modelClassName)
     {
@@ -485,12 +502,13 @@ public static class ModelProtoGenerator
         };
         // 前端→.NET：页面脚本就绪，请求补发完整快照
         var modelReady = new Dictionary<string, object?> { ["fields"] = new Dictionary<string, object?>() };
-        // .NET→前端：单属性增量。payload 是生成器为模型产出的 update 消息字节，messageName 供前端按名解码。
+        // .NET→前端：单属性增量。payload 是生成器为模型产出的 update 消息字节，modelId 是模型序号
+        // （FNV-1a 哈希，前端经烘焙 __protocol 校验并解码类型）。
         var modelUpdate = new Dictionary<string, object?>
         {
             ["fields"] = new Dictionary<string, object?>
             {
-                ["messageName"] = new Dictionary<string, object?> { ["type"] = "string", ["id"] = 1 },
+                ["modelId"] = new Dictionary<string, object?> { ["type"] = "int32", ["id"] = 1 },
                 ["payload"] = new Dictionary<string, object?> { ["type"] = "bytes", ["id"] = 2 },
             },
         };
@@ -504,12 +522,12 @@ public static class ModelProtoGenerator
             },
         };
         // 前端→.NET：执行模型命令（MVVM Command，[RelayCommand] 生成的 ICommand）。
-        // command = 命令方法名，.NET 侧按「命令名 + Command」属性查找并执行；value 为参数（可空）。
+        // commandId = 命令序号（[RelayCommand] 方法声明序，.NET 与 TS 镜像一致）；value 为参数（可空）。
         var modelInvoke = new Dictionary<string, object?>
         {
             ["fields"] = new Dictionary<string, object?>
             {
-                ["command"] = new Dictionary<string, object?> { ["type"] = "string", ["id"] = 1 },
+                ["commandId"] = new Dictionary<string, object?> { ["type"] = "int32", ["id"] = 1 },
                 ["value"] = new Dictionary<string, object?> { ["type"] = "ModelValue", ["id"] = 2 },
             },
         };
@@ -526,7 +544,7 @@ public static class ModelProtoGenerator
         {
             ["fields"] = new Dictionary<string, object?>
             {
-                ["messageName"] = new Dictionary<string, object?> { ["type"] = "string", ["id"] = 1 },
+                ["modelId"] = new Dictionary<string, object?> { ["type"] = "int32", ["id"] = 1 },
                 ["payload"] = new Dictionary<string, object?> { ["type"] = "bytes", ["id"] = 2 },
             },
         };
@@ -630,7 +648,7 @@ public static class ModelProtoGenerator
     /// （class 名会被 JS 压缩器改名，运行时反射必失真——Release 下 typed-repeated 补丁挂的根因）。</summary>
     private static string BuildTs(string modelClassName, List<ProtoField> fields, List<ModelCommand> commands,
         string ns, string rootNs, IReadOnlyDictionary<string, string>? allNamespaces,
-        IReadOnlyDictionary<string, ModelParsed> all)
+        IReadOnlyDictionary<string, ModelParsed> all, int modelId, string fullMessageName)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated>");
@@ -658,6 +676,11 @@ public static class ModelProtoGenerator
         sb.AppendLine(hasCommands
             ? $"export class {modelClassName} extends ModelCommandHost {{"
             : $"export class {modelClassName} {{");
+        // 线缆协议契约：modelId 代替消息名（ModelUpdate/GeneratedModel 只发序号），full/update 是
+        // descriptor 消息类型名（桥解码用）。构建期定死、桥直接读取，字符串字面量键压缩器不改写。
+        sb.AppendLine("  /** 线缆协议契约（构建期定死、桥直接读取）：modelId = 模型序号（线缆上代替消息名），");
+        sb.AppendLine("      full/update = descriptor 消息类型名（解码用）。字符串字面量键：压缩器不改写。 */");
+        sb.AppendLine($"  static ['__protocol'] = {{ modelId: {modelId}, full: '{fullMessageName}', update: '{fullMessageName}Update' }}");
         // typed-repeated 序数键烘焙：属性名 → { 元素 proto 字段号: 元素属性名 }（元素字段号 = 元素模型声明序）。
         // 元素模型不在全模型表（单模型用法）或非 typed repeated → 不烘焙（typed repeated 已退化 ModelValue 兜底）。
         var repeatedByNumber = new List<(string Prop, List<KeyValuePair<int, string>> Fields)>();
@@ -694,6 +717,7 @@ public static class ModelProtoGenerator
             sb.AppendLine($"  {f.WireName}: {TsType(f)} = {TsInit(f)}");
             sb.AppendLine();
         }
+        int cmdId = 0;
         foreach (var c in commands)
         {
             if (string.IsNullOrEmpty(c.Doc))
@@ -702,8 +726,9 @@ public static class ModelProtoGenerator
                 sb.AppendLine($"  /** {c.Name}：{c.Doc} */");
             var tsName = ToCamelCase(c.Name);
             sb.AppendLine(c.ParamType is null
-                ? $"  {tsName}(): void {{ this._commandChannel?.('{c.Name}') }}"
-                : $"  {tsName}(arg: {TsCommandParamType(c.ParamType)}): void {{ this._commandChannel?.('{c.Name}', arg) }}");
+                ? $"  {tsName}(): void {{ this._commandChannel?.({cmdId}) }}"
+                : $"  {tsName}(arg: {TsCommandParamType(c.ParamType)}): void {{ this._commandChannel?.({cmdId}, arg) }}");
+            cmdId++;
         }
         sb.AppendLine("}");
         sb.AppendLine();
@@ -868,7 +893,7 @@ public static class ModelProtoGenerator
         return string.Join(".", keep);
     }
 
-    private static string BuildCs(string ns, string modelClassName, string fullMessageName, List<ProtoField> fields)
+    private static string BuildCs(string ns, string modelClassName, int modelId, List<ProtoField> fields)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated>");
@@ -905,7 +930,7 @@ public static class ModelProtoGenerator
         sb.AppendLine();
         sb.AppendLine($"public partial class {modelClassName}");
         sb.AppendLine("{");
-        sb.AppendLine($"    protected override string FullMessageName => \"{fullMessageName}\";");
+        sb.AppendLine($"    protected override int ModelId => {modelId};");
         sb.AppendLine("    protected override byte[] EncodeFullSnapshot()");
         sb.AppendLine("    {");
         sb.AppendLine("        using var ms = new MemoryStream();");
@@ -913,7 +938,6 @@ public static class ModelProtoGenerator
         sb.AppendLine("        return ms.ToArray();");
         sb.AppendLine("    }");
         sb.AppendLine();
-        sb.AppendLine($"    protected override string UpdateMessageName => \"{GeneratedPackage}.{modelClassName}Update\";");
         sb.AppendLine("    protected override byte[] EncodePropertyUpdate(string propertyName, object? value)");
         sb.AppendLine("    {");
         sb.AppendLine($"        var u = new {modelClassName}Update();");

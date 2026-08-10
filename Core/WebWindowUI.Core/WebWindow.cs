@@ -139,10 +139,10 @@ public abstract class WebWindow
                     _model.BroadcastPropertyUpdate(msg.Set.Property, _backend.PostMessage);
             }
 
-            // 前端命令调用：ModelInvoke { command, value }。执行模型上的 ICommand
+            // 前端命令调用：ModelInvoke { commandId, value }。执行模型上的 ICommand
             // （[RelayCommand] 源生成）；命令方法里的属性变化照常走增量推送（不在回写抑制期间）。
             if (msg.Invoke is not null && _model is not null)
-                _model.TryInvokeCommand(msg.Invoke.Command, msg.Invoke.Value);
+                _model.TryInvokeCommand(msg.Invoke.CommandId, msg.Invoke.Value);
         }
         catch
         {

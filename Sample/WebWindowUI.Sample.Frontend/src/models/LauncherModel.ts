@@ -8,6 +8,9 @@
 import { bindModel, ModelCommandHost } from 'webwindowui-bridge';
 import descriptorJson from '../bridge/launcher_model.json';
 export class LauncherModel extends ModelCommandHost {
+  /** 线缆协议契约（构建期定死、桥直接读取）：modelId = 模型序号（线缆上代替消息名），
+      full/update = descriptor 消息类型名（解码用）。字符串字面量键：压缩器不改写。 */
+  static ['__protocol'] = { modelId: 867241668, full: 'webwindowui.model.generated.LauncherModel', update: 'webwindowui.model.generated.LauncherModelUpdate' }
   /** request：回写通道演示：值为要打开的窗口路径（"main"/"todos"/"multi"/…）；.NET 处理后清空。 与命令通道并存——前端 ModelSet 直接写属性（不经过命令），保留双向绑定回写的演示。 */
   request: string = ''
 
@@ -15,9 +18,9 @@ export class LauncherModel extends ModelCommandHost {
   buttonEnable: boolean = false
 
   /** OpenWindow：无参命令：打开主窗口。 */
-  openWindow(): void { this._commandChannel?.('OpenWindow') }
+  openWindow(): void { this._commandChannel?.(0) }
   /** CommandWithArg：带参命令：打开指定路径的窗口（CanExecute = ButtonEnable 门控）。 */
-  commandWithArg(arg: string): void { this._commandChannel?.('CommandWithArg', arg) }
+  commandWithArg(arg: string): void { this._commandChannel?.(1, arg) }
 }
 
 /** 绑定 LauncherModel：创建实例并经 webwindowui-bridge 连接 .NET 双向绑定（descriptor 已含基础信封）。 */

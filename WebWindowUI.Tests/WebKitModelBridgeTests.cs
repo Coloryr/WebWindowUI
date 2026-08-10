@@ -209,7 +209,7 @@ public class WebKitModelBridgeTests
 
         await WebKitTestHarness.RunWindowAsync("launcher", "示例入口", model, async win =>
         {
-            // 无参命令 openWindow() → 桥发 ModelInvoke{command:"OpenWindow"} → .NET OpenWindowCommand 执行
+            // 无参命令 openWindow() → 桥发 ModelInvoke{commandId:0} → .NET OpenWindowCommand 执行
             await win.ExecuteScriptAsync("window.__model.openWindow(); 0");
             await WebKitTestHarness.WaitDotNetAsync(() => opened == "main", "无参命令触发 .NET");
 

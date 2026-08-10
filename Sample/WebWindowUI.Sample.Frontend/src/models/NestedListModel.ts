@@ -10,6 +10,9 @@ import descriptorJson from '../bridge/nested_list_model.json';
 import { NestedListItemModel } from './items/NestedListItemModel';
 
 export class NestedListModel extends ModelCommandHost {
+  /** 线缆协议契约（构建期定死、桥直接读取）：modelId = 模型序号（线缆上代替消息名），
+      full/update = descriptor 消息类型名（解码用）。字符串字面量键：压缩器不改写。 */
+  static ['__protocol'] = { modelId: 514876241, full: 'webwindowui.model.generated.NestedListModel', update: 'webwindowui.model.generated.NestedListModelUpdate' }
   /** typed-repeated 序数键契约：属性名 → { proto 字段号: 元素属性名 }（与 .NET
       ConvertToModelValue/ConvertFromModelValue 的 ordinalFields int 键对称）。构建期
      烘焙、桥直接读取，不做运行时 constructor.name 反射（class 名会被压缩器改名）。
@@ -28,9 +31,9 @@ export class NestedListModel extends ModelCommandHost {
   counts: Record<string, unknown> = {}
 
   /** OpenItem */
-  openItem(arg: number): void { this._commandChannel?.('OpenItem', arg) }
+  openItem(arg: number): void { this._commandChannel?.(0, arg) }
   /** Bump：把指定统计项 +1（演示 .NET 侧原地改字典自动推前端）。 */
-  bump(arg: string): void { this._commandChannel?.('Bump', arg) }
+  bump(arg: string): void { this._commandChannel?.(1, arg) }
 }
 
 /** 绑定 NestedListModel：创建实例并经 webwindowui-bridge 连接 .NET 双向绑定（descriptor 已含基础信封）。 */

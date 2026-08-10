@@ -19,7 +19,7 @@ namespace WebWindowUI.Core;
 ///   增量载荷由生成器为每个模型单独产出的 update 消息（如 MainWindowModelUpdate）编码，
 ///   只有被修改的字段会出现在载荷里；没有生成 update 编码器的模型不推送增量（只发完整快照）；
 /// - 页面加载完成时推送完整快照：优先用生成器产出的完整模型消息
-///   （由 MainWindowModelProto 之类的生成代码 override <see cref="FullMessageName"/>/
+///   （由 MainWindowModelProto 之类的生成代码 override <see cref="ModelId"/>/
 ///   <see cref="EncodeFullSnapshot"/>），否则回退到通用 ModelSnapshot（property → ModelValue）；
 /// - 前端回传 ModelSet { property, value } 时会写回对应属性。
 ///
@@ -121,23 +121,19 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// 生成器产出的完整模型消息名（如 "webwindowui.model.generated.MainWindowModel"）。
-    /// 空串表示没有生成编码器，完整快照回退到通用 ModelSnapshot。
+    /// 模型序号（生成器烘焙：完整消息名 FNV-1a 哈希）。线缆上代替冗长的消息名——ModelUpdate/
+    /// GeneratedModel 都只发 <see cref="ModelId"/>，前端经生成器烘焙进 descriptor/TS 的
+    /// __protocol 校验并解码。0 表示没有生成编码器，完整快照回退到通用 ModelSnapshot、
+    /// 属性变化不推送增量。
     /// </summary>
-    protected virtual string FullMessageName => "";
+    protected virtual int ModelId => 0;
 
-    /// <summary>把整个模型序列化为生成消息的 protobuf 字节（仅当 <see cref="FullMessageName"/> 非空时调用）。</summary>
+    /// <summary>把整个模型序列化为生成消息的 protobuf 字节（仅当 <see cref="ModelId"/> 非 0 时调用）。</summary>
     protected virtual byte[] EncodeFullSnapshot()
         => throw new NotSupportedException($"模型 {GetType().Name} 未由 WebWindowUI.Generator 生成完整模型编码器。");
 
     /// <summary>
-    /// 生成器产出的增量 update 消息名（如 "webwindowui.model.generated.MainWindowModelUpdate"）。
-    /// 空串表示没有生成 update 编码器，属性变化不推送增量（只发完整快照）。
-    /// </summary>
-    protected virtual string UpdateMessageName => "";
-
-    /// <summary>
-    /// 把单个属性变化编码成增量 update 消息的 protobuf 字节（仅当 <see cref="UpdateMessageName"/> 非空时调用）。
+    /// 把单个属性变化编码成增量 update 消息的 protobuf 字节（仅当 <see cref="ModelId"/> 非 0 时调用）。
     /// 生成代码按属性名 set 对应字段，载荷里只包含被修改的字段。
     /// </summary>
     protected virtual byte[] EncodePropertyUpdate(string propertyName, object? value)
@@ -150,10 +146,11 @@ public abstract partial class WebWindowModel : ObservableObject
     protected virtual bool TrySetGeneratedProperty(string name, ModelValue? value) => false;
 
     /// <summary>
-    /// 源生成器产出的「命令调用」钩子：命中返回 true（命令已执行或已被 CanExecute 门控拒绝）。
+    /// 源生成器产出的「命令调用」钩子：commandId = 命令序号（[RelayCommand] 方法声明序，与前端
+    /// TS 镜像烘焙的调用序号一致）。命中返回 true（命令已执行或已被 CanExecute 门控拒绝）；
     /// 未命中返回 false（命令未由生成器收集——非 [RelayCommand] 方法；不再反射兜底）。
     /// </summary>
-    protected virtual bool TryInvokeGeneratedCommand(string command, ModelValue? value) => false;
+    protected virtual bool TryInvokeGeneratedCommand(int commandId, ModelValue? value) => false;
 
     /// <summary>源生成器产出的「按名读值」钩子：命中返回 true 并输出属性现值；未命中返回 false（不再反射兜底）。</summary>
     protected virtual bool TryGetGeneratedProperty(string name, out object? value) { value = null; return false; }
@@ -194,7 +191,7 @@ public abstract partial class WebWindowModel : ObservableObject
 
         // 增量更新走生成器为模型单独产出的 update 消息（只编码被修改的字段）；
         // 未生成 update 编码器的模型不推送增量。
-        if (string.IsNullOrEmpty(UpdateMessageName))
+        if (ModelId == 0)
             return;
 
         PushEnvelope(BuildUpdateEnvelope(e.PropertyName, value));
@@ -233,7 +230,7 @@ public abstract partial class WebWindowModel : ObservableObject
     /// 按事件 Action 编码 CollectionPatch（Insert/Remove/Replace/Move），前端对响应式数组原地 splice——
     /// 比整列表增量省流量、免整列重建。Reset 事件不带新旧元素，无法差量编码 → 回退整列表补丁
     /// （Items 承载全量，前端整体替换）。补丁自包含（property + action + items），不依赖
-    /// UpdateMessageName；远程回写期间（_isApplyingRemoteWrite）不推送。
+    /// ModelId；远程回写期间（_isApplyingRemoteWrite）不推送。
     /// </summary>
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -248,7 +245,7 @@ public abstract partial class WebWindowModel : ObservableObject
             {
                 // ObservableDictionary 等字典：键值语义无索引差量，原地改（dict[k]=v / Add / Remove / Clear）
                 // → 整属性重推（复用增量 update 消息，ModelValue 对象 map 整体替换前端对象）。
-                if (string.IsNullOrEmpty(UpdateMessageName))
+                if (ModelId == 0)
                     return;
                 if (TryGetGeneratedProperty(kv.Key, out object? value))
                     PushEnvelope(BuildUpdateEnvelope(kv.Key, value));
@@ -318,7 +315,7 @@ public abstract partial class WebWindowModel : ObservableObject
         var payload = EncodePropertyUpdate(propertyName, value);
         var msg = new WebMessage
         {
-            Update = new ModelUpdate { MessageName = UpdateMessageName, Payload = payload },
+            Update = new ModelUpdate { ModelId = ModelId, Payload = payload },
         };
         return ModelProtocol.Encode(msg);
     }
@@ -329,7 +326,7 @@ public abstract partial class WebWindowModel : ObservableObject
     /// </summary>
     internal void BroadcastPropertyUpdate(string propertyName, Action<byte[]> exclude)
     {
-        if (string.IsNullOrEmpty(UpdateMessageName))
+        if (ModelId == 0)
             return;
         // 读值走生成代码（无反射）；未命中（属性非生成/非公开）不广播。
         if (TryGetGeneratedProperty(propertyName, out object? value))
@@ -343,10 +340,9 @@ public abstract partial class WebWindowModel : ObservableObject
         ArmCollectionSubscriptions();
 
         var msg = new WebMessage();
-        var name = FullMessageName;
-        if (!string.IsNullOrEmpty(name))
+        if (ModelId != 0)
         {
-            msg.Full = new GeneratedModel { MessageName = name, Payload = EncodeFullSnapshot() };
+            msg.Full = new GeneratedModel { ModelId = ModelId, Payload = EncodeFullSnapshot() };
         }
         else
         {
@@ -369,19 +365,15 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// 执行前端发来的命令调用（ModelInvoke { command, value }，MVVM Command）。
-    /// command 为命令方法名（[RelayCommand] 方法名，如 "OpenWindow"），由生成代码直接命中
+    /// 执行前端发来的命令调用（ModelInvoke { commandId, value }，MVVM Command）。
+    /// commandId 为命令序号（[RelayCommand] 方法声明序），由生成代码直接命中
     /// 「命令名 + Command」的 ICommand（如 OpenWindowCommand）并执行：有参命令按方法参数类型
     /// 转换，无参命令按 object 透传，CanExecute 不满足时拒绝执行（MVVM 门控，如
     /// [RelayCommand(CanExecute = ...)]）。未由生成器收集的命令返回 false（不抛异常）。
     /// 命令方法内部的属性变化照常走增量推送（Invoke 不在回写抑制期间）。
     /// </summary>
-    internal bool TryInvokeCommand(string command, ModelValue? value)
-    {
-        if (string.IsNullOrEmpty(command))
-            return false;
-        return TryInvokeGeneratedCommand(command, value);
-    }
+    internal bool TryInvokeCommand(int commandId, ModelValue? value)
+        => TryInvokeGeneratedCommand(commandId, value);
 
     /// <summary>前端回传的属性写入：由生成代码按名写回（无反射）。找不到可写属性或值类型不匹配时返回 false（不抛异常）。</summary>
     internal bool TrySetProperty(string name, ModelValue? value)

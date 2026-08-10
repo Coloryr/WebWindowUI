@@ -10,6 +10,9 @@ import descriptorJson from '../bridge/todo_list_model.json';
 import { TodoItemModel } from './items/TodoItemModel';
 
 export class TodoListModel {
+  /** 线缆协议契约（构建期定死、桥直接读取）：modelId = 模型序号（线缆上代替消息名），
+      full/update = descriptor 消息类型名（解码用）。字符串字面量键：压缩器不改写。 */
+  static ['__protocol'] = { modelId: 160333348, full: 'webwindowui.model.generated.TodoListModel', update: 'webwindowui.model.generated.TodoListModelUpdate' }
   /** typed-repeated 序数键契约：属性名 → { proto 字段号: 元素属性名 }（与 .NET
       ConvertToModelValue/ConvertFromModelValue 的 ordinalFields int 键对称）。构建期
      烘焙、桥直接读取，不做运行时 constructor.name 反射（class 名会被压缩器改名）。
