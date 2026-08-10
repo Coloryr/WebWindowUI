@@ -10,6 +10,7 @@
          Windows 侧核心（net10.0-windows）不匹配，放进共享 slnx 会在 Windows 上构建报错。
          它们在各自 OS 上作为独立工程构建（WWUIPlatform=Linux/MacOS）。 -->
     <Project Path="WebWindowUI.Platforms.Windows/WebWindowUI.Platforms.Windows.csproj" />
+    <Project Path="WebWindowUI.Platforms.Cef/WebWindowUI.Platforms.Cef.csproj" />
   </Folder>
   <Folder Name="/Generator/">
     <Project Path="WebWindowUI.Generator.SourceGen/WebWindowUI.Generator.SourceGen.csproj" />

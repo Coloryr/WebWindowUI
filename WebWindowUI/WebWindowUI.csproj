@@ -46,8 +46,12 @@
        自己的平台依赖也抑制掉（deps 空、nuspec 丢平台依赖）。Core 拆分后平台工程不引用本入口，
        无任何环路径，也不需要靠它挡循环。 -->
 
-  <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows' And '$(WWUI_PlatformRef)' == 'true'">
+  <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows' And '$(WWUI_PlatformRef)' == 'true' And '$(UseCEF)' != 'true'">
     <PackageReference Include="WebWindowUI.Platforms.Windows" />
+  </ItemGroup>
+  <!-- CEF：UseCEF=true 时替换 WebView2（WWUIPlatform 必为 Windows，CEF 无 Linux/macOS 实现） -->
+  <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows' And '$(WWUI_PlatformRef)' == 'true' And '$(UseCEF)' == 'true'">
+    <PackageReference Include="WebWindowUI.Platforms.Cef" />
   </ItemGroup>
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Linux' And '$(WWUI_PlatformRef)' == 'true'">
     <PackageReference Include="WebWindowUI.Platforms.Linux" />
@@ -59,8 +63,11 @@
   <!-- 仓库模式（构建/测试，不传 WWUI_PlatformRef）：Platform.cs 的 #if 静态引用需在编译期拿到平台类型，
        补 ProjectReference 到相邻平台工程（包模式则靠上面 PackageReference 的编译期引用）。
        依赖图仍单向无环：entry→platform、platform→Core、entry→Core。平台 dll 经本引用传递进消费方产物。 -->
-  <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows' And '$(WWUI_PlatformRef)' != 'true' And Exists('..\WebWindowUI.Platforms.Windows\WebWindowUI.Platforms.Windows.csproj')">
+  <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows' And '$(WWUI_PlatformRef)' != 'true' And '$(UseCEF)' != 'true' And Exists('..\WebWindowUI.Platforms.Windows\WebWindowUI.Platforms.Windows.csproj')">
     <ProjectReference Include="..\WebWindowUI.Platforms.Windows\WebWindowUI.Platforms.Windows.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows' And '$(WWUI_PlatformRef)' != 'true' And '$(UseCEF)' == 'true' And Exists('..\WebWindowUI.Platforms.Cef\WebWindowUI.Platforms.Cef.csproj')">
+    <ProjectReference Include="..\WebWindowUI.Platforms.Cef\WebWindowUI.Platforms.Cef.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Linux' And '$(WWUI_PlatformRef)' != 'true' And Exists('..\WebWindowUI.Platforms.Linux\WebWindowUI.Platforms.Linux.csproj')">
     <ProjectReference Include="..\WebWindowUI.Platforms.Linux\WebWindowUI.Platforms.Linux.csproj" />

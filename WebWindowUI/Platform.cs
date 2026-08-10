@@ -12,7 +12,12 @@ public static class Platform
     /// <summary>确保当前平台实现已加载并注册。幂等，可重复调用。</summary>
     public static void EnsureRegistered()
     {
-#if WINDOWS
+#if WWUI_CEF
+        // CEF 渲染器（UseCEF=true，仅 Windows）：显式引导——下载运行时、子进程短路、cef_initialize、注册。
+        // 必须置最前（先于 #elif WINDOWS）；Cef 程序集内无 [ModuleInitializer]，靠这里显式调用。
+        WebWindowUI.Cef.CefBootstrap.EnsureRegistered();
+        return;
+#elif WINDOWS
         GC.KeepAlive(typeof(WebWindowUI.Windows.WindowsPlatform));
 #elif LINUX
         GC.KeepAlive(typeof(WebWindowUI.Linux.LinuxPlatform));

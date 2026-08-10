@@ -35,6 +35,8 @@
        由测试泵线程触碰平台类型触发）。包模式消费方则由入口 nuspec 平台依赖自动带回，无需直接引用。 -->
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows'">
     <ProjectReference Include="..\WebWindowUI.Platforms.Windows\WebWindowUI.Platforms.Windows.csproj" />
+    <!-- CEF 绑定结构布局单测（CefLayoutTests）用；不初始化 CEF，纯 SizeOf/OffsetOf 断言 -->
+    <ProjectReference Include="..\WebWindowUI.Platforms.Cef\WebWindowUI.Platforms.Cef.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Linux'">
     <ProjectReference Include="..\WebWindowUI.Platforms.Linux\WebWindowUI.Platforms.Linux.csproj" />

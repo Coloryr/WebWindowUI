@@ -14,6 +14,7 @@
     <PackageVersion Include="WebWindowUI.Backend" Version="$(Version)" />
     <PackageVersion Include="WebWindowUI.Frontend" Version="$(Version)" />
     <PackageVersion Include="WebWindowUI.Platforms.Windows" Version="$(Version)" />
+    <PackageVersion Include="WebWindowUI.Platforms.Cef" Version="$(Version)" />
     <PackageVersion Include="WebWindowUI.Platforms.Linux" Version="$(Version)" />
     <PackageVersion Include="WebWindowUI.Platforms.MacOS" Version="$(Version)" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
@@ -21,6 +22,7 @@
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
     <PackageVersion Include="protobuf-net" Version="3.2.56" />
+    <PackageVersion Include="SharpCompress" Version="0.50.4" />
     <PackageVersion Include="System.Text.Json" Version="8.0.6" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="xunit" Version="2.9.2" />

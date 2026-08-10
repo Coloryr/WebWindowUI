@@ -29,6 +29,10 @@
     <DefineConstants Condition="'$(WWUIPlatform)' == 'Windows'">$(DefineConstants);WINDOWS</DefineConstants>
     <DefineConstants Condition="'$(WWUIPlatform)' == 'Linux'">$(DefineConstants);LINUX</DefineConstants>
     <DefineConstants Condition="'$(WWUIPlatform)' == 'MacOS'">$(DefineConstants);MACOS</DefineConstants>
+
+    <!-- CEF 渲染器：UseCEF=true 且 Windows 时定义 WWUI_CEF——入口 Platform.cs 的 #if WWUI_CEF 分支
+         改走 CefBootstrap、平台包改引 WebWindowUI.Platforms.Cef（替换 WebView2）。仅 Windows 有效。 -->
+    <DefineConstants Condition="'$(WWUIPlatform)' == 'Windows' And '$(UseCEF)' == 'true'">$(DefineConstants);WWUI_CEF</DefineConstants>
   </PropertyGroup>
 
 </Project>
