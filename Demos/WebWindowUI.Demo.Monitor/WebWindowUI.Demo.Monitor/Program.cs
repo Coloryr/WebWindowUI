@@ -50,6 +50,8 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        WebWindowUI.Platform.EnsureRegistered();
+
         // 同一个 MonitorModel 实例给两个窗口用（master-detail）：
         //   main     绑定 MonitorModel（实时监控；Settings 是嵌套模型，主窗口 ordinal 翻译展示）
         //   settings 绑定 model.Settings 同一子实例（强类型编辑，改间隔即时生效）
@@ -57,7 +59,6 @@ internal static class Program
         new MainWindow(model).Show();
         new SettingsWindow(model.Settings).Show();
 
-        // 运行当前平台的消息循环（Windows 上是 Win32），直到最后一个窗口关闭
         WebWindow.RunMessageLoop();
     }
 }

@@ -18,12 +18,13 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        WebWindowUI.Platform.EnsureRegistered();
+
         // 启动即从 %LocalAppData%\WebWindowUI.Demo.Todo\todos.json 加载历史任务。
         TodoListModel model = new();
         MainWindow window = new(model);
         window.Show();
 
-        // 运行当前平台的消息循环（Windows 上是 Win32），直到最后一个窗口关闭
         WebWindow.RunMessageLoop();
     }
 }

@@ -209,6 +209,11 @@ public class GeneratorTests
         Assert.Contains("import { TodoItemModel } from './TodoItemModel';", result.TsCode);
         Assert.Contains("todos: TodoItemModel[] = []", result.TsCode);
 
+        // TS：typed-repeated 序数键契约烘焙进静态字符串键字段（桥直接读取、不做 constructor.name 反射；
+        // 压缩器会改 class 名导致反射失真，故契约必须构建期定死为字符串字面量）
+        Assert.Contains("static ['__repeatedFields'] = {", result.TsCode);
+        Assert.Contains("todos: { 1: 'title', 2: 'done' },", result.TsCode);
+
         // descriptor：repeated + 元素类型，且全量集合包含元素消息（typed 引用可被 protobufjs 解析）
         using JsonDocument json = JsonDocument.Parse(result.DescriptorJson);
         JsonElement gen = json.RootElement.GetProperty("nested").GetProperty("webwindowui")

@@ -10,6 +10,14 @@ import descriptorJson from '../bridge/todo_list_model.json';
 import { TodoItemModel } from './TodoItemModel';
 
 export class TodoListModel extends ModelCommandHost {
+  /** typed-repeated 序数键契约：属性名 → { proto 字段号: 元素属性名 }（与 .NET
+      ConvertToModelValue/ConvertFromModelValue 的 ordinalFields int 键对称）。构建期
+     烘焙、桥直接读取，不做运行时 constructor.name 反射（class 名会被压缩器改名）。
+     声明与访问均用字符串字面量键：minifier 不改写字面量。 */
+  static ['__repeatedFields'] = {
+    items: { 1: 'title', 2: 'done', 3: 'priority', 4: 'createdAt' },
+  }
+
   /** items：任务列表：前端强类型 TodoItemModel[]，勾选/增删即整列表回写。 */
   items: TodoItemModel[] = []
 

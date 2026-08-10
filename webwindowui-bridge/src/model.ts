@@ -289,29 +289,22 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
   const m = reactive(model) as T & Record<string, unknown>
   const values = m as unknown as Record<string, unknown> // 泛型 T 不能做写索引，这里用非泛型引用
 
-  // 模型消息类型 + typed-repeated 元素字段表：根属性若是 typed repeated（List<模型>，如 todos），
-  // 元素对象 map 用 proto 字段号键（"1"/"2"…）而非属性名——协议序号是固定契约，与 .NET 生成器
+  // typed-repeated 元素字段表：根属性若是 typed repeated（List<模型>，如 todos），元素对象 map 用
+  // proto 字段号键（"1"/"2"…）而非属性名——协议序号是固定契约，与 .NET 生成器
   // ConvertFromModelValue/ConvertToModelValue 对称，不依赖前后端命名一致；generic object/Dictionary
   // 属性仍是 name 键。全量快照（typed protobuf）本就走字段号、经 fullModelEntries 产出命名键对象，
-  // 此处只管 ModelValue 兜底的增量推送（.NET→前端，updateEntries）与整列表回写（前端→.NET，watch）。
-  let modelType: protobuf.Type | undefined
-  try {
-    modelType = root.lookupType(`webwindowui.model.generated.${(model as object).constructor.name}`)
-  } catch {
-    modelType = undefined // 消息未注册（descriptor 缺失/漂移）：无 typed-repeated 特判，退回通用 name 键
-  }
-  /** root 属性键 → 该属性 typed-repeated 的元素字段号→字段名表（序数键编码/解码用）。 */
+  // 此处只管 ModelValue 兜底的增量推送（.NET→前端，updateEntries）、差量补丁（applyPatch）与整列表
+  // 回写（前端→.NET，watch）。
+  /** root 属性键 → 该属性 typed-repeated 的元素字段号→字段名表（序数键编码/解码用）。
+      由生成器烘焙进模型镜像类的静态字符串键契约 ['__repeatedFields']（构建期定死、随类声明发布），
+      桥直接读取——不做运行时 constructor.name → lookupType 反射：class 名会被 JS 压缩器改名
+      （如 class TodoListModel → g=class{...}），反射必失真（Release 下 typed-repeated 补丁挂的根因）。
+      空 → 无 typed-repeated 特判，退回通用 name 键。 */
   const typedElemFields = new Map<string, Record<number, string>>()
-  if (modelType) {
-    for (const key of Object.keys(values)) {
-      const f = modelType.fields[key]
-      if (f?.repeated && f.resolve().resolvedType instanceof protobuf.Type) {
-        const rt = f.resolve().resolvedType as protobuf.Type
-        const byNumber: Record<number, string> = {}
-        for (const [n, ef] of Object.entries(rt.fields)) byNumber[ef.id] = n
-        typedElemFields.set(key, byNumber)
-      }
-    }
+  const baked = (model as unknown as { constructor: { readonly ['__repeatedFields']?: Record<string, Record<number, string>> } })
+    .constructor['__repeatedFields']
+  if (baked && typeof baked === 'object') {
+    for (const [prop, byNumber] of Object.entries(baked)) typedElemFields.set(prop, byNumber)
   }
 
   // 命令通道：生成器为带 [RelayCommand] 方法的模型产出的命令方法（openWindow()/commandWithArg(arg)）

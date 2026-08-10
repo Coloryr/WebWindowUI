@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- WebWindowUI.Core：运行时代码本体（WebWindow / WebWindowModel / protobuf 协议 / 资源解析 /
+       WebWindowPlatform 运行时调度）。平台无关，不引用任何平台工程或包——平台实现（WebWindowUI.Platforms.*）
+       依赖本工程，方向单向、无环。消费方不直接引用本包，经入口包 WebWindowUI 自动带回。 -->
+  <!-- 平台选择（TFM + WINDOWS/LINUX/MACOS 编译符号）集中在 WebWindowUI.Platform.props（入口工程目录） -->
+  <Import Project="..\WebWindowUI\WebWindowUI.Platform.props" />
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <PackageId>WebWindowUI.Core</PackageId>
+    <Description>WebWindowUI 核心库：跨平台 WebView 窗口抽象 + protobuf 模型协议 + 静态资源解析 + 运行时平台调度。平台无关，平台实现见 WebWindowUI.Platforms.{Windows,Linux,MacOS}，消费方请引用入口包 WebWindowUI。</Description>
+    <PackageTags>webwindowui;webview2;webkit2gtk;protobuf;vue;desktop;linux;macos</PackageTags>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\artifacts</PackageOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="protobuf-net" />
+  </ItemGroup>
+
+  <!-- 平台包经 IVT 访问核心 internal（WebWindow 内部成员、WebView2StringCodec、JsStringLiteral 等） -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="WebWindowUI.Tests" />
+    <InternalsVisibleTo Include="WebWindowUI.Platforms.Windows" />
+    <InternalsVisibleTo Include="WebWindowUI.Platforms.Linux" />
+    <InternalsVisibleTo Include="WebWindowUI.Platforms.MacOS" />
+  </ItemGroup>
+
+
+  <!-- PDB 内嵌策略显式化：Debug=portable（独立 .pdb）、Release=embedded（符号随程序集，无独立 .pdb 文件）。
+       仓库工程与根 Directory.Build.props 的 Release=embedded 重复但无害（自包含）；模板生成工程无根 props，靠这里保证。 -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+</Project>

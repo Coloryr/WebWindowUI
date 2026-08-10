@@ -340,6 +340,8 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        WebWindowUI.Platform.EnsureRegistered();
+
         // app:// 自定义协议，静态资源由类库内置的 WebResourceResolver 提供（Vue+Vite 构建产物）。
         // 每个窗口继承 WebWindow，构造时传入窗口路径；平台由类库在编译期按操作系统自动选择，
         // 这里不接触任何平台 API。
@@ -359,7 +361,6 @@ internal static class Program
         LauncherWindow launcher = new();
         launcher.Show();
 
-        // 运行当前平台的消息循环（Windows 上是 Win32），直到最后一个窗口关闭
         WebWindow.RunMessageLoop();
     }
 }

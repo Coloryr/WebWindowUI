@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Linux 平台实现（libwebkit2gtk-4.1 / GTK3，手写 P/Invoke）：独立包，由 WebWindowUI 核心包按平台自动引入。
+       硬编码 net10.0 + LINUX 编译符号，使文件内 #if LINUX 门控原样保留（本工程内恒真）。
+       本工程只能在 Linux 上构建（TFM net10.0 无法引用 Windows 上 net10.0-windows 的核心包；
+       Windows 上交叉编译检查用 -p:WWUIPlatform=Linux）。 -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <PackageId>WebWindowUI.Platforms.Linux</PackageId>
+    <Description>WebWindowUI Linux 平台实现：libwebkit2gtk-4.1（GTK3 端口）+ GTK3 窗口层，GirCore 无 GTK3 托管绑定故全手写 P/Invoke。由核心包 WebWindowUI 按平台自动引入。</Description>
+    <PackageTags>webwindowui;webkit2gtk;linux</PackageTags>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\artifacts</PackageOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);LINUX</DefineConstants>
+    <!-- 平台注册走 [ModuleInitializer]（程序集加载即注册平台实现），库场景属 CA2255 预期用法 -->
+    <NoWarn>$(NoWarn);CA2255</NoWarn>
+  </PropertyGroup>
+
+  <!-- 只留 GirCore.GLib-2.0（消息循环用，纯托管，运行时才加载原生库）；WebKit/GTK 全手写 P/Invoke -->
+  <ItemGroup>
+    <PackageReference Include="GirCore.GLib-2.0" />
+  </ItemGroup>
+
+  <!-- 反向引用核心（WebWindowUI.Core，非入口包 WebWindowUI）：PrivateAssets=all 抑制 pack 依赖，
+       本包由入口包引入、入口已带 Core；编译期仍拿到 Core 的全部类型与 internal（IVT）。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\WebWindowUI.Core\WebWindowUI.Core.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WebWindowUI.Tests" />
+  </ItemGroup>
+
+
+  <!-- PDB 内嵌策略显式化：Debug=portable（独立 .pdb）、Release=embedded（符号随程序集，无独立 .pdb 文件）。
+       仓库工程与根 Directory.Build.props 的 Release=embedded 重复但无害（自包含）；模板生成工程无根 props，靠这里保证。 -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+</Project>

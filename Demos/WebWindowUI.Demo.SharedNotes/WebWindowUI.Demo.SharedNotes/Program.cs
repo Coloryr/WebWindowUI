@@ -31,13 +31,14 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        WebWindowUI.Platform.EnsureRegistered();
+
         // 同一个 NotesModel 实例绑定两个窗口：任一窗口的发送/删除广播到所有订阅者，
         // 改动源窗口不重复接收（框架排除远程回写源），其它窗口实时跟随 —— 双屏共享便签本。
         NotesModel model = new();
         new MainWindow(model).Show();
         new MonitorWindow(model).Show();
 
-        // 运行当前平台的消息循环（Windows 上是 Win32），直到最后一个窗口关闭
         WebWindow.RunMessageLoop();
     }
 }

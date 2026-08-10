@@ -2,28 +2,14 @@
   <Folder Name="/Core/">
     <Project Path="WebWindowUI.Backend/WebWindowUI.Backend.csproj" />
     <Project Path="WebWindowUI.Frontend/WebWindowUI.Frontend.csproj" />
+    <Project Path="WebWindowUI.Core/WebWindowUI.Core.csproj" />
     <Project Path="WebWindowUI/WebWindowUI.csproj" />
   </Folder>
-  <Folder Name="/Demos/" />
-  <Folder Name="/Demos/Monitor/">
-    <Project Path="Demos/WebWindowUI.Demo.Monitor/WebWindowUI.Demo.Monitor.Backend/WebWindowUI.Demo.Monitor.Backend.csproj" />
-    <Project Path="Demos/WebWindowUI.Demo.Monitor/WebWindowUI.Demo.Monitor.Frontend/WebWindowUI.Demo.Monitor.Frontend.csproj" />
-    <Project Path="Demos/WebWindowUI.Demo.Monitor/WebWindowUI.Demo.Monitor/WebWindowUI.Demo.Monitor.csproj" />
-  </Folder>
-  <Folder Name="/Demos/SharedNotes/">
-    <Project Path="Demos/WebWindowUI.Demo.SharedNotes/WebWindowUI.Demo.SharedNotes.Backend/WebWindowUI.Demo.SharedNotes.Backend.csproj" />
-    <Project Path="Demos/WebWindowUI.Demo.SharedNotes/WebWindowUI.Demo.SharedNotes.Frontend/WebWindowUI.Demo.SharedNotes.Frontend.csproj" />
-    <Project Path="Demos/WebWindowUI.Demo.SharedNotes/WebWindowUI.Demo.SharedNotes/WebWindowUI.Demo.SharedNotes.csproj" />
-  </Folder>
-  <Folder Name="/Demos/ImageGallery/">
-    <Project Path="Demos/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery.Backend/WebWindowUI.Demo.ImageGallery.Backend.csproj" />
-    <Project Path="Demos/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery.Frontend/WebWindowUI.Demo.ImageGallery.Frontend.csproj" />
-    <Project Path="Demos/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery.csproj" />
-  </Folder>
-  <Folder Name="/Demos/Todo/">
-    <Project Path="Demos/WebWindowUI.Demo.Todo/WebWindowUI.Demo.Todo.Backend/WebWindowUI.Demo.Todo.Backend.csproj" />
-    <Project Path="Demos/WebWindowUI.Demo.Todo/WebWindowUI.Demo.Todo.Frontend/WebWindowUI.Demo.Todo.Frontend.csproj" />
-    <Project Path="Demos/WebWindowUI.Demo.Todo/WebWindowUI.Demo.Todo/WebWindowUI.Demo.Todo.csproj" />
+  <Folder Name="/Platforms/">
+    <!-- 平台包只入 Windows 版 slnx：Linux/macOS 平台工程 TFM（net10.0 / net10.0-macos）与
+         Windows 侧核心（net10.0-windows）不匹配，放进共享 slnx 会在 Windows 上构建报错。
+         它们在各自 OS 上作为独立工程构建（WWUIPlatform=Linux/MacOS）。 -->
+    <Project Path="WebWindowUI.Platforms.Windows/WebWindowUI.Platforms.Windows.csproj" />
   </Folder>
   <Folder Name="/Generator/">
     <Project Path="WebWindowUI.Generator.SourceGen/WebWindowUI.Generator.SourceGen.csproj" />

@@ -5,7 +5,9 @@
       "Bash(dotnet test *)",
       "Bash(dotnet build *)",
       "Bash(powershell -NoProfile -Command ' *)",
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Bash(dotnet restore *)",
+      "Bash(dotnet nuget *)"
     ]
   }
 }

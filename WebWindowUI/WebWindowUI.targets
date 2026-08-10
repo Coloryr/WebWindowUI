@@ -97,6 +97,13 @@
     <_WWUI_FrontendMarkerRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Frontend'));@(PackageReference->WithMetadataValue('Identity', 'WebWindowUI.Frontend'))" />
   </ItemGroup>
 
+  <!-- 平台实现（WebWindowUI.Platforms.{Windows,Linux,MacOS} 独立包）的引入完全走引用图，本文件不再注入：
+       包模式：入口包 nuspec 带对应平台包依赖（打包时 -p:WWUI_PlatformRef=true 才写入），消费方只引
+               WebWindowUI 即按系统自动带回平台包 + 平台自身依赖（WebView2 等）。
+       仓库模式：入口工程 WebWindowUI.csproj 在 WWUI_PlatformRef != 'true' 时条件 ProjectReference 相邻平台
+               工程，经引用图传递进消费方产物（测试工程另有自己的直接条件引用，见 WebWindowUI.Tests.csproj）。
+       消费方 Main 首行调用 WebWindowUI.Platform.EnsureRegistered() 触发平台加载注册（AOT 安全：编译期静态引用）。 -->
+
   <!-- 桥 descriptor 输出目录默认（零配置）：工程名以 .Backend 结尾的模型库工程，默认写到「去掉 .Backend 后缀的
        兄弟前端工程」的 src。约定 App=<名>、后端=<名>.Backend、前端=<名>.Frontend 三工程同目录平铺（模板/样例/演示
        均此布局），GenerateModelProto 落桥文件到 $(WebWindowUIBridgeDir)\src\bridge 与 src\models。
@@ -161,12 +168,19 @@
   </PropertyGroup>
 
   <!-- 跨项目探测：前端工程自识别并在被探针时返回自己工程文件路径（Identity = 完整路径）。
-       非前端工程返回空 → TargetOutputs 为空，探测方据此跳过。
+       应用类工程（无角色标记、自身已探测到前端引用）把发现的前端透传出去——前端发现沿引用链传递，
+       任何引用应用工程的宿主（测试工程、二次应用）也能发现前端、在 Release 注入 FrontendLoad 强制加载
+       （见 _WWUI_InjectFrontendLoad）。非前端且未发现前端的工程返回空 → TargetOutputs 为空，探测方跳过。
+       透传分支 DependsOnTargets _WWUI_DiscoverFrontend：被探针时若自身还没探测过（子 MSBuild 进程首次），
+       先探测一遍再回传（工程引用图无环，无递归问题）。
        SkipNonexistentTargets：消费方的 ProjectReference 里可能有未导入本 targets 的工程（标记库源码工程、
        生成器工程），探针目标不存在时静默跳过，不报 MSB4057。 -->
-  <Target Name="_WWUI_ReportFrontend" Returns="@(_WWUI_ReportedFrontend)">
+  <Target Name="_WWUI_ReportFrontend" DependsOnTargets="_WWUI_DiscoverFrontend" Returns="@(_WWUI_ReportedFrontend)">
     <ItemGroup Condition="'@(_WWUI_FrontendMarkerRef)' != ''">
       <_WWUI_ReportedFrontend Include="$(MSBuildProjectFullPath)" />
+    </ItemGroup>
+    <ItemGroup Condition="'@(_WWUI_FrontendMarkerRef)' == '' And '@(_WWUI_BackendRef)' == '' And '$(WebWindowUIFrontendProject)' != ''">
+      <_WWUI_ReportedFrontend Include="$(WebWindowUIFrontendProject)" />
     </ItemGroup>
   </Target>
 
@@ -396,6 +410,35 @@
         <Type>Non-Resx</Type>
         <WithCulture>false</WithCulture>
       </EmbeddedResource>
+    </ItemGroup>
+  </Target>
+
+  <!-- 前端 dll 静态引用注入（Release，AOT 安全）：内嵌 wwwroot 的前端 dll 是纯 Vue 工程产物、
+       本身无任何 C# 类型，无法按类型静态引用；NativeAOT 又没有运行时按名加载。
+       故改为两端注入可静态引用的宿主类型（源文件随包分发在 build/ 与 buildTransitive/，
+       $(MSBuildThisFileDirectory) = targets 所在目录，仓库模式 = WebWindowUI/）：
+         _WWUI_InjectFrontendHost：前端工程（引用 WebWindowUI.Frontend 标记）注入 FrontendHost.cs，
+           给前端 dll 一个可引用类型；
+         _WWUI_InjectFrontendLoad：应用工程（无角色标记 + 探测到前端引用）注入 FrontendLoad.cs，
+           [ModuleInitializer] 在进程启动时 typeof(FrontendHost)——JIT 下强制加载前端 dll
+           （进入已加载程序集）、NativeAOT 下根进链接闭包（内嵌 wwwroot 随之保留）。
+           「探测到前端引用」= WebWindowUIFrontendProject 非空；前端发现经 _WWUI_ReportFrontend 沿引用链
+           传递（见该目标注释），故测试工程等经应用工程间接引用前端的宿主也会注入（测试进程不加载应用 dll，
+           只有本 dll 自身被加载才能触发前端加载）。
+       WebResourceResolver 由此只扫已加载程序集即命中，无需运行时按名加载。
+       挂 BeforeTargets="_GenerateCompileInputs"（同 _WWUI_EmbedWwwroot：SDK 在该处组装 Csc 的
+       Compile/Resources 参数），Compile 项在目标体注入（角色/前端探测结果构建期才就绪）。 -->
+  <Target Name="_WWUI_InjectFrontendHost" BeforeTargets="_GenerateCompileInputs"
+          Condition="'@(_WWUI_FrontendMarkerRef)' != '' And '$(Configuration)' == 'Release'">
+    <ItemGroup>
+      <Compile Include="$(MSBuildThisFileDirectory)FrontendHost.cs" Link="FrontendHost.cs" />
+    </ItemGroup>
+  </Target>
+  <Target Name="_WWUI_InjectFrontendLoad" BeforeTargets="_GenerateCompileInputs"
+          Condition="'@(_WWUI_BackendRef)' == '' And '@(_WWUI_FrontendMarkerRef)' == '' And '$(Configuration)' == 'Release'"
+          DependsOnTargets="_WWUI_DiscoverFrontend">
+    <ItemGroup Condition="'$(WebWindowUIFrontendProject)' != ''">
+      <Compile Include="$(MSBuildThisFileDirectory)FrontendLoad.cs" Link="FrontendLoad.cs" />
     </ItemGroup>
   </Target>
 

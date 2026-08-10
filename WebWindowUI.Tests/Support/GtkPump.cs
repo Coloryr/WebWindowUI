@@ -12,9 +12,10 @@ namespace WebWindowUI.Tests.Support;
 /// 必须在同一根线程上构造平台、跑循环、执行测试体。
 ///
 /// 泵线程初始化顺序（与本库 LinuxPlatform 构造逻辑一致）：
-///   访问 WebWindowPlatform.Current（懒创建静态单例）→ 在泵线程执行 gtk_init、WebKit 初始化、
-///   LinuxMessageLoopSynchronizationContext.Initialize()（UiThreadId=泵线程）、SetSynchronizationContext。
-///   然后 MainLoop 跑 GLib 默认 MainContext（与 SyncContext.Post 的 idle source 同一上下文）。
+///   typeof(LinuxPlatform) 强制加载平台程序集（泵线程）→ [ModuleInitializer] new LinuxPlatform()
+///   执行 gtk_init、WebKit 初始化、LinuxMessageLoopSynchronizationContext.Initialize()（UiThreadId=泵线程）、
+///   SetSynchronizationContext，注册进 WebWindowPlatform.Current。然后 MainLoop 跑 GLib 默认
+///   MainContext（与 SyncContext.Post 的 idle source 同一上下文）。
 ///
 /// 测试体经 LinuxMessageLoopSynchronizationContext.Post 投递到泵线程（idle source → 循环迭代执行），
 /// async 延续捕获泵线程的 SynchronizationContext 自动回到泵线程，全程串行在泵线程。
@@ -86,8 +87,9 @@ internal sealed class GtkPump
         try
         {
             // 平台构造放本线程：gtk_init、WebKit 初始化、UiThreadId=泵线程、SetSynchronizationContext。
-            // 直接访问 WebWindowPlatform.Current（懒创建单例），后续所有 WebWindow 复用同一实例，
-            // 不会出现第二次 gtk_init。
+            // typeof 强制在泵线程加载平台程序集 → [ModuleInitializer] new LinuxPlatform() 完成注册
+            //（编译期静态引用，AOT 安全），后续所有 WebWindow 复用同一实例，不会出现第二次 gtk_init。
+            _ = typeof(LinuxPlatform);
             _ = WebWindowPlatform.Current;
             _loop = MainLoop.New(null, false); // null = 默认 MainContext（与 SyncContext.Post 同一上下文）
         }

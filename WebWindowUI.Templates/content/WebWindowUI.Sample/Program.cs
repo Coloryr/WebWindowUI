@@ -17,12 +17,12 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
-        // 单窗口骨架：创建主窗口并运行消息循环。
+        WebWindowUI.Platform.EnsureRegistered();
+
         // 前端页面 src/window/main/（Vue + Vite 产物经 BuildFrontend 直产本工程 wwwroot）。
         MainWindow window = new(new MainModel());
         window.Show();
 
-        // 运行当前平台的消息循环（Windows 上是 Win32），直到最后一个窗口关闭
         WebWindow.RunMessageLoop();
     }
 }

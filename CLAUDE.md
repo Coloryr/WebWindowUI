@@ -2,6 +2,8 @@
 
 跨平台桌面应用框架：.NET 模型库（WebWindowModel）用 Roslyn 源生成器产出 proto 消息/写回代码，Vue3+Vite 前端通过 `webwindowui-bridge` 双向绑定，Windows=WebView2 / Linux=WebKit2GTK（GTK3）/ macOS=WKWebView。**内存全部来自本仓库的迭代踩坑，遇到不理解的构建行为先查这里。**
 
+**包结构（入口聚合，消费方只引 `WebWindowUI` 一个包）**：`WebWindowUI`（入口，聚合 + 平台引导）+ `WebWindowUI.Core`（运行时代码本体，平台无关）+ `WebWindowUI.Platforms.{Windows,Linux,MacOS}`（平台实现，按系统自动引入）+ `WebWindowUI.Backend`/`WebWindowUI.Frontend`（角色标记包）+ `WebWindowUI.Templates`。依赖单向无环：平台包→Core→（Mvvm/protobuf），入口→{Core, 平台包}。详见「NuGet 打包」与「平台拆分」两节。
+
 ## 三工程结构（核心约定）
 
 每个应用是**三个子工程**（目录 = 工程名）：
@@ -20,7 +22,7 @@
 ## 构建链路（按配置分叉）
 
 - **Debug**：应用 `BuildFrontend` 调前端工程（`Targets="WebWindowUIBuildFrontend"`，`WwwrootDir=$(TargetDir)wwwroot`）→ vite **直产应用 bin/wwwroot**；`AddWebWindowUIResourcesCopy` 把 bin/wwwroot 经 ContentWithTargetPath 注入（wwwroot 求值期不存在，不能走 Content→AssignTargetPaths）。测试工程经 ProjectReference 传递复制。
-- **Release**：应用两个目标都短路，改由**前端工程自驱动**——`_WWUI_FrontendSelfDrive` 在 CoreCompile 前跑 vite 到前端工程 `obj/<Config>/<TFM>/wwwroot`，`_WWUI_EmbedWwwroot` 把它注入 EmbeddedResource **编进前端 dll**（LogicalName=`wwwroot\相对路径`）；应用对前端 ProjectReference 的 `ReferenceOutputAssembly` 由 targets 按配置注入（Debug=false 不复制空 dll、Release=true 复制带资源 dll）。
+- **Release**：应用两个目标都短路，改由**前端工程自驱动**——`_WWUI_FrontendSelfDrive` 在 CoreCompile 前跑 vite 到前端工程 `obj/<Config>/<TFM>/wwwroot`，`_WWUI_EmbedWwwroot` 把它注入 EmbeddedResource **编进前端 dll**（LogicalName=`wwwroot\相对路径`）；应用对前端 ProjectReference 的 `ReferenceOutputAssembly` 由 targets 按配置注入（Debug=false 不复制空 dll、Release=true 复制带资源 dll）。前端 dll 是纯 Vue 工程、本身无 C# 类型，targets 另注入 `FrontendHost` 空标记类型进前端 dll、`FrontendLoad` 模块初始化器进应用 dll——应用启动即 `typeof` 静态引用强制加载前端 dll（AOT 安全，见 WebResourceResolver 节）。
 - **前端增量**：`FrontendInput`（src/public/package.json/vite.config/tsconfig）vs `FrontendOutput`（`$(WwwrootDir)\window\**\index.html` + `.frontend-stamp` Touch 标记）。**node_modules 不在 FrontendInput** → 改桥后 `dotnet build` 会跳过 vite 重建（bundle 是旧的，坑）；强制重建须 touch 一个 FrontendInput 文件。
 - **vite 产物按配置压缩**：经 `WWUI_CONFIGURATION=$(Configuration)` 传给 vite.config.ts，Release minify / Debug 不压缩 + inline sourcemap。**vite 8 是 rolldown 内核，`minify` 写 `true` 不能写 `'esbuild'`**（会去加载未安装的 esbuild 报错）。
 - **GenerateModelProto 不设 Inputs/Outputs，每次构建都执行**：生成器幂等写（内容相同不写、保持 mtime），descriptor/TS 缺失时必重建，内容不变时 mtime 不动、不触发 vite 重建。
@@ -46,7 +48,7 @@
 
 ## WebResourceResolver（wwwroot 两来源、内嵌优先）
 
-先查程序集嵌入资源再回退磁盘（Debug 磁盘、Release 内嵌，互斥存在）。内嵌查找名 = `wwwroot\` + 相对路径（`/`→`\`）。内嵌程序集**懒发现**（单例缓存）：扫 AppDomain 已加载程序集 + `AppContext.BaseDirectory\*.dll`（`Assembly.Load` 按名先试、失败 `LoadFrom`），只留含 `wwwroot\` 前缀资源的程序集。Release 下前端 dll 虽在 deps.json/产物目录但应用不引用其类型、不会自动 Load，全靠发现。Program.cs 图标也走同一 resolver。
+先查程序集嵌入资源再回退磁盘（Debug 磁盘、Release 内嵌，互斥存在）。内嵌查找名 = `wwwroot\` + 相对路径（`/`→`\`）。内嵌程序集**懒发现**（单例缓存）：只扫 AppDomain 已加载程序集，取含 `wwwroot\` 前缀资源的程序集。Release 下前端 dll 虽在 deps.json/产物目录但应用不引用其类型、不会自动 Load——靠 targets 注入的**宿主标记机制**强制加载：`_WWUI_InjectFrontendHost` 把 `FrontendHost`（空标记类型）注入编译进每个前端工程 dll，`_WWUI_InjectFrontendLoad` 把 `FrontendLoad`（`[ModuleInitializer]`，`GC.KeepAlive(typeof(FrontendHost))`）注入编译进应用工程——进程启动时 `typeof` 静态引用前端 dll：JIT 下强制加载进已加载程序集、NativeAOT 下根进链接闭包（内嵌 wwwroot 随之保留），**全程无 Assembly.Load**。两文件随入口包分发到 `build\;buildTransitive\`。Program.cs 图标也走同一 resolver。**平台调度与前端 dll 的 Assembly.Load 已全部清除**（此前 WebResourceResolver 按名 `Assembly.Load`/`LoadFrom` 扫 BaseDirectory 的 AOT 遗留不再存在）。
 
 ## 数据绑定 / 推送 / 集合
 
@@ -54,6 +56,7 @@
 - **ObservableCollection 原地增删自动推送**：.NET 侧 `.Add()/.Remove()` 即自动整列表推送（不必整体替换列表属性；List 原地 Add 不触发 PropertyChanged 的旧坑绕开）。集合属性**免 [ObservableProperty]**（get-only 也双向）。
 - **集合差量补丁 CollectionPatch**：ObservableCollection 增删走**差量**（`WebMessage` oneof `patch`，action Insert/Remove/Replace/Move/Reset）；`Reset`（如 .Clear）不带元素无法差量 → 回退整列表补丁。补丁自包含。前端 `applyPatch` 对响应式数组**原地 splice**。
 - **typed repeated（List\<已知模型\>）**：生成器产 `repeated SomeModel`（descriptor `"type":"SomeModel"`、TS `SomeModel[]`）。**typed 元素 ModelValue 对象 map 键是真实 int（proto 字段号，声明顺序 1..N）而非属性名**——落在 `ModelValueMap.OrdinalFields`（map<int32,ModelValue>），与 name 键 `fields`（generic object/Dictionary）并存。前端 watch 回写 typed-repeated 用 `{ object: { ordinalFields: { [String(num)]: jsToModelValue(el[fieldName]) } } }`，.NET `ConvertFromModelValue` `foreach (kv in v.OrdinalFields) switch (kv.Key) { case 1: }`（int 键直接数字字面量）。字段号单一来源 `CollectFieldNumbers` → descriptor 与桥两侧无漂移。generic object/Dictionary/未注册 POCO 维持 name 键。前端收敛成命名键（`fullModelEntries` 只收敛根层 typed repeated；元素内嵌套 typed repeated 全量快照可读，但**整列表重推后嵌套成员退化为序数键** `[{ "1": name }]`，模板用容错访问器 `tag.name ?? tag['1']`）。
+- **TS 序数键契约构建期烘焙（`__repeatedFields`）**：生成器把 typed-repeated 的「属性名 → { proto 字段号: 元素属性名 }」烘焙成模型镜像类的 `static ['__repeatedFields']`（**字符串字面量键**，声明与访问两侧都用 `['...']`），桥 `bindModel` 直接读 `constructor['__repeatedFields']` 建 typedElemFields。**durable 大坑：不要用运行时 `constructor.name` → `lookupType` 反射取元素字段表**——Release minified bundle（vite 8 / rolldown 内核压缩器）会把 class 绑定名改名（`class TodoListModel` → `g=class{...}`），`constructor.name` 失真、lookupType 落空，typed-repeated **补丁**元素退化成序数键 `{"1":"t3"}`（快照路径走 resolvedType name 键、不受影响 → 表现为「快照过、.NET Add 后挂」，E2E 20s 超时）。字符串字面量 minifier 永不改写，故协议契约一律构建期定死为字面量，别依赖任何运行时 JS 标识符反射。
 - **ObservableDictionary 原地自动推送**：.NET 侧原地改（dict[k]=v / Add / Remove / Clear）抛 CollectionChanged → 框架**整属性重推**（name 键对象 map，非 typed → 不收敛序数键），前端对象整体替换。前端原地改经深 watch 整字典 name 键回写 .NET（`TryConvertObject` 的 `ObservableDictionary<,>` 分支重建同类实例）。**durable 大坑：readonly struct 字段 + 防御性复制 → 死循环**——`DictionaryEntryEnumerator._inner` 若 `readonly`，`MoveNext()` 每次 true、枚举字典无限循环（--blame-hang 拿 .dmp 定位）；须去 readonly。非泛型 `IDictionary` 的 `GetEnumerator()` 返回 `IDictionaryEnumerator`（不能 yield，`Reset()` 抛 NotSupportedException）。
 - **字段初始化器在基类构造之后执行**：基类 ctor 扫描看不到初始集合，集合订阅须在 `BuildSnapshotEnvelope` 首次推送时武装（`ArmCollectionSubscriptions`），属性被替换时切订阅，`_isApplyingRemoteWrite` 期间不推送。
 - **单订阅者快路径 + 空订阅者短路**（`PushEnvelope`）：`Count==1` 直接调、免 ToArray；`Count==0` 直接 return。最后订阅者解绑自动 `UnbindCollections()`。
@@ -86,19 +89,30 @@ netstandard2.0、`IsRoslynComponent=true`，**两个 IIncrementalGenerator**（�
 - **`using WebWindowUI.Sample;` 不能当冗余删**：测试文件在 `namespace WebWindowUI.Tests`，C# 命名空间解析只走当前+外层——`WebWindowUI.Sample` 是 `WebWindowUI` 的**兄弟**子命名空间，不在链上。`using WebWindowUI;` 才是真冗余。子命名空间不反向解析：用到 `WebWindowUI.Sample.Items` 类型须加 `using WebWindowUI.Sample.Items;`（外层不含它），模型 doc 注释 `<see cref>` 指外层类型也要全限定（CS1574）。
 - **残留 TS 剪枝由 console 生成器精确做**（`PruneStaleTs`，按「类名 → 期望子路径」，`--all-models` 缺失跳过）；targets 的 `_WWUI_CleanBridgeOutputs` 只剪平铺 bridge JSON。只剪孤儿、不整删（保幂等写 mtime）。
 
-## NuGet 打包（四个包）
+## NuGet 打包（入口聚合，全平台八个包；Windows 上产 7 个）
 
-- **`WebWindowUI`**：lib/ 核心库 + `build/WebWindowUI.targets` **和 `buildTransitive/WebWindowUI.targets` 各一份**（`PackagePath="build\;buildTransitive\"`）+ `tools/net10.0/` 模型生成器。**必须 buildTransitive 也打**：NuGet 只对直接引用者自动导入 build/ 的 targets，透过标记包引用的模型库只吃到 buildTransitive/。
-- **`WebWindowUI.Backend` / `WebWindowUI.Frontend`（角色标记包）**：各一个空标记类，依赖核心包。一条 `PackageReference` 即带回 targets+生成器。Backend 包额外内嵌写回/Proto 源生成器到 `analyzers/dotnet/cs/`。
+依赖单向无环：`WebWindowUI.Platforms.*` → `WebWindowUI.Core` →（Mvvm/protobuf），`WebWindowUI`（入口）→ {`WebWindowUI.Core`, `WebWindowUI.Platforms.*`}，标记包 → `WebWindowUI`。
+
+- **`WebWindowUI`（入口包，聚合 + 平台引导）**：唯一源码 `Platform.cs`（`Platform.EnsureRegistered`，AOT 安全 `#if` 静态引用触发平台加载）。ProjectReference `WebWindowUI.Core` + 按 `$(WWUIPlatform)` 条件 PackageReference 平台包（**仓库模式 `WWUI_PlatformRef != 'true'` 时改 ProjectReference 相邻平台工程**——`Platform.cs` 的 `#if` 引用需编译期拿到平台类型）+ `build/WebWindowUI.targets` **和 `buildTransitive/WebWindowUI.targets` 各一份**（`PackagePath="build\;buildTransitive\"`）+ `tools/net10.0/` 模型生成器。nuspec 依赖 = Core + 平台包 → 消费方只引本包即自动带回全部。**必须 buildTransitive 也打**：NuGet 只对直接引用者自动导入 build/ 的 targets，透过标记包引用的模型库只吃到 buildTransitive/。
+- **`WebWindowUI.Core`（运行时代码本体）**：WebWindow / WebWindowModel / protobuf 协议 / WebResourceResolver / WebWindowPlatform 运行时调度。依赖仅 CommunityToolkit.Mvvm + protobuf-net，**无任何平台依赖**（平台包反引它）。入口包聚合它，消费方经入口间接得到，不直接引用。
+- **`WebWindowUI.Platforms.{Windows,Linux,MacOS}`（平台实现包）**：各自带自身依赖（Windows=Microsoft.Web.WebView2，Linux=GirCore.GLib-2.0，MacOS=无托管额外依赖）。ProjectReference `WebWindowUI.Core` 且 `PrivateAssets="all"` → 平台包 nuspec 不声明 Core 依赖（入口已带 Core），也因 Core 无平台引用而无环。入口只引入与构建/运行 OS 匹配的一个（`$(WWUIPlatform)` 条件）。
+- **`WebWindowUI.Backend` / `WebWindowUI.Frontend`（角色标记包）**：各一个空标记类，依赖入口包 `WebWindowUI`。一条 `PackageReference` 即带回 targets+生成器+Core+平台。Backend 包额外内嵌写回/Proto 源生成器到 `analyzers/dotnet/cs/`。`WebWindowUI.Generator.SourceGen` 不产独立包（`IsPackable=false`，分析器内嵌进 Backend）。
 - **`WebWindowUI.Templates`**（`PackageType=Template`）：`content/` 三子工程骨架，`sourceName=WebWindowUI.Sample`，`preferNameDirectory: true`，`primaryOutputs=[WebWindowUI.Sample.csproj]`。**不可加 restore postActions**（多 csproj 模板 `B17581D1` 每次生成都报「无法确定哪个项目文件要添加引用」）。**模板 slnx 坑**：`<Folder Name="/">` 根文件夹抛 MSB4025，模板骨架用裸 `<Project Path=.../>` 平铺。
-- **CPM 集中版本**：`Directory.Packages.props`（`ManagePackageVersionsCentrally=true`）。所有 PackageReference 裸写（无 Version）。**PackageVersion 不许浮动版本**（`3.2.*` 抛 NU1011，钉死 protobuf-net 3.2.56 / System.Text.Json 8.0.6）。
-- **打包纪律**：`dotnet pack -c Release -o artifacts/`；**重复打包同一版本必须清缓存** `dotnet nuget locals global-packages --clear`（或删 `%USERPROFILE%\.nuget\packages\webwindowui*`）——同版本号不改缓存，消费方会恢复旧 dll 编译出 CS0115。
-- 本地源见仓库根 `NuGet.config`（artifacts 目录）。
+- **CPM 集中版本**：`Directory.Packages.props`（`ManagePackageVersionsCentrally=true`）。所有 PackageReference 裸写（无 Version）。**PackageVersion 不许浮动版本**（`3.2.*` 抛 NU1011，钉死 protobuf-net 3.2.56 / System.Text.Json 8.0.6）。`WebWindowUI.Platforms.{Windows,Linux,MacOS}` 也进根 CPM（入口的版本化 PackageReference 需要）。
+- **打包纪律（两步，平台包先行）**：
+  1. `dotnet pack WebWindowUI.Platforms.Windows -c Release -o artifacts/`（先打平台包：它只构建 Core，Core 无平台依赖 → 全新环境无死锁；Linux/MacOS 平台包不能在 Windows 上交叉打，须在各自 OS 上补打）。
+  2. `dotnet pack WebWindowUI.slnx -c Release -o artifacts/ -p:WWUI_PlatformRef=true`（`WWUI_PlatformRef` 门控入口的平台 PackageReference：默认不传则入口不需要平台包、仓库内构建/测试零 artifacts 依赖；只有打框架时才引入平台依赖。平台包已在第 1 步就绪 → restore 可解析）。
+  **重复打包同一版本必须清缓存** `dotnet nuget locals global-packages --clear`（或删 `%USERPROFILE%\.nuget\packages\webwindowui*`）——同版本号不改缓存，消费方会恢复旧 dll 编译出 CS0115。
+- **durable 坑：不能对入口的平台 PackageReference 加 `ExcludeRestorePackageImports!=true` 门控**（早期尝试）——restore 图遍历**连被还原项目自身**也用 `ExcludeRestorePackageImports=true` 重新求值、其 assets 反映该遍历求值（NuGet.targets `_GenerateRestoreGraphProjectEntryInputProperties`），加了会把入口自己的平台依赖也抑制掉（assets deps 空、nuspec 丢平台依赖）。Core 拆分后平台工程不引用入口、无任何环路径，也不需要靠它挡循环。
+- 本地源见仓库根 `NuGet.config`（artifacts 目录）。**durable 坑：artifacts 目录缺失 → NuGet 报 NU1301（本地源不存在）硬失败，即使所需包已在全局缓存也照挂**。缓解（都实测过）：`dotnet restore -p:RestoreIgnoreFailedSources=true`（全局属性）才把 NU1301 降成 NU1101；`NuGet.config <config>` 同名键无效、`Directory.Build.props` 属性只在单工程 restore 生效、**slnx 级 restore 不认**。治本方案即现状：Demo 从 `WebWindowUI.slnx` 移除——主解决方案构建不依赖 artifacts，Demo 各自经 `Demos/<Demo>/<Demo>.slnx` 单独构建（须先 pack）。
 
 ## 平台拆分（Windows=WebView2 / Linux=WebKit2GTK（GTK3）/ macOS=WKWebView）
 
-- `WebWindowUI.Platform.props` 集中平台选择：`$(WWUIPlatform)`（Windows/Linux/MacOS，默认按宿主 OS）驱动 TFM（net10.0-windows / net10.0 / net10.0-macos）与 `WINDOWS/LINUX/MACOS` DefineConstants。**所有条件键控 WWUIPlatform 而非裸 `IsOSPlatform`**（否则 `-p:WWUIPlatform=Linux` 在 Windows 上双定义符号）。标记库 TFM 必须镜像核心。targets 里的 npm/vite 命令用 `IsOSPlatform`（跟构建宿主走）。App 工程 OutputType 条件化 WinExe/Exe。桥 JS `resolveChannel()` 自适应 `chrome.webview`（Windows）→ `window.webkit.messageHandlers.wwui`（WebKit）。
-- **Linux = WebKit2GTK 4.1（GTK3 端口）**，不是 WebKitGTK 6.0/GTK4。GirCore 只发布 WebKitGTK 6.0（GTK4）与 GLib 绑定，无 GTK3/WebKit2 4.1 托管绑定，故窗口壳 + WebKit 绑定全部手写 P/Invoke（`Platforms/Linux/Native/`：`WebKit2Native.cs`（libwebkit2gtk-4.1.so.0 + libjavascriptcoregtk-4.1.so.0 + gobject/glib/gio）+ `GtkNative.cs`/`GtkWindowHost.cs`（libgtk-3.so.0））。Linux 只引 `GirCore.GLib-2.0`（消息循环，纯托管，运行时才加载原生库 → 支持 Windows 上编译检查）。运行前提 Ubuntu `libwebkit2gtk-4.1-0`。
+- **包结构（Core + 入口 + 平台包，依赖单向无环）**：`WebWindowUI.Core`（运行时代码本体，平台无关，**不引用任何平台工程/包**）→ `WebWindowUI.Platforms.{Windows,Linux,MacOS}`（平台实现，ProjectReference Core 且 `PrivateAssets=all`）→ `WebWindowUI`（**入口包，聚合 + 平台引导**，ProjectReference Core + 按 WWUIPlatform 条件 PackageReference 平台包 + 唯一源码 `Platform.cs`）。消费方只引 `WebWindowUI`：nuspec 依赖 Core + 平台包 → 自动带回平台实现及其自身依赖（WebView2/GirCore）。**平台包依赖 Core 而非入口 → 打包无鸡生蛋**（打平台包只构建 Core，Core 无平台依赖，无需平台包先存在；打入口才需要平台包先就绪，pack 顺序见「NuGet 打包」）。
+- **运行时调度（AOT 安全，无 Assembly.Load）**：`WebWindowPlatform`（在 Core）是**纯注册表**——`Current` 返回已注册实现，平台程序集 `[ModuleInitializer]`（`PlatformRegistration.cs`，库场景预期用法故 NoWarn CA2255）调 `internal Register` 写入自身静态字段（无静态字段初始化器 → 无 cctor，无类型初始化死锁）。**加载触发由入口包 `Platform.EnsureRegistered()`（`Platform.cs`）承担**：编译期 `#if WINDOWS/LINUX/MACOS` 静态引用平台类型（`GC.KeepAlive(typeof(...))`，无反射）——JIT 下 `typeof` 解析强制加载平台程序集、模块初始化器在触发线程注册；NativeAOT 下类型被静态链接、模块初始化器启动时按依赖序执行。**消费方 Program.cs 的 Main 首行必须调一次 `WebWindowUI.Platform.EnsureRegistered()`**（平台无关；这是唯一一处消费方改动，入口程序集在 JIT 下懒加载、模块初始化器不会自动跑，Core 保持平台无关就必然要求 Core 之上的显式启动）。`WebWindow` 构造时调 `WebWindowPlatform.Current`。
+- **仓库模式（构建/测试 slnx，不传 WWUI_PlatformRef）**：入口的平台 PackageReference 被门控关闭，改由入口工程 `WebWindowUI.csproj` 按 WWUIPlatform 条件 ProjectReference 相邻平台工程（`Exists` 判定），经引用图传递进消费方产物（应用引用入口 → 平台 dll 进 bin）；测试工程另有自己的直接条件引用（`WebWindowUI.Tests.csproj`）。包模式（`WWUI_PlatformRef=true` 打包）则完全走 nuspec 依赖。
+- `WebWindowUI.Platform.props` 集中平台选择：`$(WWUIPlatform)`（Windows/Linux/MacOS，默认按宿主 OS）驱动 TFM（net10.0-windows / net10.0 / net10.0-macos）与 `WINDOWS/LINUX/MACOS` DefineConstants。**所有条件键控 WWUIPlatform 而非裸 `IsOSPlatform`**（否则 `-p:WWUIPlatform=Linux` 在 Windows 上双定义符号）。标记库 TFM 必须镜像核心。targets 里的 npm/vite 命令用 `IsOSPlatform`（跟构建宿主走）。App 工程 OutputType **配置键控**（Debug=Exe 控制台看日志 / Release=WinExe 无控制台；WinExe 的 WindowsSubsystem 仅 Windows 生效，Linux/macOS 上等效 Exe）。桥 JS `resolveChannel()` 自适应 `chrome.webview`（Windows）→ `window.webkit.messageHandlers.wwui`（WebKit）。
+- **Linux = WebKit2GTK 4.1（GTK3 端口）**，不是 WebKitGTK 6.0/GTK4。GirCore 只发布 WebKitGTK 6.0（GTK4）与 GLib 绑定，无 GTK3/WebKit2 4.1 托管绑定，故窗口壳 + WebKit 绑定全部手写 P/Invoke（`WebWindowUI.Platforms.Linux/`：`WebKit2Native.cs`（libwebkit2gtk-4.1.so.0 + libjavascriptcoregtk-4.1.so.0 + gobject/glib/gio）+ `GtkNative.cs`/`GtkWindowHost.cs`（libgtk-3.so.0））。Linux 只引 `GirCore.GLib-2.0`（消息循环，纯托管，运行时才加载原生库 → 支持 Windows 上编译检查）。运行前提 Ubuntu `libwebkit2gtk-4.1-0`。
 - **GirCore 信号坑**：事件用 `+=` 订阅（不是 `add_OnXxx`，合成 add 访问器 CS0571）。delegate：`GObject.SignalHandler<T>` = `void(T sender, EventArgs args)`。文件头 `#pragma warning disable CA1416`。歧义：`using Action = System.Action;`（Gio.Action）与 `using Exception = System.Exception;`（JavaScriptCore.Exception）。
 - **MSBuild 条件坑**：嵌套单引号 `'$([MSBuild]::IsOSPlatform('Windows'))' == 'true'` → MSB4092。裸函数调用 `Condition="$([MSBuild]::IsOSPlatform('Windows'))"`，取反 `!$([MSBuild]::IsOSPlatform('Windows'))`。
 - **macOS = 盲写**（Windows 编译不了）：NSWindow + WKWebView + 四个 `[Export]` NSObject 子类。绑定事实：`NSDictionary.FromObjectsAndKeys(objects, keys, count)` 对象在前、`NSHttpUrlResponse(NSUrl, nint, string, NSDictionary?)`、`NSData.FromArray(byte[])`、`EvaluateJavaScriptAsync(string)`→`Task<NSObject>`。需 Mac + `dotnet workload install macos` 验证。
@@ -107,12 +121,12 @@ netstandard2.0、`IsRoslynComponent=true`，**两个 IIncrementalGenerator**（�
 ## 单文件发布（PublishSingleFile）
 
 - `PublishSingleFile` + `SelfContained` 只管托管侧（DLL/运行时全打进 exe）；**WPF 原生 DLL（D3DCompiler_47_cor3 / PresentationNative_cor3 / wpfgfx_cor3 / vcruntime140_cor3 / PenImc_cor3）+ WebView2Loader 必须 `IncludeNativeLibrariesForSelfExtract=true` 才内嵌**；`IncludeAllContentForSelfExtract=true` 收内容文件；`EnableCompressionInSingleFile=true` 把 133MB 压到 ~65MB。
-- **PDB 内嵌**：不要 `DebugType=none`（发布版丢符号），也不要靠 pubxml 删 .pdb——统一在仓库根 `Directory.Build.props` 设 `DebugType=embedded`（Release 条件，所有工程含库继承），符号随程序集打进 exe，无独立 .pdb 文件。
+- **PDB 内嵌**：不要 `DebugType=none`（发布版丢符号），也不要靠 pubxml 删 .pdb——统一在仓库根 `Directory.Build.props` 设 `DebugType=embedded`（Release 条件，所有工程含库继承），符号随程序集打进 exe，无独立 .pdb 文件。**每个 csproj 也显式写 per-config DebugType**（Debug=portable / Release=embedded）：模板生成工程不继承根 props，Release 单文件发布会散 .pdb，靠 csproj 显式写保证（仓库工程与根 props 重复但无害、自包含）。
 - **单文件下 WebResourceResolver 磁盘回退失效**（BaseDirectory 无 dll），内嵌 wwwroot 靠「已加载程序集」扫描命中。发布 exe 启动即建 `.exe.WebView2` 用户数据目录属正常（跑过就会留，清理发布目录时注意）。
 
 ## Demo 应用
 
-`Demos/` 下四个**有功能的真实 Demo**（都加进仓库根 `WebWindowUI.slnx` `/Demos/` 文件夹，包模式生成 = 包模式端到端验证样本）：
+`Demos/` 下四个**有功能的真实 Demo**（包模式生成 = 包模式端到端验证样本；**不在**仓库根 `WebWindowUI.slnx` 里——各自 `Demos/<Demo>/<Demo>.slnx`，先 `dotnet pack` 再单独构建，主解决方案构建不依赖 artifacts 本地源）：
 
 - **`WebWindowUI.Demo.Todo`（待办）**：TodoItemModel + TodoListModel（get-only ObservableCollection Items + NewTitle/Status + 命令 AddTitle/Toggle/Remove/ClearCompleted，持久化 `%LocalAppData%\...\todos.json` 用私有 DTO 规避序列化基类状态）。单窗口 main。
 - **`WebWindowUI.Demo.SharedNotes`（双屏共享便签）**：NotesModel，App 用**同一个实例**开 main 编辑窗 + monitor 只读墙 → 任一窗口操作全广播、其余实时跟随（多订阅者 + 远程回写排除源）。
@@ -128,7 +142,7 @@ netstandard2.0、`IsRoslynComponent=true`，**两个 IIncrementalGenerator**（�
 - Git Bash 的 taskkill 会把 `/IM` 当路径 → 须 `cmd //c "taskkill /IM xxx.exe /F"` 包。
 - `tasklist` 把镜像名截到 25 字符（`WebWindowUI.Demo.Monito`），别 grep 全名，用前缀 grep。
 - 应用进程由 bash `&` 启动时，其宿主 shell 一结束进程就死——启动验证用 Start-Process 或保持 shell。
-- 仓库级回归：`dotnet build WebWindowUI.slnx -c Debug/-c Release`（0 错，MSB3277 WebView2 WindowsBase 无害警告）+ `dotnet test WebWindowUI.slnx -c Debug`（124/124）。`dotnet test` 会把 demo 一起编 = 回归包模式链路。
+- 仓库级回归：`dotnet build WebWindowUI.slnx -c Debug/-c Release`（0 错，MSB3277 WebView2 WindowsBase 无害警告）+ `dotnet test WebWindowUI.slnx -c Debug`（124/124）。**Demo 不在主 slnx**（见 NuGet 打包一节），包模式回归各 Demo 经自身 `Demos/<Demo>/<Demo>.slnx` 单独验证。
 - 前端调试：桥改动要**物理拷进** `node_modules/webwindowui-bridge`（npm link 符号链接被 rolldown 解析到真实路径、无依赖报 `Failed to resolve import "protobufjs"`）+ touch `vite.config.ts` 强制 vite 重建，再 grep bundle 验证。
 
 ## 样例（Sample/，2026-08-09 从仓库根 WebWindowUI.Sample/ 改名）

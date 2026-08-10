@@ -13,6 +13,9 @@
     <PackageVersion Include="WebWindowUI" Version="$(Version)" />
     <PackageVersion Include="WebWindowUI.Backend" Version="$(Version)" />
     <PackageVersion Include="WebWindowUI.Frontend" Version="$(Version)" />
+    <PackageVersion Include="WebWindowUI.Platforms.Windows" Version="$(Version)" />
+    <PackageVersion Include="WebWindowUI.Platforms.Linux" Version="$(Version)" />
+    <PackageVersion Include="WebWindowUI.Platforms.MacOS" Version="$(Version)" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageVersion Include="GirCore.GLib-2.0" Version="0.8.1" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />

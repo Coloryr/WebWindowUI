@@ -190,7 +190,7 @@ public class WriteBackGeneratorTests
     public void ProtoGenerator_EmitsModelProtoForEachModel()
     {
         // ProtoGenerator（与 WriteBack 同跑 CSharpGeneratorDriver）：为每个 WebWindowModel 子类内存产出
-        // {Model}Proto.g.cs（快照/增量 DTO + partial override），替代原 console 的 --cs-out 落盘。
+        // {Model}Proto.g.cs（快照/增量 DTO + partial override）。
         ImmutableDictionary<string, string> run = Driver.RunOnSampleModels();
 
         string main = run["MainWindowModelProto.g.cs"];

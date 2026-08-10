@@ -90,7 +90,11 @@ internal sealed class StaThreadPump
     {
         try
         {
-            // 与 WindowsPlatform 构造一致：在本线程绑定平台单例
+            // typeof 强制在泵线程加载平台程序集 → [ModuleInitializer] new WindowsPlatform() 完成注册
+            //（编译期静态引用，AOT 安全）。
+            _ = typeof(WindowsPlatform);
+
+            // 与 WindowsPlatform 构造一致：在本线程绑定平台单例（幂等兜底）
             IntPtr hwnd = Win32.GetOrCreateMarshalWindow();
             MessageLoopSynchronizationContext.Initialize(hwnd);
             SynchronizationContext.SetSynchronizationContext(MessageLoopSynchronizationContext.Instance);
@@ -111,7 +115,6 @@ internal sealed class StaThreadPump
                 try { job(); } catch { /* job 内部已捕获异常并设置 tcs */ }
             }
 
-            // 2. 派发所有就绪消息
             PumpPendingMessages();
 
             // 3. 挂起等待：工作信号 / 新消息 / 200ms 兜底

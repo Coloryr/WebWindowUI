@@ -18,12 +18,13 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        WebWindowUI.Platform.EnsureRegistered();
+
         // 启动即扫描 %LocalAppData%\WebWindowUI.Demo.ImageGallery\images，把每张图片字节发给前端。
         ImageGalleryModel model = new();
         MainWindow window = new(model);
         window.Show();
 
-        // 运行当前平台的消息循环（Windows 上是 Win32），直到最后一个窗口关闭
         WebWindow.RunMessageLoop();
     }
 }
