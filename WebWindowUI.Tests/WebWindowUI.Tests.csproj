@@ -2,12 +2,10 @@
 
   <!-- 平台选择与框架一致：Windows 上 net10.0-windows（WINDOWS 符号，跑真 WebView2 集成测试），
        Linux/macOS 上 net10.0 / net10.0-macos（无 WINDOWS 符号 → WebView2/STA 相关文件被 #if 排除，
-       只编译运行纯逻辑测试）。 -->
-  <Import Project="..\WebWindowUI\WebWindowUI.Platform.props" />
-  <!-- 仓库模式手动 Import 共享 targets（同 Sample 各工程）：测试工程是 WebWindow 宿主（TestWindow 继承 WebWindow），
-       Release 下经 _WWUI_InjectFrontendLoad 注入 FrontendLoad.cs——前端发现沿引用链传递（_WWUI_ReportFrontend
-       透传应用工程的前端），测试进程自身被加载即触发前端 dll 加载（内嵌 wwwroot 可被 resolver 扫到）。 -->
-  <Import Project="..\WebWindowUI\WebWindowUI.targets" />
+       只编译运行纯逻辑测试）。
+       测试工程是 WebWindow 宿主（TestWindow 继承 WebWindow），Release 下经 _WWUI_InjectFrontendLoad
+       注入 FrontendLoad.cs——前端发现沿引用链传递（_WWUI_ReportFrontend 透传应用工程的前端），测试进程
+       自身被加载即触发前端 dll 加载（内嵌 wwwroot 可被 resolver 扫到）。 -->
 
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -32,10 +30,9 @@
     <ProjectReference Include="..\Sample\WebWindowUI.Sample\WebWindowUI.Sample.csproj" />
   </ItemGroup>
 
-  <!-- 平台实现 dll：仓库模式（构建/测试，不传 WWUI_PlatformRef）下 core 的包级平台引用被门控关闭，
-       核心产物不带平台 dll，测试必须直接 ProjectReference 平台工程才能拿到平台程序集（编译经 core 的
-       IVT 访问平台 internal 成员 + 运行时 WebWindowPlatform.Assembly.Load 加载它）。
-       包模式消费方则由 core 的 nuspec 平台依赖自动带回，无需任何直接引用。 -->
+  <!-- 平台实现 dll：仓库模式（构建/测试，不传 WWUI_PlatformRef）下入口的平台包引用被门控关闭、
+       核心产物不带平台 dll，测试必须直接 ProjectReference 平台工程（平台注册经 ModuleInitializer，
+       由测试泵线程触碰平台类型触发）。包模式消费方则由入口 nuspec 平台依赖自动带回，无需直接引用。 -->
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows'">
     <ProjectReference Include="..\WebWindowUI.Platforms.Windows\WebWindowUI.Platforms.Windows.csproj" />
   </ItemGroup>

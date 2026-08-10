@@ -1,10 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- 平台选择（TFM + WINDOWS/LINUX/MACOS 编译符号）集中在 WebWindowUI.Platform.props（随模板生成）
-       默认按构建机选平台：Windows=net10.0-windows，Linux=net10.0，macOS=net10.0-macos；
-       交叉编译可用 -p:WWUIPlatform=Linux/MacOS 覆盖。OutputType 配置键控：Debug=Exe / Release=WinExe。 -->
-  <Import Project="WebWindowUI.Platform.props" />
-
   <PropertyGroup>
     <!-- 配置键控：Debug=Exe（开发控制台看日志）、Release=WinExe（无控制台窗口）。 -->
     <OutputType Condition="'$(Configuration)' == 'Debug'">Exe</OutputType>

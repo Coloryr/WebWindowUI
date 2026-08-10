@@ -10,9 +10,8 @@
        （WebWindowUI.Generator.dll）。平台实现包依赖 Core（而非本入口）→ 依赖单向无环，
        打包顺序：先平台包、再本包（本包 nuspec 声明 Core + 平台依赖，包模式消费方只引 WebWindowUI
        即自动带回 Core + 平台包 + 平台自身依赖如 WebView2）。
-       平台选择（TFM）集中在 WebWindowUI.Platform.props（本工程目录，仓库内各工程共享导入）。 -->
-
-  <Import Project="WebWindowUI.Platform.props" />
+       平台选择（TFM）由 WebWindowUI.Platform.props 自动提供：仓库模式根 Directory.Build.props 导入，
+       包模式本文件被打包成 build\;buildTransitive\WebWindowUI.props（见下）。 -->
 
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -72,6 +71,11 @@
 
   <ItemGroup>
     <None Include="WebWindowUI.targets" Pack="true" PackagePath="build\;buildTransitive\" />
+    <!-- 平台选择 props：打包名 = 包名（NuGet 约定 build/<PackageId>.props 自动导入），
+         包模式消费方（含透过后端/前端标记包间接引用）无需手写 Import 即得 WWUIPlatform/TFM/平台符号。
+         与 targets 同一模式：build\（直接引用）+ buildTransitive\（透传）两份，_WWUI_PlatformPropsLoaded 守卫幂等。 -->
+    <None Include="WebWindowUI.Platform.props" Pack="true" PackagePath="build\WebWindowUI.props" />
+    <None Include="WebWindowUI.Platform.props" Pack="true" PackagePath="buildTransitive\WebWindowUI.props" />
     <!-- 前端宿主标记源文件：供 targets 注入前端工程/应用工程编译（Release，见 targets 的
          _WWUI_InjectFrontendHost/_WWUI_InjectFrontendLoad），不进本入口 dll 编译、只随包分发。
          buildTransitive 也要（同 targets：透过后端/前端标记包间接引用只吃 buildTransitive/）。 -->

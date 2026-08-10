@@ -8,6 +8,14 @@
     <Authors>Color_yr</Authors>
   </PropertyGroup>
 
+  <!-- 平台选择（WWUIPlatform/TFM/平台编译符号）仓库模式自动提供：等价包模式 buildTransitive\WebWindowUI.props。
+       仓库内所有工程（框架 + Sample + Demos + Tests）都从根 props 获得，csproj 不再手写
+       <Import WebWindowUI.Platform.props>。包模式消费方由包 buildTransitive\WebWindowUI.props 提供
+       （_WWUI_PlatformPropsLoaded 守卫双导入幂等）。Platforms.* 与 Generator/SourceGen 的 csproj 正文
+       各自显式 TFM 覆盖此处默认，行为不变。 -->
+
+  <Import Project="$(MSBuildThisFileDirectory)WebWindowUI\WebWindowUI.Platform.props" />
+
   <PropertyGroup>
     <!-- Release 下 PDB 内嵌进程序集（DebugType=embedded）：符号随程序集走，不散出独立 .pdb 文件。
          发布单文件（PublishSingleFile）时符号一起打进 exe。所有工程含库统一继承，无需逐个 csproj 写。 -->

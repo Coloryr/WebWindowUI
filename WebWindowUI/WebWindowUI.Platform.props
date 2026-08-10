@@ -1,11 +1,20 @@
 <Project>
 
-  <!-- 平台选择集中定义：WebWindowUI 系列库（核心 + 两个角色标记库）共享。
+  <!-- 平台选择集中定义：WebWindowUI 系列库（核心 + 两个角色标记库）+ 仓库内消费方共享。
        所有条件键控 $(WWUIPlatform) 而非裸 $([MSBuild]::IsOSPlatform(...))——
        否则 -p:WWUIPlatform=Linux 在 Windows 上会同时定义 WINDOWS 和 LINUX 两个符号。
-       WWUIPlatform 可被命令行 -p:WWUIPlatform=<值> 覆盖（在 Windows 上做 Linux/macOS 编译检查）。 -->
+       WWUIPlatform 可被命令行 -p:WWUIPlatform=<值> 覆盖（在 Windows 上做 Linux/macOS 编译检查）。
+       自动分发，消费方不再手写 Import：
+         仓库模式 = 根 Directory.Build.props 导入本文件；
+         包模式   = 本文件被打包成 build\;buildTransitive\WebWindowUI.props（NuGet 约定包名 props
+                   自动导入，透过后端/前端标记包间接引用只吃 buildTransitive/）；
+         模板     = content/Directory.Build.props 导入随模板生成的本地副本。
+       _WWUI_PlatformPropsLoaded 守卫：多导入路径幂等（先导入者生效，其余跳过，与
+       WebWindowUI.targets 的 _WebWindowUITargetsLoaded 同一模式）。 -->
 
-  <PropertyGroup>
+  <PropertyGroup Condition="'$(_WWUI_PlatformPropsLoaded)' == ''">
+    <_WWUI_PlatformPropsLoaded>true</_WWUI_PlatformPropsLoaded>
+
     <WWUIPlatform Condition="'$(WWUIPlatform)' == '' And $([MSBuild]::IsOSPlatform('Windows'))">Windows</WWUIPlatform>
     <WWUIPlatform Condition="'$(WWUIPlatform)' == '' And $([MSBuild]::IsOSPlatform('Linux'))">Linux</WWUIPlatform>
     <WWUIPlatform Condition="'$(WWUIPlatform)' == '' And $([MSBuild]::IsOSPlatform('OSX'))">MacOS</WWUIPlatform>

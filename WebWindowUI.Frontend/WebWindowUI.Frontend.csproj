@@ -1,8 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- TFM 必须与核心库一致（net10.0 引用不了 net10.0-windows），平台选择集中在 WebWindowUI.Platform.props -->
-  <Import Project="..\WebWindowUI\WebWindowUI.Platform.props" />
-
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

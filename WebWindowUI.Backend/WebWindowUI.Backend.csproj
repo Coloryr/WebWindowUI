@@ -1,8 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- TFM 必须与核心库一致（net10.0 引用不了 net10.0-windows），平台选择集中在 WebWindowUI.Platform.props -->
-  <Import Project="..\WebWindowUI\WebWindowUI.Platform.props" />
-
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -14,6 +11,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WebWindowUI\WebWindowUI.csproj" />
+    <!-- 源生成器（WebWindowUI.Generator.SourceGen）随包内嵌在 analyzers/dotnet/cs/ 供包模式消费方自动获得；
+         仓库模式由根 Directory.Build.targets 对「引用本标记工程的模型库」直接注入 @(Analyzer)（ProjectReference
+         的 OutputItemType=Analyzer 不透传，见根 Directory.Build.targets）。本引用只保证构建顺序
+         （_PackSourceGenAnalyzer 打包前 SourceGen 先构建好）。 -->
     <ProjectReference Include="..\WebWindowUI.Generator.SourceGen\WebWindowUI.Generator.SourceGen.csproj"
                       ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>

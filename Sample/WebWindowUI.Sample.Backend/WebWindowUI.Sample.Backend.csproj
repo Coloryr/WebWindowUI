@@ -1,8 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- 平台选择（TFM 与核心库一致）集中在 WebWindowUI.Platform.props -->
-  <Import Project="..\..\WebWindowUI\WebWindowUI.Platform.props" />
-
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -11,13 +8,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\WebWindowUI.Backend\WebWindowUI.Backend.csproj" />
-    <ProjectReference Include="..\..\WebWindowUI.Generator.SourceGen\WebWindowUI.Generator.SourceGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
   </ItemGroup>
-
-  <Import Project="..\..\WebWindowUI\WebWindowUI.targets" />
 
 
   <!-- PDB 内嵌策略显式化：Debug=portable（独立 .pdb）、Release=embedded（符号随程序集，无独立 .pdb 文件）。

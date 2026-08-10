@@ -1,8 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- 平台选择（TFM + WINDOWS/LINUX/MACOS 编译符号）集中在 WebWindowUI.Platform.props -->
-  <Import Project="..\..\..\WebWindowUI\WebWindowUI.Platform.props" />
-
   <PropertyGroup>
     <!-- 配置键控：Debug=Exe（开发控制台看日志）、Release=WinExe（无控制台窗口）。
          WinExe 的 WindowsSubsystem 仅 Windows 生效，Linux/macOS 上等效于 Exe。 -->

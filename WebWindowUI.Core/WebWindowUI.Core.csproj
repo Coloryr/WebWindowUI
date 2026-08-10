@@ -3,8 +3,6 @@
   <!-- WebWindowUI.Core：运行时代码本体（WebWindow / WebWindowModel / protobuf 协议 / 资源解析 /
        WebWindowPlatform 运行时调度）。平台无关，不引用任何平台工程或包——平台实现（WebWindowUI.Platforms.*）
        依赖本工程，方向单向、无环。消费方不直接引用本包，经入口包 WebWindowUI 自动带回。 -->
-  <!-- 平台选择（TFM + WINDOWS/LINUX/MACOS 编译符号）集中在 WebWindowUI.Platform.props（入口工程目录） -->
-  <Import Project="..\WebWindowUI\WebWindowUI.Platform.props" />
 
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>

@@ -1,8 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- 平台选择（TFM + WINDOWS/LINUX/MACOS 编译符号）集中在 WebWindowUI.Platform.props -->
-  <Import Project="..\..\WebWindowUI\WebWindowUI.Platform.props" />
-
   <PropertyGroup>
     <!-- 配置键控：Debug=Exe（开发控制台看日志）、Release=WinExe（无控制台窗口）。
          WinExe 的 WindowsSubsystem 仅 Windows 生效，Linux/macOS 上等效于 Exe。 -->
@@ -19,9 +16,6 @@
     <ProjectReference Include="..\..\WebWindowUI\WebWindowUI.csproj" />
   </ItemGroup>
 	
-  <Import Project="..\..\WebWindowUI\WebWindowUI.targets" />
-
-
   <!-- PDB 内嵌策略显式化：Debug=portable（独立 .pdb）、Release=embedded（符号随程序集，无独立 .pdb 文件）。
        仓库工程与根 Directory.Build.props 的 Release=embedded 重复但无害（自包含）；模板生成工程无根 props，靠这里保证。 -->
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">

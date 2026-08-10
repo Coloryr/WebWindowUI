@@ -1,0 +1,11 @@
+<Project>
+
+  <!-- 模板自包含：生成工程没有仓库根 Directory.Build.props，平台选择（WWUIPlatform/TFM/平台编译符号）
+       由本文件导入随模板生成的 WebWindowUI.Platform.props 提供。本文件在生成目录根、Platform.props
+       在旁，三个 csproj 经目录上溯自动继承，无需手写任何 Import。首个 restore 即可用（本地文件，
+       不依赖包还原）；包 buildTransitive\WebWindowUI.props 也提供同款平台选择，_WWUI_PlatformPropsLoaded
+       守卫保证双导入幂等（先导入者生效）。 -->
+
+  <Import Project="WebWindowUI.Platform.props" />
+
+</Project>

@@ -3,7 +3,8 @@
   <!--
     WebWindowUI 共享构建目标：把「模型 → proto 生成器」「前端构建编排」「wwwroot 传递复制」做成可复用逻辑。
     两种接入方式：
-      仓库模式：工程手动 <Import Project="..\WebWindowUI\WebWindowUI.targets" />（路径按实际位置调整）；
+      仓库模式：根 Directory.Build.targets 统一导入（对齐包模式 buildTransitive；ProjectReference
+              不透传 .targets 导入，故由根文件兜底，详见根 Directory.Build.targets）；
       包模式：WebWindowUI nuget 包的 build/WebWindowUI.targets 在 PackageReference 时被自动导入
               （标记包 WebWindowUI.Backend / WebWindowUI.Frontend 依赖核心包，引用它们即带回本文件），
               生成器随包内嵌在 tools/net10.0/（$(MSBuildThisFileDirectory)=包内 build/ 目录，父级即包根）。
@@ -68,9 +69,11 @@
   -->
 
   <PropertyGroup>
-    <!-- 防重复导入：包模式下本文件被 NuGet 自动导入（消费方 PackageReference WebWindowUI 或标记包），
-         仓库模式被前端工程手动 <Import>。两条链路不会同时触发，但叠加（手动 Import + PackageReference）时
-         用标记属性避免 wwwroot ItemGroup 重复注入（Target 重复定义无害，ItemGroup 会真实重复）。 -->
+    <!-- 防重复导入（三条导入链路，._WebWindowUITargetsLoaded 置位即后续导入跳过）：
+         a) 包模式：NuGet buildTransitive 自动导入（消费方 PackageReference WebWindowUI 或标记包）；
+         b) 仓库模式：根 Directory.Build.targets 导入（Import Condition 检查本标记，包模式先导入则跳过）；
+         c) 历史写法：消费方工程 body 手动 <Import>（同样被 b) 的 Condition 避开）。
+         Target 重复定义无害，ItemGroup 会真实重复，故靠标记属性避免 wwwroot 等 ItemGroup 重复注入。 -->
     <_WebWindowUITargetsLoaded Condition="'$(_WebWindowUITargetsLoaded)' == ''">true</_WebWindowUITargetsLoaded>
   </PropertyGroup>
 
