@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- CEF 平台实现（手写 cef.h C API P/Invoke + 裸 Win32 子窗口 + 启动自动下载运行时）：
+  <!-- CEF 平台实现（CefGlue 托管包装 + 裸 Win32 子窗口 + 启动自动下载运行时）：
        独立包，由 WebWindowUI 入口包在 UseCEF=true 时按平台引入（替换 WebWindowUI.Platforms.Windows，
        与 WebView2 互斥）。本程序集不写 [ModuleInitializer]——CEF 渲染/GPU 子进程会复进主 exe 加载
        本程序集，ModuleInitializer 会在子进程里也执行，而子进程需要的是短路退出而非注册；
@@ -12,7 +12,7 @@
     <Nullable>enable</Nullable>
 
     <PackageId>WebWindowUI.Platforms.Cef</PackageId>
-    <Description>WebWindowUI CEF 平台实现：手写 CEF C API 绑定 + 裸 Win32 子窗口 + 启动自动下载运行时（%LocalAppData%\WebWindowUI\cef）。由 WebWindowUI 入口包在 UseCEF=true 时自动引入（替换 WebView2）。</Description>
+    <Description>WebWindowUI CEF 平台实现：CefGlue（Deon-Berlin 分支，CEF 150.0.11）+ 裸 Win32 子窗口 + 启动自动下载运行时（%LocalAppData%\WebWindowUI\cef）。由 WebWindowUI 入口包在 UseCEF=true 时自动引入（替换 WebView2）。</Description>
     <PackageTags>webwindowui;cef;chromium;windows</PackageTags>
     <PackageOutputPath>$(MSBuildThisFileDirectory)..\artifacts</PackageOutputPath>
   </PropertyGroup>
@@ -23,6 +23,12 @@
 
   <ItemGroup>
     <PackageReference Include="SharpCompress" />
+    <!-- CefGlue（Deon-Berlin 分支）：.NET 托管包装，钉版 150.7871.115 = CEF 150.0.11。
+         只引 CefGlue.Next.Core（纯托管、零依赖、不含 native redist）——native 运行时由
+         CefRuntimeManager 下载到 %LocalAppData% 缓存并经 SetDllDirectory + CefRuntime.Load(path) 接入，
+         与 CefGlue 自带 redist 互斥（勿引 CefGlue.Next.* 带 native 的包）。API hash 硬校验要求
+         CefRuntimeManager.Version 必须与 150.7871.115 匹配（见 CefRuntimeManager）。 -->
+    <PackageReference Include="CefGlue.Next.Core" />
   </ItemGroup>
 
   <!-- 反向引用核心（WebWindowUI.Core，非入口包）：PrivateAssets=all 抑制 pack 依赖——

@@ -1,6 +1,4 @@
 #if MACOS
-using System.Runtime.CompilerServices;
-
 namespace WebWindowUI.MacOS;
 
 /// <summary>

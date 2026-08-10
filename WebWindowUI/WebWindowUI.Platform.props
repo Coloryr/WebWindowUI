@@ -1,17 +1,5 @@
 <Project>
 
-  <!-- 平台选择集中定义：WebWindowUI 系列库（核心 + 两个角色标记库）+ 仓库内消费方共享。
-       所有条件键控 $(WWUIPlatform) 而非裸 $([MSBuild]::IsOSPlatform(...))——
-       否则 -p:WWUIPlatform=Linux 在 Windows 上会同时定义 WINDOWS 和 LINUX 两个符号。
-       WWUIPlatform 可被命令行 -p:WWUIPlatform=<值> 覆盖（在 Windows 上做 Linux/macOS 编译检查）。
-       自动分发，消费方不再手写 Import：
-         仓库模式 = 根 Directory.Build.props 导入本文件；
-         包模式   = 本文件被打包成 build\;buildTransitive\WebWindowUI.props（NuGet 约定包名 props
-                   自动导入，透过后端/前端标记包间接引用只吃 buildTransitive/）；
-         模板     = content/Directory.Build.props 导入随模板生成的本地副本。
-       _WWUI_PlatformPropsLoaded 守卫：多导入路径幂等（先导入者生效，其余跳过，与
-       WebWindowUI.targets 的 _WebWindowUITargetsLoaded 同一模式）。 -->
-
   <PropertyGroup Condition="'$(_WWUI_PlatformPropsLoaded)' == ''">
     <_WWUI_PlatformPropsLoaded>true</_WWUI_PlatformPropsLoaded>
 
@@ -20,8 +8,6 @@
     <WWUIPlatform Condition="'$(WWUIPlatform)' == '' And $([MSBuild]::IsOSPlatform('OSX'))">MacOS</WWUIPlatform>
     <WWUIPlatform Condition="'$(WWUIPlatform)' == ''">Windows</WWUIPlatform>
 
-    <!-- macOS 的 net10.0-macos 无法在 Windows 上编译（需 Mac + macos workload）；
-         Windows 上 -p:WWUIPlatform=MacOS 会因缺 Apple SDK 而编译失败，属预期。 -->
     <TargetFramework Condition="'$(WWUIPlatform)' == 'Windows'">net10.0-windows</TargetFramework>
     <TargetFramework Condition="'$(WWUIPlatform)' == 'MacOS'">net10.0-macos</TargetFramework>
     <TargetFramework Condition="'$(WWUIPlatform)' == 'Linux'">net10.0</TargetFramework>
@@ -30,8 +16,6 @@
     <DefineConstants Condition="'$(WWUIPlatform)' == 'Linux'">$(DefineConstants);LINUX</DefineConstants>
     <DefineConstants Condition="'$(WWUIPlatform)' == 'MacOS'">$(DefineConstants);MACOS</DefineConstants>
 
-    <!-- CEF 渲染器：UseCEF=true 且 Windows 时定义 WWUI_CEF——入口 Platform.cs 的 #if WWUI_CEF 分支
-         改走 CefBootstrap、平台包改引 WebWindowUI.Platforms.Cef（替换 WebView2）。仅 Windows 有效。 -->
     <DefineConstants Condition="'$(WWUIPlatform)' == 'Windows' And '$(UseCEF)' == 'true'">$(DefineConstants);WWUI_CEF</DefineConstants>
   </PropertyGroup>
 

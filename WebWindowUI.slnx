@@ -6,10 +6,9 @@
     <Project Path="WebWindowUI/WebWindowUI.csproj" />
   </Folder>
   <Folder Name="/Platforms/">
-    <!-- 平台包只入 Windows 版 slnx：Linux/macOS 平台工程 TFM（net10.0 / net10.0-macos）与
-         Windows 侧核心（net10.0-windows）不匹配，放进共享 slnx 会在 Windows 上构建报错。
-         它们在各自 OS 上作为独立工程构建（WWUIPlatform=Linux/MacOS）。 -->
     <Project Path="WebWindowUI.Platforms.Windows/WebWindowUI.Platforms.Windows.csproj" />
+    <Project Path="WebWindowUI.Platforms.Linux/WebWindowUI.Platforms.Linux.csproj" />
+    <Project Path="WebWindowUI.Platforms.MacOS/WebWindowUI.Platforms.MacOS.csproj" />
     <Project Path="WebWindowUI.Platforms.Cef/WebWindowUI.Platforms.Cef.csproj" />
   </Folder>
   <Folder Name="/Generator/">

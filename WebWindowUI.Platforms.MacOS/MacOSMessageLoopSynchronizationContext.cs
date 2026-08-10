@@ -1,6 +1,4 @@
 #if MACOS
-using CoreFoundation;
-
 namespace WebWindowUI.MacOS;
 
 /// <summary>

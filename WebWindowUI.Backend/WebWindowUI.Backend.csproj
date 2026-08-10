@@ -11,10 +11,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WebWindowUI\WebWindowUI.csproj" />
-    <!-- 源生成器（WebWindowUI.Generator.SourceGen）随包内嵌在 analyzers/dotnet/cs/ 供包模式消费方自动获得；
-         仓库模式由根 Directory.Build.targets 对「引用本标记工程的模型库」直接注入 @(Analyzer)（ProjectReference
-         的 OutputItemType=Analyzer 不透传，见根 Directory.Build.targets）。本引用只保证构建顺序
-         （_PackSourceGenAnalyzer 打包前 SourceGen 先构建好）。 -->
     <ProjectReference Include="..\WebWindowUI.Generator.SourceGen\WebWindowUI.Generator.SourceGen.csproj"
                       ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
@@ -29,15 +25,4 @@
       </TfmSpecificPackageFile>
     </ItemGroup>
   </Target>
-
-
-  <!-- PDB 内嵌策略显式化：Debug=portable（独立 .pdb）、Release=embedded（符号随程序集，无独立 .pdb 文件）。
-       仓库工程与根 Directory.Build.props 的 Release=embedded 重复但无害（自包含）；模板生成工程无根 props，靠这里保证。 -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <DebugType>portable</DebugType>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <DebugType>embedded</DebugType>
-  </PropertyGroup>
 </Project>

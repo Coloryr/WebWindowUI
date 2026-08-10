@@ -89,6 +89,19 @@ function resolveSendChannel(): { postMessage(data: string): void } | null {
   const handler = webkit?.messageHandlers?.[HANDLER_NAME]
   if (handler?.postMessage) return { postMessage: (data) => handler.postMessage(data) }
 
+  // CEF 渲染器（WebWindowUI.Platforms.Cef）：无 chrome.webview / webkit.messageHandlers，
+  // JS → .NET 回传经自定义 scheme 的 fetch POST 到同源 app://<host>/__wwui——native scheme 处理器
+  // 读 post data（UTF-8 编码的 NUL 转义串）还原 protobuf 字节后投递 .NET 模型（与其余平台同一 codec）。
+  // 同 scheme 同 host → 同源请求，无 CORS 预检；fetch 失败静默（纯浏览器调试场景通道不存在）。
+  if (typeof fetch === 'function') {
+    const messageUrl = `${location.origin}/__wwui`
+    return {
+      postMessage: (data) => {
+        void fetch(messageUrl, { method: 'POST', body: data }).catch(() => {})
+      },
+    }
+  }
+
   return null
 }
 

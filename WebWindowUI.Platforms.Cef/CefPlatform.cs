@@ -1,12 +1,14 @@
+using Xilium.CefGlue;
+
 namespace WebWindowUI.Cef;
 
 /// <summary>
-/// CEF 平台实现（Windows：手写 cef.h C API 绑定 + 裸 Win32 子窗口 + 启动自动下载运行时）。
+/// CEF 平台实现（Windows：CefGlue 托管包装 + 裸 Win32 子窗口 + 启动自动下载运行时）。
 /// 与 WebWindowUI.Platforms.Windows 互斥：入口在 UseCEF=true 时改引本包（WWUIPlatform 必为 Windows）。
 ///
 /// 消息循环：单线程模式（multi_threaded_message_loop=false）→ CEF UI 线程 == 主线程。
-/// RunMessageLoop 用 Win32 GetMessage 环 + 每次 dispatch 后 cef_do_message_loop_work()，
-/// WM_QUIT（末窗关闭）后同线程 cef_shutdown()（必须在 UI 线程、进程退出前）。
+/// RunMessageLoop 用 CefRuntime.RunMessageLoop()（CEF 内部完整消息环：泵 Windows 消息 + CEF 任务，
+/// 隐式处理 WM_RUN 隐藏窗调度与末窗 WM_QUIT 退出），返回后同线程 CefRuntime.Shutdown()。
 /// </summary>
 public sealed class CefPlatform : IWebWindowPlatform
 {
@@ -29,11 +31,12 @@ public sealed class CefPlatform : IWebWindowPlatform
         // 构造里已装过一次，这里是幂等兜底（覆盖未经过窗口创建直接调消息循环的宿主）。
         InstallMessageLoopSynchronizationContext();
 
-        // 单线程 CEF 消息循环：Win32 环 + cef_do_message_loop_work，末窗关闭（WM_QUIT）后返回
-        CefNative.RunMessageLoop();
+        // 单线程 CEF 消息循环：CefRuntime.RunMessageLoop 内部泵 Windows 消息 + CEF 任务，
+        // 末窗关闭（WM_QUIT）后返回。
+        CefRuntime.RunMessageLoop();
 
-        // 同线程（UI 线程）关停 CEF。cef_shutdown 会等待剩余浏览器上下文销毁，必须最后调用。
-        CefNative.cef_shutdown();
+        // 同线程（UI 线程）关停 CEF。Shutdown 会等剩余浏览器上下文销毁，必须最后调用。
+        CefRuntime.Shutdown();
     }
 
     private static void InstallMessageLoopSynchronizationContext()

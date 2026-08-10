@@ -159,7 +159,7 @@ public abstract class WebWindow
     internal static string BuildHomeUrl(string scheme, string windowPath)
     {
         string p = NormalizeWindowPath(windowPath);
-        return $"{scheme}://localhost/window/{(p.Length == 0 ? "" : p + "/")}index.html";
+        return $"{scheme}://webui/window/{(p.Length == 0 ? "" : p + "/")}index.html";
     }
 
     private static string NormalizeWindowPath(string windowPath)

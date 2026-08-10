@@ -1,7 +1,5 @@
 #if LINUX
 #pragma warning disable CA1416 // WebKit 类型带 [SupportedOSPlatform]，但本文件 #if LINUX 门控，Windows/macOS 构建不含
-using System.Text;
-
 namespace WebWindowUI.Linux;
 
 /// <summary>

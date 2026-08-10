@@ -1,26 +1,6 @@
 <Project>
-
-  <!-- 仓库模式对齐包模式（等价 NuGet 的 buildTransitive/ + analyzers/dotnet/cs/）：
-       消费者工程只引用角色标记库（WebWindowUI.Backend / WebWindowUI.Frontend）即可自动获得
-       共享构建 targets 与模型源生成器，无需手写 <Import WebWindowUI.targets> 或 SourceGen 引用。
-       根文件兜底的原因：MSBuild 的 ProjectReference 不透传 .targets 导入，OutputItemType="Analyzer"
-       也只对直接引用生效（ResolveProjectReferences 逐直接引用取 GetTargetPath），两条都无法经标记
-       工程传递，只能全局注入。
-
-       包模式（Demo/模板消费方）不受影响：包 buildTransitive/WebWindowUI.targets 经 .nuget.g.targets
-       （Microsoft.Common.targets 42 行）先于本文件（60 行）导入，_WebWindowUITargetsLoaded 已置位 →
-       下面 Import 跳过，不双导入；analyzer 注入按「ProjectReference 到标记库」精确匹配，包引用
-       （PackageReference）不命中。 -->
-
-  <!-- 1) 共享构建 targets：等价包模式 buildTransitive/。 -->
   <Import Project="$(MSBuildThisFileDirectory)WebWindowUI\WebWindowUI.targets"
           Condition="'$(_WebWindowUITargetsLoaded)' == ''" />
-
-  <!-- 2) 模型源生成器 analyzer：等价包模式 analyzers/dotnet/cs/。只对「ProjectReference 到
-       WebWindowUI.Backend 标记库」的模型库工程注入（其余工程无 WebWindowModel 子类，注入无产出）。
-       不用 @(_WWUI_BackendRef) 判定：它由 targets 定义、对 PackageReference 也非空，包模式消费方已
-       从包内嵌 analyzer 获得生成器，再注入会双生成（CS0101）。按引用类型区分：仅 ProjectReference 命中。
-       生成器 dll 路径随标记库的构建顺序保证（模型库→标记库→SourceGen）在编译前已产出。 -->
   <ItemGroup>
     <_WWUI_RepoBackendRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Backend'))" />
   </ItemGroup>

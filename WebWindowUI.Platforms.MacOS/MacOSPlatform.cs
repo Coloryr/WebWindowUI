@@ -1,6 +1,4 @@
 #if MACOS
-using AppKit;
-
 namespace WebWindowUI.MacOS;
 
 /// <summary>

@@ -1,6 +1,4 @@
 #if LINUX
-using GLib;
-
 namespace WebWindowUI.Linux;
 
 /// <summary>

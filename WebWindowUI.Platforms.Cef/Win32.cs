@@ -41,23 +41,8 @@ public static class Win32
     private static IntPtr _marshalHwnd;
     private static WndProcDelegate _marshalWndProc = null!; // 保活，防止被 GC 回收
 
-    /// <summary>跑 Win32 消息循环，直到收到 WM_QUIT 为止。CEF 平台的循环见 <c>CefNative.RunMessageLoop</c>（额外调 cef_do_message_loop_work）。</summary>
-    public static void MessageLoop()
-    {
-        MSG msg;
-        while (GetMessageW(out msg, IntPtr.Zero, 0, 0) > 0)
-        {
-            TranslateMessage(ref msg);
-            DispatchMessageW(ref msg);
-        }
-    }
-
     public static void ShowError(string message)
-    {
-        // 控制台先输出一份，便于无界面调试时看到错误原因（仅 Debug；弹窗 Release 也保留）
-        Log.Debug(message);
-        MessageBoxW(IntPtr.Zero, message, "错误", MB_OK | MB_ICONERROR);
-    }
+        => MessageBoxW(IntPtr.Zero, message, "错误", MB_OK | MB_ICONERROR);
 
     /// <summary>
     /// 创建（或复用）隐藏的消息窗口。
@@ -123,17 +108,6 @@ public static class Win32
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct MSG
-    {
-        public IntPtr hwnd;
-        public uint message;
-        public IntPtr wParam;
-        public IntPtr lParam;
-        public uint time;
-        public POINT pt;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
     public struct RECT
     {
         public int Left;
@@ -170,15 +144,6 @@ public static class Win32
 
     [DllImport("user32.dll")]
     public static extern IntPtr DefWindowProcW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    public static extern int GetMessageW(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
-
-    [DllImport("user32.dll")]
-    public static extern bool TranslateMessage(ref MSG lpMsg);
-
-    [DllImport("user32.dll")]
-    public static extern IntPtr DispatchMessageW(ref MSG lpMsg);
 
     [DllImport("user32.dll")]
     public static extern void PostQuitMessage(int nExitCode);

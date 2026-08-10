@@ -23,6 +23,7 @@
     <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
     <PackageVersion Include="protobuf-net" Version="3.2.56" />
     <PackageVersion Include="SharpCompress" Version="0.50.4" />
+    <PackageVersion Include="CefGlue.Next.Core" Version="150.7871.115" />
     <PackageVersion Include="System.Text.Json" Version="8.0.6" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageVersion Include="xunit" Version="2.9.2" />

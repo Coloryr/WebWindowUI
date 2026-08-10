@@ -1,6 +1,4 @@
 #if LINUX
-using System.Runtime.CompilerServices;
-
 namespace WebWindowUI.Linux;
 
 /// <summary>
