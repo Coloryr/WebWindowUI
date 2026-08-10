@@ -1,5 +1,6 @@
 #if WINDOWS
 using System.Collections.Concurrent;
+using WebWindowUI.Natives.Windows;
 using WebWindowUI.Windows;
 
 namespace WebWindowUI.Tests.Support;
@@ -95,7 +96,7 @@ internal sealed class StaThreadPump
             _ = typeof(WindowsPlatform);
 
             // 与 WindowsPlatform 构造一致：在本线程绑定平台单例（幂等兜底）
-            IntPtr hwnd = Win32.GetOrCreateMarshalWindow();
+            var hwnd = Win32.GetOrCreateMarshalWindow("WebView2MarshalWindow");
             MessageLoopSynchronizationContext.Initialize(hwnd);
             SynchronizationContext.SetSynchronizationContext(MessageLoopSynchronizationContext.Instance);
         }
@@ -118,7 +119,7 @@ internal sealed class StaThreadPump
             PumpPendingMessages();
 
             // 3. 挂起等待：工作信号 / 新消息 / 200ms 兜底
-            IntPtr handle = _workReady.SafeWaitHandle.DangerousGetHandle();
+            var handle = _workReady.SafeWaitHandle.DangerousGetHandle();
             PumpWin32.MsgWaitForMultipleObjectsEx(
                 1, new[] { handle }, 200,
                 PumpWin32.QS_ALLINPUT, PumpWin32.MWMO_INPUTAVAILABLE);

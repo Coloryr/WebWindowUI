@@ -165,7 +165,7 @@ public class GeneratorTests
     {
         const string mainSrc = """
         using CommunityToolkit.Mvvm.ComponentModel;
-        using WebWindowUI;
+        using WebWindowUI.Core;
 
         namespace WebWindowUI.Sample;
 
@@ -181,7 +181,7 @@ public class GeneratorTests
 
         const string todoSrc = """
         using CommunityToolkit.Mvvm.ComponentModel;
-        using WebWindowUI;
+        using WebWindowUI.Core;
 
         namespace WebWindowUI.Sample;
 
@@ -231,7 +231,7 @@ public class GeneratorTests
         const string mainSrc = """
         using System.Collections.ObjectModel;
         using CommunityToolkit.Mvvm.ComponentModel;
-        using WebWindowUI;
+        using WebWindowUI.Core;
 
         namespace WebWindowUI.Sample;
 
@@ -247,7 +247,7 @@ public class GeneratorTests
 
         const string todoSrc = """
         using CommunityToolkit.Mvvm.ComponentModel;
-        using WebWindowUI;
+        using WebWindowUI.Core;
 
         namespace WebWindowUI.Sample;
 
@@ -276,7 +276,7 @@ public class GeneratorTests
         DirectoryInfo? dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
-            string full = Path.Combine(dir.FullName, "Sample", "WebWindowUI.Sample.Backend", modelFile);
+            var full = Path.Combine(dir.FullName, "Sample", "WebWindowUI.Sample.Backend", modelFile);
             if (File.Exists(full))
                 return File.ReadAllText(full);
             dir = dir.Parent;

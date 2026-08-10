@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text.Json;
 using ProtoBuf;
+using WebWindowUI.Core.Protocol;
 using WebWindowUI.Generator;
 using WebWindowUI.Sample;
 using Xunit;
@@ -18,9 +19,9 @@ public class ModelProtoTests
     [Fact]
     public void Codec_RoundTrip_AllByteValues()
     {
-        byte[] bytes = Enumerable.Range(0, 256).Select(i => (byte)i).ToArray();
+        var bytes = Enumerable.Range(0, 256).Select(i => (byte)i).ToArray();
 
-        string s = WebView2StringCodec.Encode(bytes);
+        var s = WebView2StringCodec.Encode(bytes);
 
         Assert.Equal(bytes, WebView2StringCodec.Decode(s));
     }
@@ -30,7 +31,7 @@ public class ModelProtoTests
     {
         byte[] bytes = { 0x00, 0x00, 0x00, 0x01, 0x00 }; // NUL 密集（protobuf 常见）
 
-        string s = WebView2StringCodec.Encode(bytes);
+        var s = WebView2StringCodec.Encode(bytes);
 
         Assert.DoesNotContain('\0', s); // WebView2 字符串通道在 NUL 处截断，绝不允许出现
         Assert.Equal(bytes, WebView2StringCodec.Decode(s));
@@ -41,7 +42,7 @@ public class ModelProtoTests
     {
         byte[] bytes = { 0x5C, 0x5C, 0x41, 0x5C }; // 转义符自身（0x5C）必须成对转义
 
-        string s = WebView2StringCodec.Encode(bytes);
+        var s = WebView2StringCodec.Encode(bytes);
 
         Assert.Equal(bytes, WebView2StringCodec.Decode(s));
     }
@@ -208,8 +209,8 @@ public class ModelProtoTests
 
         foreach (JsonProperty field in settings.GetProperty("fields").EnumerateObject())
         {
-            int id = field.Value.GetProperty("id").GetInt32();
-            string csName = dto[id]; // 字段号对上才有这个名字
+            var id = field.Value.GetProperty("id").GetInt32();
+            var csName = dto[id]; // 字段号对上才有这个名字
             // proto 字段名 = .NET 属性名首字母小写
             Assert.Equal(char.ToLowerInvariant(csName[0]) + csName[1..], field.Name);
         }
@@ -314,9 +315,9 @@ public class ModelProtoTests
         Assert.Equal(tags.Count, descriptorFields.EnumerateObject().Count());
         foreach (JsonProperty f in descriptorFields.EnumerateObject())
         {
-            int id = f.Value.GetProperty("id").GetInt32();
-            string csName = tags[id]; // 字段号对上才有这个名字
-            string expect = nameExceptions is not null && nameExceptions.TryGetValue(id, out string? over)
+            var id = f.Value.GetProperty("id").GetInt32();
+            var csName = tags[id]; // 字段号对上才有这个名字
+            var expect = nameExceptions is not null && nameExceptions.TryGetValue(id, out var over)
                 ? over
                 : char.ToLowerInvariant(csName[0]) + csName[1..];
             Assert.Equal(expect, f.Name);

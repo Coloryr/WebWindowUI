@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using WebWindowUI.Sample.Items;
+using WebWindowUI.Core;
 
 namespace WebWindowUI.Sample;
 

@@ -57,7 +57,7 @@ public sealed class ProtoGenerator : IIncrementalGenerator
             return null;
         if (!WriteBackGenerator.IsDerivedFromWebWindowModel(sym))
             return null;
-        string ns = sym.ContainingNamespace.IsGlobalNamespace ? "" : sym.ContainingNamespace.ToDisplayString();
+        var ns = sym.ContainingNamespace.IsGlobalNamespace ? "" : sym.ContainingNamespace.ToDisplayString();
         return new ModelSourceInfo(sym.Name, ns, ctx.Node.SyntaxTree.ToString());
     }
 
@@ -66,16 +66,16 @@ public sealed class ProtoGenerator : IIncrementalGenerator
     private static void BuildEmits(SourceProductionContext spc, ImmutableArray<ParsedModel?> parsedModels)
     {
         var all = new Dictionary<string, ParsedModel>(StringComparer.Ordinal);
-        foreach (ParsedModel? m in parsedModels)
+        foreach (var m in parsedModels)
         {
             if (m is null)
                 continue;
             all[m.ClassName] = m;
         }
 
-        foreach (ParsedModel m in all.Values)
+        foreach (var m in all.Values)
         {
-            ModelProtoResult result = ModelProtoGenerator.GenerateParsed(m, all, "");
+            var result = ModelProtoGenerator.GenerateParsed(m, all, "");
             spc.AddSource($"{m.ClassName}Proto.g.cs", SourceText.From(result.CsCode, Encoding.UTF8));
         }
     }
@@ -84,7 +84,7 @@ public sealed class ProtoGenerator : IIncrementalGenerator
     private static EquatableArray<KeyValuePair<string, string>> BuildNamespaceMap(ImmutableArray<ModelSourceInfo?> models)
     {
         var pairs = new List<KeyValuePair<string, string>>();
-        foreach (ModelSourceInfo? m in models)
+        foreach (var m in models)
         {
             if (m is null)
                 continue;
@@ -100,7 +100,7 @@ public sealed class ProtoGenerator : IIncrementalGenerator
         if (nsPairs.Length == 0)
             return null; // 无其它模型：单模型用法，typed repeated 退化 ModelValue 兜底（与 Generate 语义一致）
         var ns = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (KeyValuePair<string, string> kv in nsPairs)
+        foreach (var kv in nsPairs)
             ns[kv.Key] = kv.Value;
         try
         {

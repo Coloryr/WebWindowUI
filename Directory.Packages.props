@@ -1,10 +1,5 @@
 <Project>
 
-  <!-- 集中版本管理（CPM）：所有 PackageReference 只写 Include，版本统一在此定义。
-       NuGet 从工程目录向上查找本文件，仓库内全部工程自动继承。CPM 下任何 PackageReference 不得再写 Version（NU1008）。
-       WebWindowUI 系列对外包版本用 $(Version)（Directory.Build.props 统一维护）联动；其余依赖版本固定在各自 PackageVersion。
-       模板生成的工程自带一份精简版（WebWindowUI.Templates/content/Directory.Packages.props），版本须随本文件同步。 -->
-
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>

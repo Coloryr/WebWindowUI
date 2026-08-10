@@ -1,5 +1,6 @@
 #if LINUX
 using System.Diagnostics;
+using WebWindowUI.Core;
 using WebWindowUI.Sample;
 
 namespace WebWindowUI.Tests.Support;
@@ -103,7 +104,7 @@ internal static class WebKitTestHarness
             try
             {
                 // typeof undefined → "undefined"；桥接后 → "object"（reactive proxy）
-                string result = await win.ExecuteScriptAsync("typeof window.__model");
+                var result = await win.ExecuteScriptAsync("typeof window.__model");
                 if (result != "\"undefined\"")
                     return;
             }

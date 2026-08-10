@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>WebWindowUI.Platforms.Linux</PackageId>
+    <Description>WebWindowUI Linux 平台实现：libwebkit2gtk-4.1（GTK3 端口）+ GTK3 窗口层，GirCore 无 GTK3 托管绑定故全手写 P/Invoke。由核心包 WebWindowUI 按平台自动引入。</Description>
+    <PackageTags>webwindowui;webkit2gtk;linux</PackageTags>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);LINUX</DefineConstants>
+    <NoWarn>$(NoWarn);CA2255</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="GirCore.GLib-2.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\WebWindowUI.Core\WebWindowUI.Core.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WebWindowUI.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>WebWindowUI.Core</PackageId>
+    <Description>WebWindowUI 核心库：跨平台 WebView 窗口抽象 + protobuf 模型协议 + 静态资源解析 + 运行时平台调度。平台无关，平台实现见 WebWindowUI.Platforms.{Windows,Linux,MacOS}，消费方请引用入口包 WebWindowUI。</Description>
+    <PackageTags>webwindowui;webview2;webkit2gtk;protobuf;vue;desktop;linux;macos</PackageTags>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="protobuf-net" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WebWindowUI.Tests" />
+    <InternalsVisibleTo Include="WebWindowUI.Platforms.Windows" />
+    <InternalsVisibleTo Include="WebWindowUI.Platforms.Cef" />
+    <InternalsVisibleTo Include="WebWindowUI.Platforms.Linux" />
+    <InternalsVisibleTo Include="WebWindowUI.Platforms.MacOS" />
+  </ItemGroup>
+</Project>

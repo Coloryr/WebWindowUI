@@ -1,5 +1,5 @@
 using System.Collections.ObjectModel;
-using System.IO; // WPF（UseWPF）隐式 using 不含 System.IO，File/Path 需显式
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 

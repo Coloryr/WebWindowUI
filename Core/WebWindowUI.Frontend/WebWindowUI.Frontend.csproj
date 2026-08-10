@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <PackageId>WebWindowUI.Frontend</PackageId>
+    <Description>WebWindowUI 前端角色标记库：前端（Vue + Vite）工程引用本包即声明角色，WebWindowUI.targets 据此激活 vite 构建目标。引用本包自动带回 WebWindowUI 核心（共享构建目标 + 生成器）。</Description>
+    <PackageTags>webwindowui;webview2;vue;desktop</PackageTags>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WebWindowUI\WebWindowUI.csproj" />
+  </ItemGroup>
+	
+</Project>

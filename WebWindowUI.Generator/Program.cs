@@ -13,11 +13,11 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
-        string? modelPath = Get(args, "--model");
-        string? jsonOut = Get(args, "--json-out");
-        string? tsOutDir = Get(args, "--ts-out-dir");
-        string? allModels = Get(args, "--all-models");
-        string rootNs = Get(args, "--root-namespace") ?? "";
+        var modelPath = Get(args, "--model");
+        var jsonOut = Get(args, "--json-out");
+        var tsOutDir = Get(args, "--ts-out-dir");
+        var allModels = Get(args, "--all-models");
+        var rootNs = Get(args, "--root-namespace") ?? "";
 
         if (modelPath is null)
         {
@@ -47,8 +47,8 @@ internal static class Program
                     .Cast<string>());
         }
 
-        string source = File.ReadAllText(modelPath);
-        string modelClassName = Path.GetFileNameWithoutExtension(modelPath);
+        var source = File.ReadAllText(modelPath);
+        var modelClassName = Path.GetFileNameWithoutExtension(modelPath);
 
         // 全模型源码表（类名 → 源码）：供生成器识别 List<已知模型>（强类型 repeated）、
         // 取元素模型命名空间（TS import / 快照类型全限定）与输出全量 descriptor。
@@ -56,7 +56,7 @@ internal static class Program
         var allModelSources = new Dictionary<string, string>();
         if (!string.IsNullOrWhiteSpace(allModels))
         {
-            foreach (string p in allModels
+            foreach (var p in allModels
                 .Split(';', StringSplitOptions.RemoveEmptyEntries)
                 .Select(x => x.Trim())
                 .Where(File.Exists))
@@ -65,13 +65,13 @@ internal static class Program
             }
         }
 
-        ModelProtoResult result = ModelProtoGenerator.Generate(source, modelClassName, allModelSources, rootNs);
+        var result = ModelProtoGenerator.Generate(source, modelClassName, allModelSources, rootNs);
 
         if (jsonOut is not null)
             WriteIfChanged(jsonOut, result.DescriptorJson);
         if (tsOutDir is not null)
         {
-            string sub = ModelProtoGenerator.TsSubPath(result.Namespace, rootNs);
+            var sub = ModelProtoGenerator.TsSubPath(result.Namespace, rootNs);
             WriteIfChanged(Path.Combine(tsOutDir, sub, modelClassName + ".ts"), result.TsCode);
             PruneStaleTs(tsOutDir, rootNs, allModelSources);
         }
@@ -92,16 +92,16 @@ internal static class Program
             return;
 
         var expected = new HashSet<string>(StringComparer.Ordinal);
-        foreach ((string cls, string src) in allModelSources)
+        foreach (var (cls, src) in allModelSources)
         {
-            string ns = ModelProtoGenerator.GetNamespace(src) ?? rootNs;
-            string sub = ModelProtoGenerator.TsSubPath(ns, rootNs);
+            var ns = ModelProtoGenerator.GetNamespace(src) ?? rootNs;
+            var sub = ModelProtoGenerator.TsSubPath(ns, rootNs);
             expected.Add(Path.Combine(sub, cls + ".ts").Replace('\\', '/'));
         }
 
-        foreach (string file in Directory.EnumerateFiles(tsOutDir, "*.ts", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(tsOutDir, "*.ts", SearchOption.AllDirectories))
         {
-            string rel = Path.GetRelativePath(tsOutDir, file).Replace('\\', '/');
+            var rel = Path.GetRelativePath(tsOutDir, file).Replace('\\', '/');
             if (!expected.Contains(rel))
                 File.Delete(file);
         }

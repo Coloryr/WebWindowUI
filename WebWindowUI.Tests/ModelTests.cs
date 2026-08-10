@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using ProtoBuf;
+using WebWindowUI.Core;
+using WebWindowUI.Core.Protocol;
 using WebWindowUI.Generator;
 using WebWindowUI.Sample;
 using WebWindowUI.Sample.Items;
@@ -26,7 +28,7 @@ public class ModelTests
             Set = new ModelSet { Property = "Count", Value = new ModelValue { Number = 5.0 } },
         };
 
-        byte[] bytes = ModelProtocol.Encode(msg);
+        var bytes = ModelProtocol.Encode(msg);
 
         // field3(set=0x1A, len18) → "Count" + field2(value) + field1(double 5.0 = fixed64 LE 00..001440)
         byte[] expected =
@@ -291,7 +293,7 @@ public class ModelTests
     {
         const string src = """
         using CommunityToolkit.Mvvm.ComponentModel;
-        using WebWindowUI;
+        using WebWindowUI.Core;
 
         namespace WebWindowUI.Sample;
 

@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- macOS 平台实现（NSWindow + WKWebView，盲写）：独立包，由 WebWindowUI 核心包按平台自动引入。
+       仅在本机 Mac + dotnet workload install macos 上构建真实 net10.0-macos；非 macOS 宿主上退化为
+       net10.0 空壳（不编译任何源文件），保证 slnx 全量构建在 Windows/Linux 上不因缺 macos 工作负载而挂。
+       MACOS 编译符号保持恒定义（Platform.props 的 WWUIPlatform 键控，跨编译时一致）。 -->
+
+  <PropertyGroup>
+    <_WWUI_IsMacHost Condition="$([MSBuild]::IsOSPlatform('OSX'))">true</_WWUI_IsMacHost>
+    <TargetFramework Condition="'$(_WWUI_IsMacHost)' == 'true'">net10.0-macos</TargetFramework>
+    <TargetFramework Condition="'$(_WWUI_IsMacHost)' != 'true'">net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <PackageId>WebWindowUI.Platforms.MacOS</PackageId>
+    <Description>WebWindowUI macOS 平台实现：NSWindow + WKWebView。由核心包 WebWindowUI 按平台自动引入。</Description>
+    <PackageTags>webwindowui;wkwebview;macos</PackageTags>
+    <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <DefineConstants>$(DefineConstants);MACOS</DefineConstants>
+    <NoWarn>$(NoWarn);CA2255</NoWarn>
+  </PropertyGroup>
+
+  <!-- 非 macOS 宿主：源码依赖 AppKit/WebKit 绑定，net10.0 下无法编译，整包剔除 → 空壳程序集 -->
+  <ItemGroup Condition="'$(_WWUI_IsMacHost)' != 'true'">
+    <Compile Remove="**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\WebWindowUI.Core\WebWindowUI.Core.csproj" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WebWindowUI.Tests" />
+  </ItemGroup>
+</Project>

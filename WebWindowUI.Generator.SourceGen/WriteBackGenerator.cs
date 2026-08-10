@@ -75,12 +75,12 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         // 非索引器属性。基类反射兜底已移除，分析器处理过的模型必须对**所有**公开属性都有生成 case，
         // 否则显式属性会静默失效（读值/写回/订阅都落空）。
         var props = new Dictionary<string, PropInfo>(StringComparer.Ordinal);
-        foreach (ISymbol member in sym.GetMembers())
+        foreach (var member in sym.GetMembers())
         {
             ct.ThrowIfCancellationRequested();
             if (member is IFieldSymbol f && HasAttribute(f, ObservablePropertyAttribute))
             {
-                string pName = FieldToPropertyName(f.Name);
+                var pName = FieldToPropertyName(f.Name);
                 props[pName] = new PropInfo(
                     pName,
                     f.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
@@ -90,7 +90,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
                     GetCollectionKind(f.Type));
             }
         }
-        foreach (ISymbol member in sym.GetMembers())
+        foreach (var member in sym.GetMembers())
         {
             ct.ThrowIfCancellationRequested();
             if (member is IPropertySymbol pr
@@ -100,7 +100,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
                 && pr.DeclaredAccessibility == Accessibility.Public
                 && pr.GetMethod is { IsStatic: false })
             {
-                bool writable = pr.SetMethod is { IsStatic: false } setter
+                var writable = pr.SetMethod is { IsStatic: false } setter
                     && setter.DeclaredAccessibility == Accessibility.Public;
                 props[pr.Name] = new PropInfo(
                     pr.Name,
@@ -113,7 +113,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         }
 
         var commands = new List<CmdInfo>();
-        foreach (ISymbol member in sym.GetMembers())
+        foreach (var member in sym.GetMembers())
         {
             ct.ThrowIfCancellationRequested();
             if (member is IMethodSymbol m && m.MethodKind == MethodKind.Ordinary && HasAttribute(m, RelayCommandAttribute))
@@ -127,11 +127,11 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         }
 
         // POCO 可写属性 = 属性全集中非只读者（[ObservableProperty] + 显式 public 可写）。
-        PropInfo[] propArray = props.Values.ToArray();
-        PropInfo[] writableArray = props.Values.Where(p => !p.IsReadOnly).ToArray();
+        var propArray = props.Values.ToArray();
+        var writableArray = props.Values.Where(p => !p.IsReadOnly).ToArray();
 
-        bool hasParameterlessCtor = !sym.IsAbstract && sym.InstanceConstructors.Any(c => c.Parameters.Length == 0);
-        string ns = sym.ContainingNamespace.IsGlobalNamespace ? "" : sym.ContainingNamespace.ToDisplayString();
+        var hasParameterlessCtor = !sym.IsAbstract && sym.InstanceConstructors.Any(c => c.Parameters.Length == 0);
+        var ns = sym.ContainingNamespace.IsGlobalNamespace ? "" : sym.ContainingNamespace.ToDisplayString();
 
         return new ModelInfo(
             sym.Name,
@@ -142,11 +142,11 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
             hasParameterlessCtor);
     }
 
-    /// <summary>基类链是否落在 WebWindowUI.WebWindowModel（WriteBack/Proto 两个生成器共用）。</summary>
+    /// <summary>基类链是否落在 WebWindowUI.Core.WebWindowModel（WriteBack/Proto 两个生成器共用）。</summary>
     internal static bool IsDerivedFromWebWindowModel(INamedTypeSymbol sym)
     {
         for (INamedTypeSymbol? b = sym.BaseType; b is not null; b = b.BaseType)
-            if (b.Name == "WebWindowModel" && b.ContainingNamespace.ToDisplayString() == "WebWindowUI")
+            if (b.Name == "WebWindowModel" && b.ContainingNamespace.ToDisplayString() == "WebWindowUI.Core")
                 return true;
         return false;
     }
@@ -157,7 +157,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
     /// <summary>精确复刻 CommunityToolkit 字段→属性名：剥**一个**前导 '_'，再首字母转大写（_name→Name、name→Name、__name→_Name）。</summary>
     private static string FieldToPropertyName(string fieldName)
     {
-        string name = fieldName.Length > 0 && fieldName[0] == '_' ? fieldName.Substring(1) : fieldName;
+        var name = fieldName.Length > 0 && fieldName[0] == '_' ? fieldName.Substring(1) : fieldName;
         return name.Length > 0 && char.IsLower(name[0])
             ? char.ToUpperInvariant(name[0]) + name.Substring(1)
             : name;
@@ -182,13 +182,13 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
     {
         if (type is not INamedTypeSymbol nt || !nt.IsGenericType)
             return CollectionKind.None;
-        string ns = nt.ContainingNamespace.ToDisplayString();
+        var ns = nt.ContainingNamespace.ToDisplayString();
         return (ns, nt.Name) switch
         {
             ("System.Collections.ObjectModel", "ObservableCollection") => CollectionKind.List,
             ("System.Collections.Generic", "List") => CollectionKind.List,
             ("System.Collections.Generic", "IList") => CollectionKind.List,
-            ("WebWindowUI", "ObservableDictionary") => CollectionKind.Dict,
+            ("WebWindowUI.Core", "ObservableDictionary") => CollectionKind.Dict,
             ("System.Collections.Generic", "Dictionary") => CollectionKind.Dict,
             ("System.Collections.Generic", "IDictionary") => CollectionKind.Dict,
             _ => CollectionKind.None,
@@ -226,7 +226,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
 
     private static void EmitTrySetProperty(CodeWriter w, ModelInfo m)
     {
-        w.Line("protected override bool TrySetGeneratedProperty(string name, global::WebWindowUI.ModelValue? value)");
+        w.Line("protected override bool TrySetGeneratedProperty(string name, global::WebWindowUI.Core.Protocol.ModelValue? value)");
         w.Open("{");
         w.Line("switch (name)");
         w.Open("{");
@@ -241,7 +241,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
                 w.Line($"case \"{p.Name}\":");
                 w.Open("{");
                 w.Line("if (value is not null");
-                w.Line($"    && global::WebWindowUI.ModelProtocol.TryFromModelValue(value, typeof({p.Type}), out object? c{i}))");
+                w.Line($"    && global::WebWindowUI.Core.Protocol.ModelProtocol.TryFromModelValue(value, typeof({p.Type}), out object? c{i}))");
                 w.Open("{");
                 w.Line("ApplyRemoteWrite(() =>");
                 w.Open("{");
@@ -263,7 +263,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
             w.Line($"case \"{p.Name}\":");
             w.Open("{");
             w.Line("if (value is not null");
-            w.Line($"    && global::WebWindowUI.ModelProtocol.TryFromModelValue(value, typeof({p.Type}), out object? c{i}))");
+            w.Line($"    && global::WebWindowUI.Core.Protocol.ModelProtocol.TryFromModelValue(value, typeof({p.Type}), out object? c{i}))");
             w.Open("{");
             w.Line($"ApplyRemoteWrite(() => {p.Name} = ({p.Type})c{i}!);");
             w.Line("return true;");
@@ -281,7 +281,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
 
     private static void EmitTryInvokeCommand(CodeWriter w, ModelInfo m)
     {
-        w.Line("protected override bool TryInvokeGeneratedCommand(string command, global::WebWindowUI.ModelValue? value)");
+        w.Line("protected override bool TryInvokeGeneratedCommand(string command, global::WebWindowUI.Core.Protocol.ModelValue? value)");
         w.Open("{");
         w.Line("switch (command)");
         w.Open("{");
@@ -291,7 +291,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
             w.Line($"case \"{c.Name}\":");
             w.Open("{");
             w.Line("object? arg = null;");
-            w.Line($"if (value is not null && global::WebWindowUI.ModelProtocol.TryFromModelValue(value, typeof({c.ParamType ?? "global::System.Object"}), out object? c{i}))");
+            w.Line($"if (value is not null && global::WebWindowUI.Core.Protocol.ModelProtocol.TryFromModelValue(value, typeof({c.ParamType ?? "global::System.Object"}), out object? c{i}))");
             w.Line($"    arg = c{i};");
             w.Line($"if (!{c.Name}Command.CanExecute(arg)) return false;");
             w.Line($"{c.Name}Command.Execute(arg);");
@@ -354,7 +354,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         // 反序列化：序数对象 map（OrdinalFields，键 = proto 字段号 int）→ 实例。
         // 键是固定的协议序号（声明顺序 1..N），前端桥按同一编号序列化 typed 元素 → 不依赖命名一致。
         // 键是真实 int（map<int32,ModelValue>），switch (kv.Key) 直接 case 1: ——不需要字符串承载再解析。
-        w.Line("internal static bool ConvertFromModelValue(global::WebWindowUI.ModelValueMap v, out object? result)");
+        w.Line("internal static bool ConvertFromModelValue(global::WebWindowUI.Core.Protocol.ModelValueMap v, out object? result)");
         w.Open("{");
         w.Line("result = null;");
         w.Line("if (v is null) return false;");
@@ -370,7 +370,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
                 continue; // 字段号未知（解析失败/漂移）：不产出序数 case
             w.Line($"case {p.Number}:");
             w.Open("{");
-            w.Line($"if (!global::WebWindowUI.ModelProtocol.TryFromModelValue(kv.Value, typeof({p.Type}), out object? c{i})) return false;");
+            w.Line($"if (!global::WebWindowUI.Core.Protocol.ModelProtocol.TryFromModelValue(kv.Value, typeof({p.Type}), out object? c{i})) return false;");
             w.Line($"instance.{p.Name} = ({p.Type})c{i}!;");
             w.Line("break;");
             w.Close("}");
@@ -392,23 +392,23 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         w.Line("[global::System.Runtime.CompilerServices.ModuleInitializer]");
         w.Line("internal static void __WWUI_RegisterPocoConverter()");
         w.Open("{");
-        w.Line($"global::WebWindowUI.ModelProtocol.RegisterPocoConverter(typeof({m.ClassName}), ConvertFromModelValue);");
-        w.Line($"global::WebWindowUI.ModelProtocol.RegisterPocoSerializer(typeof({m.ClassName}), ConvertToModelValue);");
+        w.Line($"global::WebWindowUI.Core.Protocol.ModelProtocol.RegisterPocoConverter(typeof({m.ClassName}), ConvertFromModelValue);");
+        w.Line($"global::WebWindowUI.Core.Protocol.ModelProtocol.RegisterPocoSerializer(typeof({m.ClassName}), ConvertToModelValue);");
         w.Close("}");
     }
 
     private static void EmitPocoSerializer(CodeWriter w, ModelInfo m)
     {
-        w.Line("internal static bool ConvertToModelValue(object value, out global::WebWindowUI.ModelValueMap? map)");
+        w.Line("internal static bool ConvertToModelValue(object value, out global::WebWindowUI.Core.Protocol.ModelValueMap? map)");
         w.Open("{");
         w.Line("map = null;");
         w.Line($"if (value is not {m.ClassName} instance) return false;");
-        w.Line("var m = new global::WebWindowUI.ModelValueMap();");
+        w.Line("var m = new global::WebWindowUI.Core.Protocol.ModelValueMap();");
         foreach (PropInfo p in m.Props)
         {
             if (p.Number <= 0)
                 continue;
-            w.Line($"m.OrdinalFields[{p.Number}] = global::WebWindowUI.ModelProtocol.ToModelValue(instance.{p.Name});");
+            w.Line($"m.OrdinalFields[{p.Number}] = global::WebWindowUI.Core.Protocol.ModelProtocol.ToModelValue(instance.{p.Name});");
         }
         w.Line("map = m;");
         w.Line("return true;");

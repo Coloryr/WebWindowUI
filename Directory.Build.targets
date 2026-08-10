@@ -1,5 +1,5 @@
 <Project>
-  <Import Project="$(MSBuildThisFileDirectory)WebWindowUI\WebWindowUI.targets"
+  <Import Project="$(MSBuildThisFileDirectory)WebWindowUI.targets"
           Condition="'$(_WebWindowUITargetsLoaded)' == ''" />
   <ItemGroup>
     <_WWUI_RepoBackendRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Backend'))" />

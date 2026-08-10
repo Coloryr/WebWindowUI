@@ -1,3 +1,4 @@
+using WebWindowUI.Core;
 using Xunit;
 
 namespace WebWindowUI.Tests;

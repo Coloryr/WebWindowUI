@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using ProtoBuf;
+using WebWindowUI.Core;
 using WebWindowUI.Generator.SourceGen;
 using Xunit;
 
@@ -23,8 +24,8 @@ public class WriteBackGeneratorTests
         ImmutableDictionary<string, string> run = Driver.RunOnSampleModels();
 
         // ---- MainWindowModel：写回 + 读值 + 集合订阅 + POCO ----
-        string main = run["MainWindowModel.WriteBack.g.cs"];
-        Assert.Contains("protected override bool TrySetGeneratedProperty(string name, global::WebWindowUI.ModelValue? value)", main);
+        var main = run["MainWindowModel.WriteBack.g.cs"];
+        Assert.Contains("protected override bool TrySetGeneratedProperty(string name, global::WebWindowUI.Core.Protocol.ModelValue? value)", main);
         Assert.Contains("case \"Name\":", main);
         Assert.Contains("ApplyRemoteWrite(() => Name = (string)c0!)", main);
         Assert.Contains("case \"Count\":", main);
@@ -37,7 +38,7 @@ public class WriteBackGeneratorTests
         Assert.Contains("switch (kv.Key)", main);                     // case 直接数字字面量
 
         // ---- LauncherModel：命令（无参 typeof(object) + 带参 string），CanExecute 门控 ----
-        string launcher = run["LauncherModel.WriteBack.g.cs"];
+        var launcher = run["LauncherModel.WriteBack.g.cs"];
         Assert.Contains("case \"OpenWindow\":", launcher);
         Assert.Contains("typeof(global::System.Object)", launcher); // 无参命令按 object 转
         Assert.Contains("if (!OpenWindowCommand.CanExecute(arg)) return false;", launcher);
@@ -47,13 +48,13 @@ public class WriteBackGeneratorTests
         Assert.Contains("if (!CommandWithArgCommand.CanExecute(arg)) return false;", launcher);
 
         // ---- TodoListModel：ObservableCollection<TodoItemModel> 写回 + 单条集合订阅表达式 ----
-        string todoList = run["TodoListModel.WriteBack.g.cs"];
+        var todoList = run["TodoListModel.WriteBack.g.cs"];
         Assert.Contains("case \"Todos\":", todoList);
         Assert.Contains("EnsureCollectionSubscribed(\"Todos\", Todos)", todoList);
         Assert.Contains("=> EnsureCollectionSubscribed(\"Todos\", Todos);", todoList);
 
         // ---- TodoItemModel：POCO 转换 + 反向序列化 + [ModuleInitializer] 注册 ----
-        string todoItem = run["TodoItemModel.WriteBack.g.cs"];
+        var todoItem = run["TodoItemModel.WriteBack.g.cs"];
         Assert.Contains("[global::System.Runtime.CompilerServices.ModuleInitializer]", todoItem);
         Assert.Contains("internal static void __WWUI_RegisterPocoConverter()", todoItem);
         Assert.Contains("RegisterPocoConverter(typeof(TodoItemModel), ConvertFromModelValue)", todoItem);
@@ -65,11 +66,11 @@ public class WriteBackGeneratorTests
         Assert.DoesNotContain("case \"title\":", todoItem); // 不再按属性名匹配
         Assert.DoesNotContain("case \"1\":", todoItem);     // 不用字符串字面量键
         // 反向序列化器：实例 → object map（序数键，全可读属性含只读）
-        Assert.Contains("internal static bool ConvertToModelValue(object value, out global::WebWindowUI.ModelValueMap? map)", todoItem);
-        Assert.Contains("m.OrdinalFields[1] = global::WebWindowUI.ModelProtocol.ToModelValue(instance.Title);", todoItem);
+        Assert.Contains("internal static bool ConvertToModelValue(object value, out global::WebWindowUI.Core.Protocol.ModelValueMap? map)", todoItem);
+        Assert.Contains("m.OrdinalFields[1] = global::WebWindowUI.Core.Protocol.ModelProtocol.ToModelValue(instance.Title);", todoItem);
 
         // ---- MultiWindowModel：有参构造 → 不生成 POCO 转换/注册 ----
-        string multi = run["MultiWindowModel.WriteBack.g.cs"];
+        var multi = run["MultiWindowModel.WriteBack.g.cs"];
         Assert.DoesNotContain("ModuleInitializer", multi);
         Assert.DoesNotContain("RegisterPocoConverter", multi);
         // 命令/写回/读值照常
@@ -97,7 +98,7 @@ public class WriteBackGeneratorTests
         // 但 ProtoGenerator 按「派生自 WebWindowModel」仍会为它产出 {Model}Proto.g.cs（快照/DTO + partial override），
         // 故只断言 WriteBack 产物缺席。
         ImmutableDictionary<string, string> run = Driver.RunOnSource("""
-        using WebWindowUI;
+        using WebWindowUI.Core;
 
         namespace WebWindowUI.Sample;
 
@@ -116,7 +117,7 @@ public class WriteBackGeneratorTests
         // 否则写回/读值静默失效。可写属性进 TrySet + TryGet；只读 expression-bodied 属性只进 TryGet。
         ImmutableDictionary<string, string> run = Driver.RunOnSource("""
         using CommunityToolkit.Mvvm.ComponentModel;
-        using WebWindowUI;
+        using WebWindowUI.Core;
 
         namespace WebWindowUI.Sample;
 
@@ -131,7 +132,7 @@ public class WriteBackGeneratorTests
         }
         """);
 
-        string src = run["ExplicitModel.WriteBack.g.cs"];
+        var src = run["ExplicitModel.WriteBack.g.cs"];
 
         // [ObservableProperty] 字段照常（从字段符号推属性名）
         Assert.Contains("case \"Name\":", src);
@@ -152,7 +153,7 @@ public class WriteBackGeneratorTests
         ImmutableDictionary<string, string> run = Driver.RunOnSource("""
         using System.Collections.ObjectModel;
         using CommunityToolkit.Mvvm.ComponentModel;
-        using WebWindowUI;
+        using WebWindowUI.Core;
 
         namespace WebWindowUI.Sample;
 
@@ -167,7 +168,7 @@ public class WriteBackGeneratorTests
         }
         """);
 
-        string src = run["DictModel.WriteBack.g.cs"];
+        var src = run["DictModel.WriteBack.g.cs"];
 
         // get-only ObservableCollection：有 TrySet case，原地清空 + 逐项 Add（列表 Add 元素）
         Assert.Contains("case \"Items\":", src);
@@ -193,14 +194,14 @@ public class WriteBackGeneratorTests
         // {Model}Proto.g.cs（快照/增量 DTO + partial override）。
         ImmutableDictionary<string, string> run = Driver.RunOnSampleModels();
 
-        string main = run["MainWindowModelProto.g.cs"];
+        var main = run["MainWindowModelProto.g.cs"];
         Assert.Contains("protected override string FullMessageName", main);
         Assert.Contains("webwindowui.model.generated.MainWindowModel", main);
         Assert.Contains("[ProtoMember(1)] public string Name", main);
         Assert.Contains("case \"Name\": u.Name =", main); // 增量编码器 switch
 
         // typed repeated：全模型清单（allModelSources 由编译内全部模型类构建）解析出元素模型 → 快照 DTO 引用其快照类型
-        string todoList = run["TodoListModelProto.g.cs"];
+        var todoList = run["TodoListModelProto.g.cs"];
         Assert.Contains("List<WebWindowUI.Sample.Items.TodoItemModelSnapshot> Todos", todoList);
 
         // 全部 7 个模型都有 Proto 输出（与 WriteBack 并列，partial 合并进同一类型）
@@ -215,7 +216,7 @@ public class WriteBackGeneratorTests
         {
             string? dir = FindRepoRoot();
             Assert.NotNull(dir);
-            string backendDir = Path.Combine(dir!, "Sample", "WebWindowUI.Sample.Backend");
+            var backendDir = Path.Combine(dir!, "Sample", "WebWindowUI.Sample.Backend");
 
             // 全部 .cs（递归含 Items\ 子目录的嵌套模型，互相引用须一起编；DataProvider.cs 非模型，生成器按基类过滤）。
             // 排除 obj\bin 下的中间产物（EmitCompilerGeneratedFiles 落盘的 .g.cs / GlobalUsings / AssemblyInfo，
@@ -235,7 +236,7 @@ public class WriteBackGeneratorTests
             var refs = new List<MetadataReference>();
             foreach (string tpa in ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator))
                 refs.Add(MetadataReference.CreateFromFile(tpa));
-            refs.Add(MetadataReference.CreateFromFile(typeof(WebWindowUI.WebWindowModel).Assembly.Location));
+            refs.Add(MetadataReference.CreateFromFile(typeof(WebWindowModel).Assembly.Location));
             refs.Add(MetadataReference.CreateFromFile(typeof(ObservableObject).Assembly.Location));
             refs.Add(MetadataReference.CreateFromFile(typeof(Serializer).Assembly.Location));
 

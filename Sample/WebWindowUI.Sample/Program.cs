@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using WebWindowUI.Core;
 using WebWindowUI.Sample.Items;
 
 namespace WebWindowUI.Sample;
@@ -173,7 +174,7 @@ internal sealed class NestedDetailWindow : WebWindow
 internal sealed class NestedListWindow : WebWindow
 {
     private readonly NestedListModel _model;
-    private readonly Dictionary<NestedListItemModel, NestedListItemWindow> _detailWindows = new();
+    private readonly Dictionary<NestedListItemModel, NestedListItemWindow> _detailWindows = [];
 
     public NestedListWindow() : base("nested-list", "List<>嵌套窗口", width: 860, height: 660)
     {
@@ -340,6 +341,8 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
+        Console.WriteLine("示例工程启动");
+
         WebWindowUI.Platform.EnsureRegistered();
 
         // app:// 自定义协议，静态资源由类库内置的 WebResourceResolver 提供（Vue+Vite 构建产物）。

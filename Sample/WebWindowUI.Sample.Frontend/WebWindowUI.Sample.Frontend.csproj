@@ -8,7 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\WebWindowUI.Frontend\WebWindowUI.Frontend.csproj" />
+    <ProjectReference Include="..\..\Core\WebWindowUI.Frontend\WebWindowUI.Frontend.csproj" />
     <ProjectReference Include="..\WebWindowUI.Sample.Backend\WebWindowUI.Sample.Backend.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
@@ -21,14 +21,4 @@
     <None Include="vite.config.ts" />
   </ItemGroup>
 
-
-  <!-- PDB 内嵌策略显式化：Debug=portable（独立 .pdb）、Release=embedded（符号随程序集，无独立 .pdb 文件）。
-       仓库工程与根 Directory.Build.props 的 Release=embedded 重复但无害（自包含）；模板生成工程无根 props，靠这里保证。 -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <DebugType>portable</DebugType>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <DebugType>embedded</DebugType>
-  </PropertyGroup>
 </Project>

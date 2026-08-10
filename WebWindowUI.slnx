@@ -1,15 +1,18 @@
 <Solution>
   <Folder Name="/Core/">
-    <Project Path="WebWindowUI.Backend/WebWindowUI.Backend.csproj" />
-    <Project Path="WebWindowUI.Frontend/WebWindowUI.Frontend.csproj" />
-    <Project Path="WebWindowUI.Core/WebWindowUI.Core.csproj" />
-    <Project Path="WebWindowUI/WebWindowUI.csproj" />
+    <Project Path="Core/WebWindowUI.Backend/WebWindowUI.Backend.csproj" />
+    <Project Path="Core/WebWindowUI.Core/WebWindowUI.Core.csproj" />
+    <Project Path="Core/WebWindowUI.Frontend/WebWindowUI.Frontend.csproj" />
+    <Project Path="Core/WebWindowUI/WebWindowUI.csproj" />
+  </Folder>
+  <Folder Name="/Natives/">
+    <Project Path="Natives/WebWindowUI.Natives.Windows/WebWindowUI.Natives.Windows.csproj" />
   </Folder>
   <Folder Name="/Platforms/">
-    <Project Path="WebWindowUI.Platforms.Windows/WebWindowUI.Platforms.Windows.csproj" />
-    <Project Path="WebWindowUI.Platforms.Linux/WebWindowUI.Platforms.Linux.csproj" />
-    <Project Path="WebWindowUI.Platforms.MacOS/WebWindowUI.Platforms.MacOS.csproj" />
-    <Project Path="WebWindowUI.Platforms.Cef/WebWindowUI.Platforms.Cef.csproj" />
+    <Project Path="Platforms/WebWindowUI.Platforms.Cef/WebWindowUI.Platforms.Cef.csproj" />
+    <Project Path="Platforms/WebWindowUI.Platforms.Linux/WebWindowUI.Platforms.Linux.csproj" />
+    <Project Path="Platforms/WebWindowUI.Platforms.MacOS/WebWindowUI.Platforms.MacOS.csproj" />
+    <Project Path="Platforms/WebWindowUI.Platforms.Windows/WebWindowUI.Platforms.Windows.csproj" />
   </Folder>
   <Folder Name="/Generator/">
     <Project Path="WebWindowUI.Generator.SourceGen/WebWindowUI.Generator.SourceGen.csproj" />
@@ -25,5 +28,13 @@
   </Folder>
   <Folder Name="/Test/">
     <Project Path="WebWindowUI.Tests/WebWindowUI.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Files/">
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="Directory.Packages.props" />
+    <File Path="NuGet.config" />
+    <File Path="WebWindowUI.Platform.props" />
+    <File Path="WebWindowUI.targets" />
   </Folder>
 </Solution>

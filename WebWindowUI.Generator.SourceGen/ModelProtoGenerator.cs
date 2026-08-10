@@ -88,13 +88,13 @@ public static class ModelProtoGenerator
     /// 输出全量集合（任一模型都内联全部模型消息，typed 引用可解析），否则只含本模型（兼容单模型用法）。</summary>
     internal static ModelProtoResult GenerateParsed(ModelParsed model, IReadOnlyDictionary<string, ModelParsed> all, string rootNs)
     {
-        string fullMessageName = $"{GeneratedPackage}.{model.ClassName}";
-        string descriptorJson = all.Count > 0
+        var fullMessageName = $"{GeneratedPackage}.{model.ClassName}";
+        var descriptorJson = all.Count > 0
             ? BuildDescriptor(BuildAllModelFields(all))
             : BuildDescriptor(new[] { new KeyValuePair<string, List<ProtoField>>(model.ClassName, model.Fields) });
 
         var allNamespaces = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (KeyValuePair<string, ModelParsed> kv in all)
+        foreach (var kv in all)
             allNamespaces[kv.Key] = kv.Value.Namespace;
 
         return new ModelProtoResult(
@@ -111,7 +111,7 @@ public static class ModelProtoGenerator
         if (allModelSources is null)
             return null;
         var ns = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (KeyValuePair<string, string> kv in allModelSources)
+        foreach (var kv in allModelSources)
             if (GetNamespace(kv.Value) is { } n)
                 ns[kv.Key] = n;
         return ns;
@@ -134,7 +134,7 @@ public static class ModelProtoGenerator
             .FirstOrDefault(c => c.Identifier.Text == modelClassName)
             ?? throw new ArgumentException($"在源代码中找不到类 {modelClassName}。");
 
-        string ns = FindNamespace(root) ?? "WebWindowUI.Sample";
+        var ns = FindNamespace(root) ?? "WebWindowUI.Sample";
 
         // 同文件声明的枚举：ModelValue 兜底字段若是枚举，前端以 number 呈现（而非 object）
         var enumNames = new HashSet<string>(root.DescendantNodes()
@@ -147,15 +147,15 @@ public static class ModelProtoGenerator
 
         foreach (var field in classDecl.Members.OfType<FieldDeclarationSyntax>())
         {
-            bool observable = field.AttributeLists
+            var observable = field.AttributeLists
                 .SelectMany(al => al.Attributes)
                 .Any(IsObservablePropertyAttribute);
             if (!observable)
                 continue;
-            string doc = GetDocSummary(field);
+            var doc = GetDocSummary(field);
             foreach (var v in field.Declaration.Variables)
             {
-                string propName = ToPascalCase(v.Identifier.Text.TrimStart('_'));
+                var propName = ToPascalCase(v.Identifier.Text.TrimStart('_'));
                 if (!names.Contains(propName))
                 {
                     names.Add(propName);
@@ -167,8 +167,8 @@ public static class ModelProtoGenerator
 
         foreach (var prop in classDecl.Members.OfType<PropertyDeclarationSyntax>())
         {
-            bool isPublic = prop.Modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword));
-            bool hasGetter = prop.AccessorList?.Accessors.Any(a => a.IsKind(SyntaxKind.GetAccessorDeclaration)) ?? false;
+            var isPublic = prop.Modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword));
+            var hasGetter = prop.AccessorList?.Accessors.Any(a => a.IsKind(SyntaxKind.GetAccessorDeclaration)) ?? false;
             if (!isPublic || !hasGetter)
                 continue;
             if (!names.Contains(prop.Identifier.Text))
@@ -250,10 +250,10 @@ public static class ModelProtoGenerator
     private static ProtoField Map(string csName, string csType, int number, IReadOnlyCollection<string> enumNames,
         IReadOnlyDictionary<string, string>? allNamespaces)
     {
-        string t = csType.Trim();
-        string bare = t.TrimEnd('?');
-        bool nullable = t.EndsWith("?");
-        string wire = ToCamelCase(csName);
+        var t = csType.Trim();
+        var bare = t.TrimEnd('?');
+        var nullable = t.EndsWith("?");
+        var wire = ToCamelCase(csName);
         var (updDto, updProto, updSet) = UpdateVariant(bare);
 
         switch (bare)
@@ -293,7 +293,7 @@ public static class ModelProtoGenerator
         string? listElem = null;
         if (bare.EndsWith(">"))
         {
-            foreach (string prefix in new[] { "List<", "ObservableCollection<", "IList<", "ICollection<", "IReadOnlyList<", "IReadOnlyCollection<", "IEnumerable<" })
+            foreach (var prefix in new[] { "List<", "ObservableCollection<", "IList<", "ICollection<", "IReadOnlyList<", "IReadOnlyCollection<", "IEnumerable<" })
             {
                 if (bare.StartsWith(prefix))
                 {
@@ -307,23 +307,23 @@ public static class ModelProtoGenerator
 
         if (listElem is not null)
         {
-            string elemBare = listElem.TrimEnd('?');
-            (string pt, string dtoElem, bool isModelValue) = ElemMap(elemBare);
+            var elemBare = listElem.TrimEnd('?');
+            var (pt, dtoElem, isModelValue) = ElemMap(elemBare);
             if (!isModelValue)
                 return new ProtoField(csName, wire, number, pt, true, $"List<{dtoElem}>", " = new();",
                     $"model.{csName}?.ToList() ?? new()", updDto, updProto, updSet);
             // List<已知模型> → typed repeated（强类型）：完整快照走 repeated 元素模型消息，
             // 快照 DTO 引用元素模型的快照类型（全限定跨命名空间），TS 镜像 Elem[] + import。
             // 命名空间从「类名 → 命名空间」表取（值相等缓存：改其它模型字段不重算本模型解析）。
-            if (allNamespaces is not null && allNamespaces.TryGetValue(elemBare, out string? elemNs))
+            if (allNamespaces is not null && allNamespaces.TryGetValue(elemBare, out var elemNs))
             {
-                string snapType = $"{elemNs}.{elemBare}Snapshot";
+                var snapType = $"{elemNs}.{elemBare}Snapshot";
                 return new ProtoField(csName, wire, number, elemBare, true,
                     $"List<{snapType}>", " = new();",
                     $"(model.{csName} ?? new()).Select(x => {snapType}.From(x)).ToList()", updDto, updProto, updSet,
                     TsElem: elemBare);
             }
-            bool elemIsEnum = enumNames.Contains(elemBare.Split('.').Last());
+            var elemIsEnum = enumNames.Contains(elemBare.Split('.').Last());
             return new ProtoField(csName, wire, number, "ModelValue", true, "List<ModelValue>", " = new();",
                 $"(model.{csName} ?? System.Linq.Enumerable.Empty<object>()).Select(x => ModelProtocol.ToModelValue(x)).ToList()", updDto, updProto, updSet,
                 IsEnum: elemIsEnum);
@@ -389,10 +389,10 @@ public static class ModelProtoGenerator
         sb.AppendLine($"package {GeneratedPackage};");
         sb.AppendLine();
         sb.AppendLine($"message {modelClassName} {{");
-        foreach (ProtoField f in fields)
+        foreach (var f in fields)
         {
-            string typeRef = f.ProtoType == "ModelValue" ? "webwindowui.model.ModelValue" : f.ProtoType;
-            string rep = f.IsRepeated ? "repeated " : "";
+            var typeRef = f.ProtoType == "ModelValue" ? "webwindowui.model.ModelValue" : f.ProtoType;
+            var rep = f.IsRepeated ? "repeated " : "";
             sb.AppendLine($"  {rep}{typeRef} {f.WireName} = {f.Number};");
         }
         sb.AppendLine("}");
@@ -400,9 +400,9 @@ public static class ModelProtoGenerator
         sb.AppendLine($"// 增量 update：字段与完整模型同序同号，标量/字符串/字节保留原生类型，其余用 ModelValue 兜底。");
         sb.AppendLine($"// 载荷只编码被修改的字段（.NET 侧可空 DTO，非空即序列化），前端按字段是否出现做增量应用。");
         sb.AppendLine($"message {modelClassName}Update {{");
-        foreach (ProtoField f in fields)
+        foreach (var f in fields)
         {
-            string typeRef = f.UpdProtoType == "ModelValue" ? "webwindowui.model.ModelValue" : f.UpdProtoType;
+            var typeRef = f.UpdProtoType == "ModelValue" ? "webwindowui.model.ModelValue" : f.UpdProtoType;
             sb.AppendLine($"  {typeRef} {f.WireName} = {f.Number};");
         }
         sb.AppendLine("}");
@@ -640,17 +640,17 @@ public static class ModelProtoGenerator
         sb.AppendLine("// 修改模型类后重新构建即可更新，请勿手动编辑。");
         sb.AppendLine("// </auto-generated>");
         sb.AppendLine();
-        string mySub = TsSubPath(ns, rootNs);
+        var mySub = TsSubPath(ns, rootNs);
         // 桥绑定：bindModel / ModelCommandHost 来自 webwindowui-bridge（带命令的模型继承宿主基类承载命令通道类型契约，
         // 无命令模型只 import bindModel），descriptor（含基础信封，自包含）来自 src/bridge/<ProtoBase>.json
-        bool hasCommands = commands.Count > 0;
+        var hasCommands = commands.Count > 0;
         sb.AppendLine(hasCommands
             ? "import { bindModel, ModelCommandHost } from 'webwindowui-bridge';"
             : "import { bindModel } from 'webwindowui-bridge';");
         sb.AppendLine($"import descriptorJson from '{RelativeBridgeJsonImport(mySub, modelClassName)}';");
-        foreach (string elem in fields.Select(f => f.TsElem).Where(e => e is not null).Cast<string>().Distinct())
+        foreach (var elem in fields.Select(f => f.TsElem).Where(e => e is not null).Cast<string>().Distinct())
         {
-            string elemNs = allNamespaces is not null && allNamespaces.TryGetValue(elem, out string? en) ? en : ns;
+            var elemNs = allNamespaces is not null && allNamespaces.TryGetValue(elem, out var en) ? en : ns;
             sb.AppendLine($"import {{ {elem} }} from '{RelativeTsImport(mySub, TsSubPath(elemNs, rootNs), elem)}';");
         }
         if (fields.Any(f => f.TsElem is not null))
@@ -661,12 +661,12 @@ public static class ModelProtoGenerator
         // typed-repeated 序数键烘焙：属性名 → { 元素 proto 字段号: 元素属性名 }（元素字段号 = 元素模型声明序）。
         // 元素模型不在全模型表（单模型用法）或非 typed repeated → 不烘焙（typed repeated 已退化 ModelValue 兜底）。
         var repeatedByNumber = new List<(string Prop, List<KeyValuePair<int, string>> Fields)>();
-        foreach (ProtoField f in fields)
+        foreach (var f in fields)
         {
             if (f.TsElem is null || !all.TryGetValue(f.TsElem, out ModelParsed? elem))
                 continue;
             var byNumber = new List<KeyValuePair<int, string>>();
-            foreach (ProtoField ef in elem.Fields)
+            foreach (var ef in elem.Fields)
                 byNumber.Add(new(ef.Number, ef.WireName));
             repeatedByNumber.Add((f.WireName, byNumber));
         }
@@ -677,15 +677,15 @@ public static class ModelProtoGenerator
             sb.AppendLine("     烘焙、桥直接读取，不做运行时 constructor.name 反射（class 名会被压缩器改名）。");
             sb.AppendLine("     声明与访问均用字符串字面量键：minifier 不改写字面量。 */");
             sb.AppendLine("  static ['__repeatedFields'] = {");
-            foreach ((string prop, var byNumber) in repeatedByNumber)
+            foreach (var (prop, byNumber) in repeatedByNumber)
             {
-                string inner = string.Join(", ", byNumber.Select(kv => $"{kv.Key}: '{kv.Value}'"));
+                var inner = string.Join(", ", byNumber.Select(kv => $"{kv.Key}: '{kv.Value}'"));
                 sb.AppendLine($"    {prop}: {{ {inner} }},");
             }
             sb.AppendLine("  }");
             sb.AppendLine();
         }
-        foreach (ProtoField f in fields)
+        foreach (var f in fields)
         {
             if (string.IsNullOrEmpty(f.Doc))
                 sb.AppendLine($"  /** {f.WireName} */");
@@ -694,13 +694,13 @@ public static class ModelProtoGenerator
             sb.AppendLine($"  {f.WireName}: {TsType(f)} = {TsInit(f)}");
             sb.AppendLine();
         }
-        foreach (ModelCommand c in commands)
+        foreach (var c in commands)
         {
             if (string.IsNullOrEmpty(c.Doc))
                 sb.AppendLine($"  /** {c.Name} */");
             else
                 sb.AppendLine($"  /** {c.Name}：{c.Doc} */");
-            string tsName = ToCamelCase(c.Name);
+            var tsName = ToCamelCase(c.Name);
             sb.AppendLine(c.ParamType is null
                 ? $"  {tsName}(): void {{ this._commandChannel?.('{c.Name}') }}"
                 : $"  {tsName}(arg: {TsCommandParamType(c.ParamType)}): void {{ this._commandChannel?.('{c.Name}', arg) }}");
@@ -733,7 +733,7 @@ public static class ModelProtoGenerator
     /// <summary>命令方法参数类型 → TS 参数类型（标量映射，其它复杂参数按 unknown 透传）。</summary>
     private static string TsCommandParamType(string? csType)
     {
-        string bare = (csType ?? "").Trim().TrimEnd('?');
+        var bare = (csType ?? "").Trim().TrimEnd('?');
         return bare switch
         {
             "string" => "string",
@@ -773,16 +773,16 @@ public static class ModelProtoGenerator
     /// </summary>
     private static string GetDocSummary(SyntaxNode node)
     {
-        foreach (SyntaxTrivia trivia in node.GetLeadingTrivia())
+        foreach (var trivia in node.GetLeadingTrivia())
         {
             if (!trivia.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia))
                 continue;
-            string text = trivia.ToFullString();
-            int start = text.IndexOf("<summary>", StringComparison.Ordinal);
-            int end = text.IndexOf("</summary>", StringComparison.Ordinal);
+            var text = trivia.ToFullString();
+            var start = text.IndexOf("<summary>", StringComparison.Ordinal);
+            var end = text.IndexOf("</summary>", StringComparison.Ordinal);
             if (start < 0 || end <= start)
                 continue;
-            string body = text.Substring(start + "<summary>".Length, end - start - "<summary>".Length);
+            var body = text.Substring(start + "<summary>".Length, end - start - "<summary>".Length);
             var lines = body
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(line => line.TrimStart().TrimStart('/').Trim());
@@ -809,8 +809,8 @@ public static class ModelProtoGenerator
     /// <summary>两个 TS 模型子路径（src/models 下相对目录）之间的相对 import 路径：同目录 ./X、跨目录 ../ 补全。</summary>
     private static string RelativeTsImport(string fromSubPath, string toSubPath, string className)
     {
-        string[] from = fromSubPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-        string[] to = toSubPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        var from = fromSubPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+        var to = toSubPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
         int common = 0;
         while (common < from.Length && common < to.Length && from[common] == to[common])
             common++;
@@ -855,11 +855,11 @@ public static class ModelProtoGenerator
         var list = namespaces.Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
         if (list.Count == 0)
             return "";
-        string[] segments = list[0].Split('.');
+        var segments = list[0].Split('.');
         var keep = new List<string>();
         for (int i = 0; i < segments.Length; i++)
         {
-            string candidate = string.Join(".", segments.Take(i + 1));
+            var candidate = string.Join(".", segments.Take(i + 1));
             if (list.All(n => n == candidate || n.StartsWith(candidate + ".", StringComparison.Ordinal)))
                 keep.Add(segments[i]);
             else
@@ -879,7 +879,7 @@ public static class ModelProtoGenerator
         sb.AppendLine("using System.IO;");
         sb.AppendLine("using System.Linq;");
         sb.AppendLine("using ProtoBuf;");
-        sb.AppendLine("using WebWindowUI;");
+        sb.AppendLine("using WebWindowUI.Core.Protocol;");
         sb.AppendLine();
         sb.AppendLine($"namespace {ns};");
         sb.AppendLine();
@@ -938,9 +938,9 @@ public static class ModelProtoGenerator
     /// </summary>
     private static bool IsRelayCommandAttribute(AttributeSyntax a)
     {
-        string full = a.Name.ToString();
-        int dot = full.LastIndexOf('.');
-        string name = dot >= 0 ? full.Substring(dot + 1) : full;
+        var full = a.Name.ToString();
+        var dot = full.LastIndexOf('.');
+        var name = dot >= 0 ? full.Substring(dot + 1) : full;
         return name is "RelayCommand" or "RelayCommandAttribute";
     }
 
@@ -950,9 +950,9 @@ public static class ModelProtoGenerator
     /// </summary>
     private static bool IsObservablePropertyAttribute(AttributeSyntax a)
     {
-        string full = a.Name.ToString();
-        int dot = full.LastIndexOf('.');
-        string name = dot >= 0 ? full.Substring(dot + 1) : full;
+        var full = a.Name.ToString();
+        var dot = full.LastIndexOf('.');
+        var name = dot >= 0 ? full.Substring(dot + 1) : full;
         return name is "ObservableProperty" or "ObservablePropertyAttribute";
     }
 

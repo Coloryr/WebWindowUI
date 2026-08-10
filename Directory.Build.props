@@ -5,12 +5,7 @@
     <Authors>Color_yr</Authors>
   </PropertyGroup>
 
-  <Import Project="$(MSBuildThisFileDirectory)WebWindowUI\WebWindowUI.Platform.props" />
-
-  <PropertyGroup>
-    <OutputType Condition="'$(Configuration)' == 'Debug'">Exe</OutputType>
-    <OutputType Condition="'$(Configuration)' == 'Release'">WinExe</OutputType>
-  </PropertyGroup>
+  <Import Project="$(MSBuildThisFileDirectory)WebWindowUI.Platform.props" />
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <DebugType>portable</DebugType>

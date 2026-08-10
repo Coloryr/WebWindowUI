@@ -4,12 +4,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <OutputType Condition="'$(Configuration)' == 'Debug'">Exe</OutputType>
+    <OutputType Condition="'$(Configuration)' == 'Release'">WinExe</OutputType>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\WebWindowUI.Sample.Backend\WebWindowUI.Sample.Backend.csproj" />
     <ProjectReference Include="..\WebWindowUI.Sample.Frontend\WebWindowUI.Sample.Frontend.csproj" />
-    <ProjectReference Include="..\..\WebWindowUI\WebWindowUI.csproj" />
+    <ProjectReference Include="..\..\Core\WebWindowUI\WebWindowUI.csproj" />
   </ItemGroup>
   
 </Project>
