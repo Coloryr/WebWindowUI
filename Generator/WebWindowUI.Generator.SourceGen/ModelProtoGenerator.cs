@@ -585,6 +585,10 @@ public static class ModelProtoGenerator
                 ["full"] = new Dictionary<string, object?> { ["type"] = "GeneratedModel", ["id"] = 5, ["oneof"] = "payload" },
                 ["invoke"] = new Dictionary<string, object?> { ["type"] = "ModelInvoke", ["id"] = 6, ["oneof"] = "payload" },
                 ["patch"] = new Dictionary<string, object?> { ["type"] = "CollectionPatch", ["id"] = 7, ["oneof"] = "payload" },
+                // 实例唯一 ID（int64，进程内单调自增）：统一信封 header，不进 oneof payload。
+                // 前端桥从首个 full/snapshot 捕获并暴露为 model._modelInstanceId，对 update/patch 做
+                // 防串守卫（旧实例在途消息丢弃）；ready/set/invoke 回传同字段，.NET 侧校验来源实例。
+                ["modelInstanceId"] = new Dictionary<string, object?> { ["type"] = "int64", ["id"] = 8 },
             },
             ["oneofs"] = new Dictionary<string, object?>
             {

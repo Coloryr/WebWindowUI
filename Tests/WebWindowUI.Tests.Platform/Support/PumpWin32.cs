@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace WebWindowUI.Tests.Support;
+namespace WebWindowUI.Tests.Platform.Support;
 
 /// <summary>
 /// STA 泵需要的 Win32 P/Invoke。放在测试本地而不是库的 Win32：

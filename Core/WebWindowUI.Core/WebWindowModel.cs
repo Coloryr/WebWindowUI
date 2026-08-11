@@ -33,6 +33,18 @@ public abstract partial class WebWindowModel : ObservableObject
         PropertyChanged += OnModelPropertyChanged;
     }
 
+    /// <summary>实例唯一 ID 分配计数器（进程内单调，int64 永不溢出）。</summary>
+    private static long _nextModelInstanceId;
+
+    /// <summary>
+    /// 实例唯一 ID：进程内单调自增（Interlocked），每个模型实例唯一、有序、无碰撞。
+    /// 线缆经 <see cref="WebMessage.ModelInstanceId"/> 下发（统一信封 header，不进 oneof payload），
+    /// 前端桥从首个 full/snapshot 捕获并暴露为 model._modelInstanceId，对 update/patch 做防串守卫
+    /// （窗口换绑模型后旧实例在途消息丢弃）；ready/set/invoke 回传同字段，.NET 侧校验来源实例。
+    /// 注意与模型**数据属性** InstanceId（Sample 已有，如 SharedNotes 标签）无冲突——框架级命名刻意避开。
+    /// </summary>
+    public long ModelInstanceId { get; } = Interlocked.Increment(ref _nextModelInstanceId);
+
     /// <summary>已绑定窗口的推送订阅（多窗口共享同一模型实例时各窗口各一条）。入参为 protobuf 信封字节。</summary>
     private readonly List<Action<byte[]>> _pushed = [];
 
@@ -264,7 +276,7 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>把集合变更事件编码成差量补丁信封（Insert/Remove/Replace/Move）。</summary>
-    private static byte[] BuildPatchEnvelope(string propertyName, NotifyCollectionChangedEventArgs e)
+    private byte[] BuildPatchEnvelope(string propertyName, NotifyCollectionChangedEventArgs e)
     {
         var patch = new CollectionPatch { Property = propertyName };
         switch (e.Action)
@@ -294,11 +306,11 @@ public abstract partial class WebWindowModel : ObservableObject
                 patch.Count = e.OldItems!.Count;
                 break;
         }
-        return ModelProtocol.Encode(new WebMessage { Patch = patch });
+        return ModelProtocol.Encode(new WebMessage { ModelInstanceId = ModelInstanceId, Patch = patch });
     }
 
     /// <summary>把集合整体编码成 Reset 补丁信封（Items 承载全量，前端整体替换）。</summary>
-    private static byte[] BuildPatchEnvelope(string propertyName, CollectionPatchAction action, object? value)
+    private byte[] BuildPatchEnvelope(string propertyName, CollectionPatchAction action, object? value)
     {
         var patch = new CollectionPatch { Property = propertyName, Action = action };
         if (value is IEnumerable enumerable)
@@ -306,7 +318,7 @@ public abstract partial class WebWindowModel : ObservableObject
             foreach (var item in enumerable)
                 patch.Items.Add(ModelProtocol.ToModelValue(item));
         }
-        return ModelProtocol.Encode(new WebMessage { Patch = patch });
+        return ModelProtocol.Encode(new WebMessage { ModelInstanceId = ModelInstanceId, Patch = patch });
     }
 
     /// <summary>把单个属性编码成增量 update 信封（本地属性变化 / 远程回写后广播共用）。</summary>
@@ -315,6 +327,7 @@ public abstract partial class WebWindowModel : ObservableObject
         var payload = EncodePropertyUpdate(propertyName, value);
         var msg = new WebMessage
         {
+            ModelInstanceId = ModelInstanceId,
             Update = new ModelUpdate { ModelId = ModelId, Payload = payload },
         };
         return ModelProtocol.Encode(msg);
@@ -339,7 +352,7 @@ public abstract partial class WebWindowModel : ObservableObject
         // 首次推送前武装集合订阅（字段初始化器在基类构造后执行，基类 ctor 看不到）。
         ArmCollectionSubscriptions();
 
-        var msg = new WebMessage();
+        var msg = new WebMessage { ModelInstanceId = ModelInstanceId };
         if (ModelId != 0)
         {
             msg.Full = new GeneratedModel { ModelId = ModelId, Payload = EncodeFullSnapshot() };
@@ -359,6 +372,8 @@ public abstract partial class WebWindowModel : ObservableObject
         {
             if (!prop.CanRead || prop.GetIndexParameters().Length > 0)
                 continue;
+            if (prop.Name == nameof(ModelInstanceId))
+                continue; // 框架元数据（实例唯一 ID），非模型数据，不进通用快照
             snapshot.Data[prop.Name] = ModelProtocol.ToModelValue(prop.GetValue(this));
         }
         return snapshot;

@@ -712,4 +712,64 @@ public class ModelTests
         var model = new LauncherModel();
         Assert.False(model.TryInvokeCommand(99, null));
     }
+
+    // ---- 模型实例级唯一 ID（modelInstanceId，信封字段 8）----
+
+    [Fact]
+    public void ModelInstanceId_TwoInstances_DistinctAndPositive()
+    {
+        var a = new MainWindowModel();
+        var b = new MainWindowModel();
+
+        Assert.True(a.ModelInstanceId > 0);
+        Assert.True(b.ModelInstanceId > 0);
+        Assert.NotEqual(a.ModelInstanceId, b.ModelInstanceId); // 进程内单调自增，无碰撞
+    }
+
+    [Fact]
+    public void SnapshotEnvelope_CarriesModelInstanceId()
+    {
+        var m = new MainWindowModel(); // 生成编码器 → Full 分支
+        WebMessage? msg = ModelProtocol.Decode(m.BuildSnapshotEnvelope());
+        Assert.NotNull(msg);
+        Assert.Equal(m.ModelInstanceId, msg.ModelInstanceId);
+
+        var g = new GenericFallbackModel(); // 无生成编码器 → 通用快照分支
+        WebMessage? generic = ModelProtocol.Decode(g.BuildSnapshotEnvelope());
+        Assert.NotNull(generic);
+        Assert.Equal(g.ModelInstanceId, generic.ModelInstanceId);
+        Assert.NotNull(generic.Snapshot);
+        Assert.False(generic.Snapshot.Data.ContainsKey("ModelInstanceId")); // 元数据不进数据 map
+    }
+
+    [Fact]
+    public void UpdateEnvelope_CarriesModelInstanceId()
+    {
+        var m = new MainWindowModel();
+        byte[]? pushed = null;
+        m.SubscribePushed(b => pushed = b);
+
+        m.Name = "abc";
+
+        Assert.NotNull(pushed);
+        WebMessage? msg = ModelProtocol.Decode(pushed!);
+        Assert.NotNull(msg?.Update);
+        Assert.Equal(m.ModelInstanceId, msg.ModelInstanceId);
+    }
+
+    [Fact]
+    public void PatchEnvelope_CarriesModelInstanceId()
+    {
+        var m = new TodoListModel { Todos = { new TodoItemModel { Title = "t1" } } };
+        byte[]? last = null;
+        m.SubscribePushed(b => last = b);
+        m.ArmCollectionSubscriptions();
+
+        m.Todos.Add(new TodoItemModel { Title = "t2" });
+
+        Assert.NotNull(last);
+        WebMessage? msg = ModelProtocol.Decode(last!);
+        Assert.NotNull(msg?.Patch);
+        Assert.Equal(m.ModelInstanceId, msg.ModelInstanceId);
+    }
 }

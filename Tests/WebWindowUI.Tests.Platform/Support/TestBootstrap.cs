@@ -1,7 +1,7 @@
 #if WINDOWS
 using System.Runtime.CompilerServices;
 
-namespace WebWindowUI.Tests.Support;
+namespace WebWindowUI.Tests.Platform.Support;
 
 /// <summary>
 /// 程序集加载即启动 STA 泵线程（不阻塞：loader lock 期间线程要等装配完成才能执行，

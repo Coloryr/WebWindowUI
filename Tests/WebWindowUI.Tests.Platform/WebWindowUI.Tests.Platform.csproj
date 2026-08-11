@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="protobuf-net" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\WebWindowUI.Core\WebWindowUI.Core.csproj" />
+    <ProjectReference Include="..\..\Sample\WebWindowUI.Sample.Backend\WebWindowUI.Sample.Backend.csproj" />
+    <ProjectReference Include="..\..\Sample\WebWindowUI.Sample\WebWindowUI.Sample.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows'">
+    <ProjectReference Include="..\..\Platforms\WebWindowUI.Platforms.Windows\WebWindowUI.Platforms.Windows.csproj" />
+    <ProjectReference Include="..\..\Platforms\WebWindowUI.Platforms.Cef\WebWindowUI.Platforms.Cef.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(WWUIPlatform)' == 'Linux'">
+    <ProjectReference Include="..\..\Platforms\WebWindowUI.Platforms.Linux\WebWindowUI.Platforms.Linux.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(WWUIPlatform)' == 'MacOS'">
+    <ProjectReference Include="..\..\Platforms\WebWindowUI.Platforms.MacOS\WebWindowUI.Platforms.MacOS.csproj" />
+  </ItemGroup>
+
+</Project>

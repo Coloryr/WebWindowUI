@@ -3,7 +3,7 @@ using GLib;
 using Thread = System.Threading.Thread; // GLib 也有 Thread 类型，避免歧义
 using WebWindowUI.Linux;
 
-namespace WebWindowUI.Tests.Support;
+namespace WebWindowUI.Tests.Platform.Support;
 
 /// <summary>
 /// GTK 主循环泵：一根独占线程跑 GLib MainLoop，承载所有触碰 WebKit/GTK 的测试工作。

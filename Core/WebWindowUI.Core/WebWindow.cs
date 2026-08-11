@@ -124,6 +124,11 @@ public abstract class WebWindow
             if (msg is null)
                 return;
 
+            // 实例守卫：前端消息必须来自当前绑定实例（0 = 旧桥/首握手未携带，容忍）。
+            // 窗口换绑模型后，旧实例/旧页面在途的 set/invoke 会被丢弃，防串数据写进新实例。
+            if (msg.ModelInstanceId != 0 && _model is not null && msg.ModelInstanceId != _model.ModelInstanceId)
+                return;
+
             // 前端桥接就绪：补发初始快照（防止快照早于页面监听器到达而丢失）
             if (msg.Ready is not null && _model is not null)
             {

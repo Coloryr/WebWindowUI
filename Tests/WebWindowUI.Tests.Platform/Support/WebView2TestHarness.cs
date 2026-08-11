@@ -3,7 +3,7 @@ using System.Diagnostics;
 using WebWindowUI.Core;
 using WebWindowUI.Sample;
 
-namespace WebWindowUI.Tests.Support;
+namespace WebWindowUI.Tests.Platform.Support;
 
 /// <summary>
 /// 测试用窗口宿主：真实 CoreWebView2 + 真实构建产物 wwwroot（经 ProjectReference 传递复制到测试 bin）。

@@ -26,8 +26,9 @@
   <Folder Name="/Templates/">
     <Project Path="Templates/WebWindowUI.Templates/WebWindowUI.Templates.csproj" />
   </Folder>
-  <Folder Name="/Test/">
-    <Project Path="Test/WebWindowUI.Tests/WebWindowUI.Tests.csproj" />
+  <Folder Name="/Tests/">
+    <Project Path="Tests/WebWindowUI.Tests.Protocol/WebWindowUI.Tests.Protocol.csproj" />
+    <Project Path="Tests/WebWindowUI.Tests.Platform/WebWindowUI.Tests.Platform.csproj" />
   </Folder>
   <Folder Name="/Files/">
     <File Path="Directory.Build.props" />

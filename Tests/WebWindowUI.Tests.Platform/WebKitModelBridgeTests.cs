@@ -2,10 +2,10 @@
 using System.Collections;
 using WebWindowUI.Sample;
 using WebWindowUI.Sample.Items;
-using WebWindowUI.Tests.Support;
+using WebWindowUI.Tests.Platform.Support;
 using Xunit;
 
-namespace WebWindowUI.Tests;
+namespace WebWindowUI.Tests.Platform;
 
 /// <summary>
 /// 真 WebKitGTK（libwebkit2gtk-4.1）端到端测试：真实 WebView + 真实构建产物 wwwroot。

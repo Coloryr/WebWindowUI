@@ -147,6 +147,12 @@ public sealed class WebMessage
     [ProtoMember(5)] public GeneratedModel? Full { get; set; }
     [ProtoMember(6)] public ModelInvoke? Invoke { get; set; }
     [ProtoMember(7)] public CollectionPatch? Patch { get; set; }
+
+    /// <summary>实例唯一 ID（int64，进程内单调自增，见 WebWindowModel.ModelInstanceId）：统一信封 header，
+    /// 不进 oneof payload。.NET→JS 全部消息携带（前端桥从首个 full/snapshot 捕获并暴露为
+    /// model._modelInstanceId，对 update/patch 做防串守卫）；JS→.NET 的 ready/set/invoke 回传同字段，
+    /// 本侧校验来源实例（0 = 旧端未携带，容忍）。</summary>
+    [ProtoMember(8)] public long ModelInstanceId { get; set; }
 }
 
 /// <summary>Model 协议编解码与值转换。</summary>

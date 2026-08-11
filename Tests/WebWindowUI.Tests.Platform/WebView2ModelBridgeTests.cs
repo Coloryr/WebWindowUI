@@ -2,10 +2,10 @@
 using System.Collections;
 using WebWindowUI.Sample;
 using WebWindowUI.Sample.Items;
-using WebWindowUI.Tests.Support;
+using WebWindowUI.Tests.Platform.Support;
 using Xunit;
 
-namespace WebWindowUI.Tests;
+namespace WebWindowUI.Tests.Platform;
 
 /// <summary>
 /// 真 WebView2 端到端测试：真实 CoreWebView2 + 真实构建产物 wwwroot。
@@ -52,6 +52,25 @@ public class WebView2ModelBridgeTests
 
             await WebView2TestHarness.WaitJsAsync(win, "window.__model.count === 42", "增量 count");
             await WebView2TestHarness.WaitJsAsync(win, "window.__model.message === \"updated\"", "增量 message");
+        }, Timeout);
+    }
+
+    [Fact]
+    public async Task ModelInstanceId_PositiveAndStable()
+    {
+        var model = new MainWindowModel { Name = "小明", Count = 1 };
+
+        await WebView2TestHarness.RunMainWindowAsync(model, async win =>
+        {
+            // 桥从首个快照捕获实例 ID 并暴露为非枚举 _modelInstanceId（不进 Object.keys watch 循环）
+            await WebView2TestHarness.WaitJsAsync(win, "window.__model._modelInstanceId > 0", "实例 ID 为正数");
+            string first = await win.ExecuteScriptAsync("window.__model._modelInstanceId");
+
+            // 属性增量后实例 ID 不变：同实例消息不被防串守卫误杀
+            model.Count = 2;
+            await WebView2TestHarness.WaitJsAsync(win, "window.__model.count === 2", "增量到达");
+            string second = await win.ExecuteScriptAsync("window.__model._modelInstanceId");
+            Assert.Equal(first, second);
         }, Timeout);
     }
 

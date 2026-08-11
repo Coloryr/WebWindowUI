@@ -31,6 +31,12 @@ import * as protobuf from 'protobufjs'
  * 桥按模型镜像类烘焙的 ['__protocol']（构建期定死的字符串字面量键）校验并取解码类型名；commandId
  * 是 [RelayCommand] 方法声明序（.NET 生成代码 switch 同名序，见 WriteBackGenerator）。
  *
+ * 实例唯一 ID（modelInstanceId）：WebMessage 信封层 int64 字段（字段 8，统一 header，不进 oneof
+ * payload），.NET 侧进程内单调自增。桥从首个 full/snapshot 捕获权威实例 ID，暴露为不可枚举的
+ * model._modelInstanceId；对后续 update/patch 做防串守卫（实例 ID 不匹配即丢弃——窗口换绑模型后
+ * 旧实例在途消息不会污染新实例）；ready/set/invoke 回传同字段，.NET 侧校验来源实例。
+ * 与模型**数据属性** instanceId（如 SharedNotes 的"共享实例"标签）无关——前者是信封级元数据。
+ *
  * 命名：.NET 属性名 PascalCase，前端模型 camelCase（首字母小写），本桥负责互转。
  * 类型：.NET 值经 ModelValue 一码归一码（number/text/flag/list/object/blob），
  *       生成器消息的标量字段直通（string/int32/...），object 兜底字段转 ModelValue。
@@ -131,6 +137,9 @@ interface ModelValueLike {
 }
 
 interface WebMessageLike {
+  /** 实例唯一 ID（int64，.NET 侧进程内单调自增）：统一信封 header，不进 oneof payload。
+      桥从首个 full/snapshot 捕获并暴露为 model._modelInstanceId，对 update/patch 做防串守卫。 */
+  modelInstanceId?: number
   ready?: object
   /** 增量更新：payload 是生成器为模型产出的 update 消息（如 MainWindowModelUpdate）字节。 */
   update?: { modelId?: number; payload?: Uint8Array }
@@ -291,17 +300,25 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
   const root = protobuf.Root.fromJSON(generatedJson as unknown as protobuf.INamespace)
   const webMessageType = root.lookupType('webwindowui.model.WebMessage')
 
-  /** 编码 WebMessage 信封并发送（字节 → NUL 转义字符串 → 平台通道）。返回是否发出（通道未就绪为 false）。 */
+  /** 编码 WebMessage 信封并发送（字节 → NUL 转义字符串 → 平台通道）。返回是否发出（通道未就绪为 false）。
+      已捕获实例 ID 时自动并入信封（ready/set/invoke 全部带上，.NET 侧校验来源实例；未捕获 = 0 容忍）。 */
   const sendEnvelope = (payload: Record<string, unknown>): boolean => {
     const ch = resolveSendChannel()
     if (!ch) return false
-    const bytes = webMessageType.encode(payload as unknown as never).finish()
+    const envelope = boundModelInstanceId !== undefined && boundModelInstanceId !== 0
+      ? { modelInstanceId: boundModelInstanceId, ...payload }
+      : payload
+    const bytes = webMessageType.encode(envelope as unknown as never).finish()
     ch.postMessage(bytesToEscaped(bytes as Uint8Array))
     return true
   }
 
   // 正在应用来自 .NET 的变更时置 true，让本地 watch 跳过回写，避免回声循环
   let suppressEcho = false
+
+  /** 当前绑定实例的唯一 ID：从首个 full/snapshot 捕获（.NET 侧进程内单调自增 int64）。
+      后续 update/patch 携带不同 ID → 旧实例在途消息，丢弃（换绑防串）；0/缺省 = 旧端无实例信息，容忍。 */
+  let boundModelInstanceId: number | undefined
 
   const m = reactive(model) as T & Record<string, unknown>
   const values = m as unknown as Record<string, unknown> // 泛型 T 不能做写索引，这里用非泛型引用
@@ -330,6 +347,15 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
   // 并取解码类型。
   const protocol = (model as unknown as { constructor: { readonly ['__protocol']?: { modelId?: number; full?: string; update?: string } } })
     .constructor['__protocol']
+
+  // 实例唯一 ID：不可枚举注入（不进 Object.keys watch 循环、不落快照键），首个 full/snapshot 到达后
+  // 由 onMessage 更新为 .NET 侧实例 ID（进程内单调自增 int64）。Vue 模板可直接读 model._modelInstanceId。
+  Object.defineProperty(model, '_modelInstanceId', {
+    enumerable: false,
+    configurable: false,
+    writable: true,
+    value: 0,
+  })
 
   // 命令通道：生成器为带 [RelayCommand] 方法的模型产出的命令方法（openWindow()/commandWithArg(arg)）
   // 通过它把命令调用发给 .NET 执行（ModelInvoke { commandId, value }）。定义为不可枚举属性 →
@@ -502,6 +528,18 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
       msg = webMessageType.decode(bytes) as unknown as WebMessageLike
     } catch {
       return // 非协议消息，忽略
+    }
+
+    // 实例唯一 ID（int64 → Long → number）：full/snapshot 捕获权威实例（更新暴露的 _modelInstanceId），
+    // 其余消息校验——已绑定实例且携带不同 ID → 旧实例在途消息，丢弃（换绑防串）。
+    const inst = (normalize(msg.modelInstanceId) as number) ?? 0
+    if (msg.full || msg.snapshot) {
+      if (inst !== 0) {
+        boundModelInstanceId = inst
+        ;(model as Record<string, unknown>)._modelInstanceId = inst
+      }
+    } else if (boundModelInstanceId !== undefined && inst !== 0 && inst !== boundModelInstanceId) {
+      return // 已解绑旧实例的在途消息：丢弃，防污染新实例
     }
 
     // protobufjs decode 未设置的 oneof 成员是 null 而非 undefined，分支必须用 truthy 判断

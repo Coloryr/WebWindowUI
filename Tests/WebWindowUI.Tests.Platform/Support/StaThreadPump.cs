@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using WebWindowUI.Natives.Windows;
 using WebWindowUI.Windows;
 
-namespace WebWindowUI.Tests.Support;
+namespace WebWindowUI.Tests.Platform.Support;
 
 /// <summary>
 /// STA 泵：一根独占的 STA 线程承载所有触碰平台的测试工作。
