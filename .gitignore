@@ -5,3 +5,5 @@ wwwroot/
 artifacts/
 /.vs
 *.user
+**/src/bridge/
+**/src/models/
