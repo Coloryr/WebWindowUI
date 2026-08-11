@@ -7,3 +7,4 @@ artifacts/
 *.user
 **/src/bridge/
 **/src/models/
+package-lock.json
