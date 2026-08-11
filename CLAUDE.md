@@ -148,7 +148,8 @@ netstandard2.0、`IsRoslynComponent=true`，**两个 IIncrementalGenerator**（�
 - Git Bash 的 taskkill 会把 `/IM` 当路径 → 须 `cmd //c "taskkill /IM xxx.exe /F"` 包。
 - `tasklist` 把镜像名截到 25 字符（`WebWindowUI.Demo.Monito`），别 grep 全名，用前缀 grep。
 - 应用进程由 bash `&` 启动时，其宿主 shell 一结束进程就死——启动验证用 Start-Process 或保持 shell。
-- 仓库级回归：`dotnet build WebWindowUI.slnx -c Debug/-c Release`（0 错，MSB3277 WebView2 WindowsBase 无害警告）+ `dotnet test WebWindowUI.slnx -c Debug`（124/124）。**Demo 不在主 slnx**（见 NuGet 打包一节），包模式回归各 Demo 经自身 `Demos/<Demo>/<Demo>.slnx` 单独验证。
+- **测试拆成两个工程**：`Tests/WebWindowUI.Tests.Protocol/`（协议/单元：模型、生成器、协议、resolver、BuildHomeUrl——纯逻辑，**无平台引用、无 Sample 应用/wwwroot**，Linux/macOS 上也能构建）+ `Tests/WebWindowUI.Tests.Platform/`（平台 E2E：WebView2/WebKit 桥测试 + `Support/` 泵，#if 门控，引 Sample 应用拿 wwwroot 传递复制 + 条件平台引用）。Core 对**两**测试工程 `InternalsVisibleTo`（internal 如 `BuildSnapshotEnvelope`/`ExecuteScriptAsync`），平台包只对平台测试工程；协议工程不含 `Microsoft.CodeAnalysis.CSharp` 之外的平台依赖。slnx `/Tests/` 文件夹挂两工程——**此前 slnx 误写单数 `Test/WebWindowUI.Tests/` 路径致 MSB3202**，已随拆分修复。
+- 仓库级回归：`dotnet build WebWindowUI.slnx -c Debug/-c Release`（0 错，MSB3277 WebView2 WindowsBase 无害警告）+ `dotnet test WebWindowUI.slnx -c Debug`（129：协议 111 + 平台 18）。**Demo 不在主 slnx**（见 NuGet 打包一节），包模式回归各 Demo 经自身 `Demos/<Demo>/<Demo>.slnx` 单独验证。
 - 前端调试：桥改动要**物理拷进** `node_modules/webwindowui-bridge`（npm link 符号链接被 rolldown 解析到真实路径、无依赖报 `Failed to resolve import "protobufjs"`）+ touch `vite.config.ts` 强制 vite 重建，再 grep bundle 验证。
 
 ## 样例（Sample/，2026-08-09 从仓库根 WebWindowUI.Sample/ 改名）
@@ -158,3 +159,5 @@ netstandard2.0、`IsRoslynComponent=true`，**两个 IIncrementalGenerator**（�
 ## 桥协议（descriptor 自包含）
 
 生成器把 9 个基础信封消息（WebMessage 信封 + ModelValue/ModelValueList/ModelValueMap + ModelReady/ModelUpdate/ModelSet/ModelSnapshot/GeneratedModel + ModelInvoke + CollectionPatch）**内联进每个模型 descriptor**。桥 `bindModel(model, generatedJson)` 的 `generatedJson` 必填，`Root.fromJSON` 直接解析。信封字段：`ModelUpdate`/`GeneratedModel` = `{ modelId: int32, payload: bytes }`（无 messageName）、`ModelInvoke` = `{ commandId: int32, value }`（无 command 字符串）。漂移测试 `BaseEnvelope_InlineInEveryDescriptor_MatchesCompiledDto` 锁 descriptor ↔ `ModelProtocol.cs` `[ProtoMember]`。`npm install` 必须在 `<App>.Frontend/` 跑（依赖和 vite 二进制在该层 node_modules）。
+
+- **实例级唯一 ID（modelInstanceId）**：`WebMessage` 信封层字段 8（int64，不进 oneof payload）——.NET 侧 `WebWindowModel.ModelInstanceId`（静态计数器 `Interlocked.Increment` 进程内单调自增，每实例唯一有序）。**所有出站信封**（full/snapshot/update/patch）自动携带（`BuildGenericSnapshot` 反射循环显式排除该元数据属性）；桥从首个 full/snapshot 捕获并暴露为**非枚举** `model._modelInstanceId`（仿 `_commandChannel`，不进 `Object.keys` watch 循环），ready/set/invoke 回传同字段。**双端「0 容忍」防串守卫**：.NET `WebWindow.OnBackendMessageReceived` 与桥 `onMessage` 对非 full/snapshot 消息校验 `modelInstanceId`，窗口换绑后旧实例在途消息丢弃（0 = 旧桥/首握手未携带，容忍不守卫）。命名刻意避开 Sample 模型已有的**数据属性** `InstanceId`（SharedNotes 标签「共享实例」、Settings Guid）——框架级字段统一 `modelInstanceId`/`ModelInstanceId`/`_modelInstanceId`。线缆双向兼容：新字段对旧桥是 protobufjs 跳过的未知字段，旧端缺字段按 0 容忍。

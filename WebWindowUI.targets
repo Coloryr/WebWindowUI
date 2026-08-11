@@ -110,7 +110,7 @@
        包模式：入口包 nuspec 带对应平台包依赖（打包时 -p:WWUI_PlatformRef=true 才写入），消费方只引
                WebWindowUI 即按系统自动带回平台包 + 平台自身依赖（WebView2 等）。
        仓库模式：入口工程 WebWindowUI.csproj 在 WWUI_PlatformRef != 'true' 时条件 ProjectReference 相邻平台
-               工程，经引用图传递进消费方产物（测试工程另有自己的直接条件引用，见 WebWindowUI.Tests.csproj）。
+               工程，经引用图传递进消费方产物（测试工程另有自己的直接条件引用，见 WebWindowUI.Tests.Platform.csproj）。
        消费方 Main 首行调用 WebWindowUI.Platform.EnsureRegistered() 触发平台加载注册（AOT 安全：编译期静态引用）。 -->
 
   <!-- 桥 descriptor 输出目录默认（零配置）：工程名以 .Backend 结尾的模型库工程，默认写到「去掉 .Backend 后缀的

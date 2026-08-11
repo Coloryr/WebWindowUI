@@ -144,7 +144,8 @@ WebWindowUI.Frontend/         # 前端角色标记包
 WebWindowUI.Generator/        # console 生成器（落盘 descriptor/TS）
 WebWindowUI.Generator.SourceGen/  # Roslyn 源生成器（写回/proto）
 WebWindowUI.Templates/        # dotnet new 模板包
-WebWindowUI.Tests/            # 单元测试 + WebView2 E2E（124/124）
+WebWindowUI.Tests.Protocol/   # 协议/单元测试（模型、生成器、协议，纯逻辑跨平台）
+WebWindowUI.Tests.Platform/   # 平台 E2E（WebView2/WebKit 桥测试 + 消息泵）
 Sample/                       # 样例（每窗口一功能）
 Demos/                        # 功能 Demo：Todo / SharedNotes / Monitor / ImageGallery
 ```
@@ -153,7 +154,7 @@ Demos/                        # 功能 Demo：Todo / SharedNotes / Monitor / Ima
 
 ```bash
 dotnet build WebWindowUI.slnx -c Debug   # 0 错误（MSB3277 WebView2 WindowsBase 为无害警告）
-dotnet test  WebWindowUI.slnx -c Debug   # 124/124 通过（含 WebView2 E2E）
+dotnet test  WebWindowUI.slnx -c Debug   # 129 通过：协议 111 + 平台 18（含 WebView2 E2E）
 ```
 
 ## 依赖
