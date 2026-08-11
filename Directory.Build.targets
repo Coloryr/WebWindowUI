@@ -5,7 +5,7 @@
     <_WWUI_RepoBackendRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Backend'))" />
   </ItemGroup>
   <ItemGroup Condition="'@(_WWUI_RepoBackendRef)' != ''">
-    <Analyzer Include="$(MSBuildThisFileDirectory)WebWindowUI.Generator.SourceGen\bin\$(Configuration)\netstandard2.0\WebWindowUI.Generator.SourceGen.dll" />
+    <Analyzer Include="$(MSBuildThisFileDirectory)Generator\WebWindowUI.Generator.SourceGen\bin\$(Configuration)\netstandard2.0\WebWindowUI.Generator.SourceGen.dll" />
   </ItemGroup>
 
 </Project>

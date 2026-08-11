@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\WebWindowUI\WebWindowUI.csproj" />
-    <ProjectReference Include="..\..\WebWindowUI.Generator.SourceGen\WebWindowUI.Generator.SourceGen.csproj"
+    <ProjectReference Include="..\..\Generator\WebWindowUI.Generator.SourceGen\WebWindowUI.Generator.SourceGen.csproj"
                       ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
@@ -20,7 +20,7 @@
   </PropertyGroup>
   <Target Name="_PackSourceGenAnalyzer">
     <ItemGroup>
-      <TfmSpecificPackageFile Include="..\..\WebWindowUI.Generator.SourceGen\bin\$(Configuration)\netstandard2.0\WebWindowUI.Generator.SourceGen.dll">
+      <TfmSpecificPackageFile Include="..\..\Generator\WebWindowUI.Generator.SourceGen\bin\$(Configuration)\netstandard2.0\WebWindowUI.Generator.SourceGen.dll">
         <PackagePath>analyzers/dotnet/cs/</PackagePath>
       </TfmSpecificPackageFile>
     </ItemGroup>

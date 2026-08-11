@@ -95,7 +95,7 @@
   <!-- 生成器（模型 → proto/descriptor/TS 控制台程序）构建后打包进 tools/net10.0/。
        不引用其程序集（ReferenceOutputAssembly=false 只阻止主 dll 进引用），只保证先构建好。 -->
   <ItemGroup>
-    <ProjectReference Include="..\..\WebWindowUI.Generator\WebWindowUI.Generator.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Generator\WebWindowUI.Generator\WebWindowUI.Generator.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
   <PropertyGroup>

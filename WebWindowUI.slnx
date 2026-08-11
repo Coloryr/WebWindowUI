@@ -15,8 +15,8 @@
     <Project Path="Platforms/WebWindowUI.Platforms.Windows/WebWindowUI.Platforms.Windows.csproj" />
   </Folder>
   <Folder Name="/Generator/">
-    <Project Path="WebWindowUI.Generator.SourceGen/WebWindowUI.Generator.SourceGen.csproj" />
-    <Project Path="WebWindowUI.Generator/WebWindowUI.Generator.csproj" />
+    <Project Path="Generator/WebWindowUI.Generator.SourceGen/WebWindowUI.Generator.SourceGen.csproj" />
+    <Project Path="Generator/WebWindowUI.Generator/WebWindowUI.Generator.csproj" />
   </Folder>
   <Folder Name="/Sample/">
     <Project Path="Sample/WebWindowUI.Sample.Backend/WebWindowUI.Sample.Backend.csproj" />
@@ -24,10 +24,10 @@
     <Project Path="Sample/WebWindowUI.Sample/WebWindowUI.Sample.csproj" />
   </Folder>
   <Folder Name="/Templates/">
-    <Project Path="WebWindowUI.Templates/WebWindowUI.Templates.csproj" />
+    <Project Path="Templates/WebWindowUI.Templates/WebWindowUI.Templates.csproj" />
   </Folder>
   <Folder Name="/Test/">
-    <Project Path="WebWindowUI.Tests/WebWindowUI.Tests.csproj" />
+    <Project Path="Test/WebWindowUI.Tests/WebWindowUI.Tests.csproj" />
   </Folder>
   <Folder Name="/Files/">
     <File Path="Directory.Build.props" />

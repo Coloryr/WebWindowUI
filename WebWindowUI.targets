@@ -130,7 +130,7 @@
     <!-- 生成器定位，两种模式（消费方均可覆盖）：
          仓库模式（默认）：生成器是本库源码相邻的 WebWindowUI.Generator 工程，先构建再 dotnet <dll> 调用；
          包模式：生成器随 WebWindowUI 包内嵌在 tools/net10.0/。按存在性自动选择。 -->
-    <WebWindowUIGeneratorProject Condition="'$(WebWindowUIGeneratorProject)' == ''">$(MSBuildThisFileDirectory)WebWindowUI.Generator\WebWindowUI.Generator.csproj</WebWindowUIGeneratorProject>
+    <WebWindowUIGeneratorProject Condition="'$(WebWindowUIGeneratorProject)' == ''">$(MSBuildThisFileDirectory)Generator\WebWindowUI.Generator\WebWindowUI.Generator.csproj</WebWindowUIGeneratorProject>
     <WebWindowUIGeneratorTargetFramework Condition="'$(WebWindowUIGeneratorTargetFramework)' == ''">net10.0</WebWindowUIGeneratorTargetFramework>
     <WebWindowUIGeneratorDll Condition="'$(WebWindowUIGeneratorDll)' == '' And Exists('$(MSBuildThisFileDirectory)..\tools\$(WebWindowUIGeneratorTargetFramework)\WebWindowUI.Generator.dll')">$(MSBuildThisFileDirectory)..\tools\$(WebWindowUIGeneratorTargetFramework)\WebWindowUI.Generator.dll</WebWindowUIGeneratorDll>
     <WebWindowUIGeneratorDll Condition="'$(WebWindowUIGeneratorDll)' == ''">$([System.IO.Path]::GetDirectoryName('$(WebWindowUIGeneratorProject)'))/bin/$(Configuration)/$(WebWindowUIGeneratorTargetFramework)/WebWindowUI.Generator.dll</WebWindowUIGeneratorDll>
