@@ -71,7 +71,7 @@ internal static partial class WebKit2Native
     private static partial void g_free(IntPtr mem);
 
     [LibraryImport(GLibLib, EntryPoint = "g_bytes_new")]
-    private static partial IntPtr g_bytes_new(in byte[] data, nuint len);
+    private static partial IntPtr g_bytes_new([In] byte[] data, nuint len);
 
     [LibraryImport(GLibLib, EntryPoint = "g_bytes_unref")]
     private static partial void g_bytes_unref(IntPtr bytes);
