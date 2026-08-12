@@ -1,7 +1,6 @@
-#pragma warning disable CA1416 // 原生 WebKit 类型带 [SupportedOSPlatform]
 using WebWindowUI.Core;
 
-namespace WebWindowUI.Linux;
+namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
 /// WebKit2 信号 → 托管事件的桥。用 g_signal_connect_data 把两个信号（load-changed、

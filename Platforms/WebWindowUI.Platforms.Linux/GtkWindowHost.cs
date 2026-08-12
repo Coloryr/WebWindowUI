@@ -1,5 +1,4 @@
-#pragma warning disable CA1416 // 原生 GTK 类型带 [SupportedOSPlatform]
-namespace WebWindowUI.Linux;
+namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
 /// GTK3 窗口宿主：封装窗口句柄（IntPtr）与 destroy 信号桥。用 g_signal_connect_data 把窗口的

@@ -1,8 +1,7 @@
-#pragma warning disable CA1416 // 原生 WebKit 类型带 [SupportedOSPlatform]
 using WebWindowUI.Core;
 using WebWindowUI.Core.Protocol;
 
-namespace WebWindowUI.Linux;
+namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
 /// Linux 平台：GTK3 窗口 + libwebkit2gtk-4.1（WebKit2-4.1 GIR 命名空间，GTK3 端口）的 WebView，可创建多个实例。

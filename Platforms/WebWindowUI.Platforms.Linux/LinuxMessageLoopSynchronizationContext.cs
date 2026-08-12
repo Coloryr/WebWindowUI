@@ -1,4 +1,4 @@
-namespace WebWindowUI.Linux;
+namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
 /// 把 async 延续派发回 GTK 主循环的 SynchronizationContext（Linux 版）。

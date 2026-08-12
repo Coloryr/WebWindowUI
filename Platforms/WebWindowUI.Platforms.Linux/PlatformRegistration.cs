@@ -1,6 +1,6 @@
 using WebWindowUI.Core;
 
-namespace WebWindowUI.Linux;
+namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
 /// 平台程序集自注册：入口包 <see cref="WebWindowUI.Platform.EnsureRegistered"/>（消费方 Main 首行调用）

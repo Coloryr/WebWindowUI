@@ -1,5 +1,4 @@
-#pragma warning disable CA1416 // 原生 GTK 类型带 [SupportedOSPlatform]
-namespace WebWindowUI.Linux;
+namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
 /// GTK3 手写 P/Invoke 层（libgtk-3.so.0）。libwebkit2gtk-4.1 是 GTK3 端口（本机 2.52.3 链接

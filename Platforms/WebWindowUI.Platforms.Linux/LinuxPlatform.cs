@@ -1,6 +1,6 @@
 using WebWindowUI.Core;
 
-namespace WebWindowUI.Linux;
+namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
 /// Linux 平台实现：GTK3 宿主 + libwebkit2gtk-4.1（webkit2gtk-4.1 是 GTK3 端口；WebKit/GTK 均为手写

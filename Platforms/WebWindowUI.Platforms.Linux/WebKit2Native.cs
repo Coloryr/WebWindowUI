@@ -1,7 +1,6 @@
-#pragma warning disable CA1416 // 原生 WebKit 类型带 [SupportedOSPlatform]
 using WebWindowUI.Core;
 
-namespace WebWindowUI.Linux;
+namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
 /// 手写 P/Invoke 绑定：libwebkit2gtk-4.1（GIR 命名空间 WebKit2-4.1，GTK3 端口）+ libjavascriptcoregtk-4.1。
