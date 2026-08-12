@@ -243,10 +243,10 @@ public sealed class MacOSWindow : IWindowBackend
                 var uri = urlSchemeTask.Request.Url.AbsoluteString;
                 var options = owner._options;
 
-                // 数据通道：请求来自 DataScheme 时交给 DataResolver，否则走 UI 资源（ResourceResolver）
+                // 数据通道：请求来自 DataScheme 时交给 DataRoutes（自动注册路由），否则走 UI 资源（WebResourceResolver）
                 var isData = WebResourceLocator.IsScheme(uri, options.DataScheme);
                 var scheme = isData ? options.DataScheme! : options.Scheme;
-                var resolver = isData ? options.DataResolver : options.ResourceResolver;
+                var resolver = isData ? (Func<string, Stream?>)DataRoutes.Resolve : WebResourceResolver.Resolve;
 
                 if (resolver is not null && WebResourceLocator.TryResolvePath(uri, scheme, out string? relative, out string? mimeType))
                 {
@@ -284,10 +284,11 @@ public sealed class MacOSWindow : IWindowBackend
             try
             {
                 // FromObjectsAndKeys(objects, keys, count)：与 ObjC dictionaryWithObjects:forKeys:count: 同序
+                // CORS：页面源 fetch 数据通道属跨源，须回 Access-Control-Allow-Origin（同 Windows/CEF 策略）
                 var headers = NSDictionary.FromObjectsAndKeys(
-                    new NSObject[] { new NSString(contentType), new NSString(cacheControl) },
-                    new NSObject[] { new NSString("Content-Type"), new NSString("Cache-Control") },
-                    2);
+                    new NSObject[] { new NSString(contentType), new NSString(cacheControl), new NSString("*") },
+                    new NSObject[] { new NSString("Content-Type"), new NSString("Cache-Control"), new NSString("Access-Control-Allow-Origin") },
+                    3);
                 task.DidReceiveResponse(new NSHttpUrlResponse(task.Request.Url, status, "HTTP/1.1", headers));
                 task.DidReceiveData(NSData.FromArray(bytes));
                 task.DidFinish();

@@ -1,13 +1,11 @@
-using System.ComponentModel;
 using System.Drawing;
-using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.Web.WebView2.Core;
 using WebWindowUI.Core;
 using WebWindowUI.Core.Protocol;
 using WebWindowUI.Natives.Windows;
 
-namespace WebWindowUI.Windows;
+namespace WebWindowUI.Platforms.Windows;
 
 /// <summary>
 /// Windows 平台：承载 WebView2 的 Win32 裸窗口，可创建多个实例。
@@ -15,18 +13,8 @@ namespace WebWindowUI.Windows;
 /// </summary>
 public sealed class WindowsWindow : IWindowBackend
 {
-    private const string WindowClass = "WebView2Window";
-
-    // ---- 进程级共享状态 ----
-    private static bool _classRegistered;
-    private static Win32.WndProcDelegate _wndProc = null!; // 保活，防止被 GC 回收
-    private static readonly Dictionary<IntPtr, WindowsWindow> _windows = [];
-    private static readonly object _envLock = new();
-    private static readonly Dictionary<string, Task<CoreWebView2Environment>> _environmentTasks = [];
-
     private readonly IntPtr _hwnd;
     private readonly WebWindowOptions _options;
-    private CoreWebView2Environment? _environment;
     private CoreWebView2Controller? _controller;
     private IntPtr _hIcon;
     private bool _closed;
@@ -36,26 +24,11 @@ public sealed class WindowsWindow : IWindowBackend
     /// <summary>窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。</summary>
     public event Action? Closed;
 
-    private WindowsWindow(IntPtr hwnd, WebWindowOptions options)
+    internal WindowsWindow(IntPtr hwnd, WebWindowOptions options)
     {
         _hwnd = hwnd;
         _options = options;
-        _windows[hwnd] = this;
-    }
-
-    /// <summary>创建并注册一个尚未显示的窗口。</summary>
-    public static WindowsWindow Create(string title, WebWindowOptions options, int width, int height)
-    {
-        EnsureClassRegistered();
-
-        var hwnd = Win32.CreateWindowExW(
-            0, WindowClass, title, Win32.WS_OVERLAPPEDWINDOW,
-            Win32.CW_USEDEFAULT, Win32.CW_USEDEFAULT, width, height,
-            IntPtr.Zero, IntPtr.Zero, Win32.GetModuleHandleW(null), IntPtr.Zero);
-        if (hwnd == IntPtr.Zero)
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "创建窗口失败 (CreateWindowExW)");
-
-        return new WindowsWindow(hwnd, options);
+        WindowsPlatform.WindowOpen(this);
     }
 
     /// <summary>显示窗口并初始化 WebView2。无头模式下只初始化 WebView，窗口永不显示（SW_SHOW 也跳过）。</summary>
@@ -111,8 +84,8 @@ public sealed class WindowsWindow : IWindowBackend
                 Win32.DestroyIcon(_hIcon);
             _hIcon = hIcon;
 
-            Win32.SendMessageW(_hwnd, Win32.WM_SETICON, (IntPtr)Win32.ICON_BIG, hIcon);
-            Win32.SendMessageW(_hwnd, Win32.WM_SETICON, (IntPtr)Win32.ICON_SMALL, hIcon);
+            Win32.SendMessageW(_hwnd, Win32.WM_SETICON, Win32.ICON_BIG, hIcon);
+            Win32.SendMessageW(_hwnd, Win32.WM_SETICON, Win32.ICON_SMALL, hIcon);
         });
     }
 
@@ -121,7 +94,7 @@ public sealed class WindowsWindow : IWindowBackend
     /// <see cref="MessageLoopSynchronizationContext.Send"/>（回 UI 线程并阻塞等待）。
     /// Win32 窗口 API（DestroyWindow/SetForegroundWindow/SetWindowTextW/SendMessage）都要求 UI 线程。
     /// </summary>
-    private void RunOnUiThread(Action action)
+    private static void RunOnUiThread(Action action)
     {
         if (Environment.CurrentManagedThreadId == MessageLoopSynchronizationContext.UiThreadId)
         {
@@ -191,62 +164,21 @@ public sealed class WindowsWindow : IWindowBackend
     /// <summary>把 WindowIcon（文件或流）加载成 HICON。流会先落到临时文件再加载。</summary>
     private static IntPtr LoadIconHandle(WindowIcon icon)
     {
-        if (icon.FilePath is not null)
+        var tmp = Path.Combine(Path.GetTempPath(), "webwindowui_" + Guid.NewGuid().ToString("N") + ".ico");
+        try
         {
-            return Win32.LoadImageW(IntPtr.Zero, icon.FilePath, Win32.IMAGE_ICON,
+            using (FileStream fs = File.Create(tmp))
+                icon.Stream.CopyTo(fs);
+            return Win32.LoadImageW(IntPtr.Zero, tmp, Win32.IMAGE_ICON,
                 0, 0, Win32.LR_LOADFROMFILE | Win32.LR_DEFAULTSIZE);
         }
-
-        if (icon.Stream is not null)
+        finally
         {
-            var tmp = Path.Combine(Path.GetTempPath(), "webwindowui_" + Guid.NewGuid().ToString("N") + ".ico");
-            try
-            {
-                using (FileStream fs = File.Create(tmp))
-                    icon.Stream.CopyTo(fs);
-                return Win32.LoadImageW(IntPtr.Zero, tmp, Win32.IMAGE_ICON,
-                    0, 0, Win32.LR_LOADFROMFILE | Win32.LR_DEFAULTSIZE);
-            }
-            finally
-            {
-                try { File.Delete(tmp); } catch { /* 临时文件清理失败可忽略 */ }
-            }
+            File.Delete(tmp);
         }
-
-        return IntPtr.Zero;
     }
 
-    private static void EnsureClassRegistered()
-    {
-        if (_classRegistered)
-            return;
-
-        _wndProc = WndProc;
-        var wc = new Win32.WNDCLASSEXW
-        {
-            cbSize = (uint)Marshal.SizeOf<Win32.WNDCLASSEXW>(),
-            style = Win32.CS_HREDRAW | Win32.CS_VREDRAW,
-            lpfnWndProc = _wndProc,
-            hInstance = Win32.GetModuleHandleW(null),
-            hIcon = Win32.LoadIconW(IntPtr.Zero, Win32.IDI_APPLICATION),
-            hCursor = Win32.LoadCursorW(IntPtr.Zero, Win32.IDC_ARROW),
-            hbrBackground = (IntPtr)(Win32.COLOR_WINDOW + 1),
-            lpszMenuName = null,
-            lpszClassName = WindowClass,
-        };
-        if (Win32.RegisterClassExW(ref wc) == 0)
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "注册窗口类失败 (RegisterClassExW)");
-
-        _classRegistered = true;
-    }
-
-    /// <summary>窗口过程入口：通过 HWND 找到对应的窗口实例。</summary>
-    private static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
-        => _windows.TryGetValue(hwnd, out WindowsWindow? window)
-            ? window.OnWndProc(msg, wParam, lParam)
-            : Win32.DefWindowProcW(hwnd, msg, wParam, lParam);
-
-    private IntPtr OnWndProc(uint msg, IntPtr wParam, IntPtr lParam)
+    public IntPtr OnWndProc(uint msg, IntPtr wParam, IntPtr lParam)
     {
         switch (msg)
         {
@@ -262,12 +194,9 @@ public sealed class WindowsWindow : IWindowBackend
                 }
                 _controller?.Close();
                 _controller = null;
-                _windows.Remove(_hwnd);
                 _closed = true;
                 Closed?.Invoke();
-                WebWindow.NotifyWindowClosed();
-                if (WebWindow.OpenCount == 0)
-                    Win32.PostQuitMessage(0); // 最后一个窗口关闭，退出消息循环
+                WindowsPlatform.WindowClose(this);
                 return IntPtr.Zero;
 
             case Win32.WM_SIZE:
@@ -292,11 +221,7 @@ public sealed class WindowsWindow : IWindowBackend
     {
         try
         {
-            _environment = await GetSharedEnvironmentAsync(_options.Scheme, _options.DataScheme);
-            if (_closed)
-                return;
-
-            _controller = await _environment.CreateCoreWebView2ControllerAsync(_hwnd);
+            _controller = await WindowsPlatform.CreateCoreWebView2ControllerAsync(_hwnd);
             if (_closed)
             {
                 _controller.Close();
@@ -307,15 +232,8 @@ public sealed class WindowsWindow : IWindowBackend
             ResizeWebView();
 
             var core = _controller.CoreWebView2;
-            core.Settings.IsStatusBarEnabled = false;
-            if (_options.ResourceResolver is not null || _options.DataResolver is not null)
-            {
-                core.AddWebResourceRequestedFilter($"{_options.Scheme}://*/*", CoreWebView2WebResourceContext.All);
-                if (!string.IsNullOrEmpty(_options.DataScheme))
-                    core.AddWebResourceRequestedFilter($"{_options.DataScheme}://*/*", CoreWebView2WebResourceContext.All);
-                core.WebResourceRequested += OnWebResourceRequested;
-            }
-            core.Navigate(_options.HomeUrl);
+
+            core.Navigate(WebWindowResource.GetWindowIndexUrl(_options.WindowPath));
 
             // Model 双向绑定通道：页面就绪通知 + JS 回传消息
             core.NavigationCompleted += (_, _) => NavigationCompleted?.Invoke();
@@ -335,83 +253,5 @@ public sealed class WindowsWindow : IWindowBackend
         }
     }
 
-    private static void ShowError(string message) => Log.Debug(message);
-
-    /// <summary>同类 scheme 的窗口共享一个环境；用 Task 缓存避免并发创建多个浏览器进程。</summary>
-    private static Task<CoreWebView2Environment> GetSharedEnvironmentAsync(string scheme, string? dataScheme)
-    {
-        // 环境按 scheme + 数据通道一起键控：同 scheme 不同 DataScheme 的窗口应各自拥有环境
-        //（自定义 scheme 注册是环境的构造参数，第一个创建的环境决定了注册内容）。
-        var key = scheme + "|" + dataScheme;
-        lock (_envLock)
-        {
-            if (!_environmentTasks.TryGetValue(key, out Task<CoreWebView2Environment>? task))
-            {
-                // 注册自定义 scheme。注意：此版本的包装器要求通过构造函数传入，
-                // new() 后访问 CustomSchemeRegistrations 会是 null。
-                var registrations = new List<CoreWebView2CustomSchemeRegistration>
-                {
-                    new(scheme)
-                    {
-                        // 允许 app://host/path 这种带 host 的 URL
-                        HasAuthorityComponent = true,
-                    },
-                };
-                // 数据通道：同一个环境里再注册一个专用 scheme，托管大块/二进制数据
-                if (!string.IsNullOrEmpty(dataScheme)
-                    && !string.Equals(dataScheme, scheme, StringComparison.OrdinalIgnoreCase))
-                {
-                    registrations.Add(new CoreWebView2CustomSchemeRegistration(dataScheme)
-                    {
-                        HasAuthorityComponent = true,
-                    });
-                }
-                var options = new CoreWebView2EnvironmentOptions(customSchemeRegistrations: registrations);
-                task = CoreWebView2Environment.CreateAsync(null, null, options);
-                _environmentTasks[key] = task;
-            }
-            return task;
-        }
-    }
-
-    private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs args)
-    {
-        try
-        {
-            // 数据通道：请求来自 DataScheme 时交给 DataResolver，否则走 UI 资源（ResourceResolver）
-            var isData = WebResourceLocator.IsScheme(args.Request.Uri, _options.DataScheme);
-            var scheme = isData ? _options.DataScheme! : _options.Scheme;
-            var resolver = isData ? _options.DataResolver : _options.ResourceResolver;
-            if (isData) Log.Debug($"DATA-REQ {args.Request.Uri}");
-
-            if (resolver is not null && WebResourceLocator.TryResolvePath(args.Request.Uri, scheme, out string? relative, out string? mimeType))
-            {
-                Stream? stream = resolver(relative!);
-                if (isData) Log.Debug($"DATA-HIT {relative} -> {stream?.Length ?? -1}");
-                if (stream is not null)
-                {
-                    // 注意：流交给 WebView2 后由其负责释放，这里不要 Dispose
-                    // 缓存策略集中在 ResourceHeaders（Linux/macOS 复用同一决策）：
-                    // vite 的 hash 构建产物可 immutable 长缓存，index.html 等未 hash 的入口必须 no-store。
-                    args.Response = _environment!.CreateWebResourceResponse(
-                        stream,
-                        200,
-                        "OK",
-                        $"Content-Type: {mimeType}\r\nCache-Control: {ResourceHeaders.CacheControl(relative!)}");
-                    return;
-                }
-            }
-        }
-        catch
-        {
-            // 读取或构造响应失败时直接放行，WebView2 会显示错误页
-        }
-
-        var notFound = new MemoryStream(Encoding.UTF8.GetBytes("404 Not Found"));
-        args.Response = _environment!.CreateWebResourceResponse(
-            notFound,
-            404,
-            "Not Found",
-            "Content-Type: text/plain\r\nCache-Control: no-store");
-    }
+    private static void ShowError(string message) => WebWindowLog.Debug(message);
 }

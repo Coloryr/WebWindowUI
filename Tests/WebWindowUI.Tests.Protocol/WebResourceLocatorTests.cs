@@ -19,7 +19,7 @@ public class WebResourceLocatorTests
     [InlineData("app://localhost/unknown.xyz", "unknown.xyz", "application/octet-stream")]
     public void ValidUrls_ResolveToRelativePathAndMime(string uri, string expectedRelative, string expectedMime)
     {
-        var ok = WebResourceLocator.TryResolvePath(uri, "app", out string? relative, out string? mimeType);
+        var ok = WebWindowResource.TryResolvePath(uri, "app", out string? relative, out string? mimeType);
 
         Assert.True(ok);
         Assert.Equal(expectedRelative, relative);
@@ -34,7 +34,7 @@ public class WebResourceLocatorTests
     [InlineData("app://localhost/a/..%2Fsecret.txt")]
     public void EscapingUrls_AreRejected(string uri)
     {
-        var ok = WebResourceLocator.TryResolvePath(uri, "app", out _, out _);
+        var ok = WebWindowResource.TryResolvePath(uri, "app", out _, out _);
         Assert.False(ok);
     }
 
@@ -48,7 +48,7 @@ public class WebResourceLocatorTests
     [InlineData("app://localhost/%2e%2e/secret.txt")]
     public void DotSegments_NeverEscapeRoot(string uri)
     {
-        var ok = WebResourceLocator.TryResolvePath(uri, "app", out string? relative, out _);
+        var ok = WebWindowResource.TryResolvePath(uri, "app", out string? relative, out _);
 
         Assert.True(ok);
         Assert.Equal("secret.txt", relative);
@@ -61,7 +61,7 @@ public class WebResourceLocatorTests
     [InlineData("appbin://localhost/bin/hello.txt", "bin/hello.txt", "text/plain; charset=utf-8")]
     public void DataScheme_ResolvesToRelativePathAndMime(string uri, string expectedRelative, string expectedMime)
     {
-        var ok = WebResourceLocator.TryResolvePath(uri, "appbin", out string? relative, out string? mimeType);
+        var ok = WebWindowResource.TryResolvePath(uri, "appbin", out string? relative, out string? mimeType);
 
         Assert.True(ok);
         Assert.Equal(expectedRelative, relative);
@@ -77,6 +77,6 @@ public class WebResourceLocatorTests
     [InlineData("https://localhost/x", "appbin", false)]
     public void IsScheme_MatchesByScheme(string uri, string scheme, bool expected)
     {
-        Assert.Equal(expected, WebResourceLocator.IsScheme(uri, scheme));
+        Assert.Equal(expected, WebWindowResource.IsScheme(uri, scheme));
     }
 }

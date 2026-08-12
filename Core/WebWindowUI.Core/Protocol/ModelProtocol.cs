@@ -3,24 +3,13 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Reflection;
 using ProtoBuf;
+using WebWindowUI.Core.Observable;
 
 namespace WebWindowUI.Core.Protocol;
 
-// =====================================================================
-// Model 双向绑定协议的 protobuf 消息契约。
-//
-// 协议契约以本文件的 [ProtoMember] 为准；前端侧由生成器把基础信封（WebMessage/ModelValue）
-// 内联进每个模型 descriptor（自包含解析，无独立 model.json/model.proto）。
-// 两侧字段号必须严格一致（ModelProtoTests 的漂移测试兜底）。
-//
-// 消息流：
-//   .NET → 前端    ModelUpdate（单字段增量：生成器为每个模型产出的 update 消息字节）/
-//                  WebMessage.Full（生成器产出的完整模型）
-//   前端 → .NET    ModelReady（就绪请求快照）/ ModelSet（单属性回写）/
-//                  ModelInvoke（命令执行：前端调用 [RelayCommand] 生成的 ICommand）
-// =====================================================================
-
-/// <summary>通用模型值（单字段增量/通用快照用）。oneof kind 未设置的成员 = null。</summary>
+/// <summary>
+/// 通用模型值（单字段增量/通用快照用）。oneof kind 未设置的成员 = null。
+/// </summary>
 [ProtoContract]
 public sealed class ModelValue
 {
@@ -41,24 +30,27 @@ public sealed class ModelValueList
 [ProtoContract]
 public sealed class ModelValueMap
 {
-    /// <summary>name 键（generic object/Dictionary、反射回退）：map&lt;string, ModelValue&gt;。</summary>
+    /// <summary>
+    /// name 键（generic object/Dictionary、反射回退）：map&lt;string, ModelValue&gt;。
+    /// </summary>
     [ProtoMember(1)] public Dictionary<string, ModelValue> Fields { get; set; } = [];
 
-    /// <summary>序数键（typed POCO 元素，proto 字段号）：map&lt;int32, ModelValue&gt;，与生成器
-    /// ConvertFromModelValue 的 switch (kv.Key) case 1: 直接对应——键是真实 int，不是字符串承载。</summary>
+    /// <summary>
+    /// 序数键（typed POCO 元素，键为 proto 字段号）：map&lt;int32, ModelValue&gt;。
+    /// </summary>
     [ProtoMember(2)] public Dictionary<int, ModelValue> OrdinalFields { get; set; } = [];
 }
 
-/// <summary>前端 → .NET：页面就绪，请求完整快照。</summary>
+/// <summary>
+/// 前端 → .NET：页面就绪，请求完整快照。
+/// </summary>
 [ProtoContract]
 public sealed class ModelReady
 {
 }
 
 /// <summary>
-/// .NET → 前端：单字段增量更新。payload 是生成器为模型产出的 update 消息
-/// （如 MainWindowModelUpdate）的 protobuf 字节，modelId = 模型序号（由生成器烘焙进
-/// descriptor 与 TS 镜像的 __protocol，前端据此校验并解码）；载荷里只编码被修改的字段。
+/// 单字段增量更新。payload 是生成器产出的 update 消息字节，modelId = 模型序号；载荷只含被修改的字段。
 /// </summary>
 [ProtoContract]
 public sealed class ModelUpdate
@@ -67,7 +59,9 @@ public sealed class ModelUpdate
     [ProtoMember(2)] public byte[]? Payload { get; set; }
 }
 
-/// <summary>前端 → .NET：单属性回写。</summary>
+/// <summary>
+/// 前端 → .NET：单属性回写。
+/// </summary>
 [ProtoContract]
 public sealed class ModelSet
 {
@@ -76,10 +70,8 @@ public sealed class ModelSet
 }
 
 /// <summary>
-/// 前端 → .NET：执行模型命令（MVVM Command）。commandId = 命令序号（[RelayCommand] 方法
-/// 声明序，与生成器烘焙进 TS 镜像的调用序号一致），.NET 侧按序号命中「命令名 + Command」
-/// 属性（如 OpenWindowCommand）查找 ICommand 并执行；value 为命令参数（可空，无参命令缺省），
-/// 按命令方法的参数类型转换（有参命令生成泛型 RelayCommand&lt;T&gt;，T 即参数类型）。
+/// 前端 → .NET：执行模型命令（MVVM Command）。commandId = [RelayCommand] 声明序，
+/// 命中「命令名 + Command」的 ICommand；value 为命令参数，按方法参数类型转换。
 /// </summary>
 [ProtoContract]
 public sealed class ModelInvoke
@@ -88,15 +80,18 @@ public sealed class ModelInvoke
     [ProtoMember(2)] public ModelValue? Value { get; set; }
 }
 
-/// <summary>完整模型（通用回退）：property → ModelValue。</summary>
+/// <summary>
+/// 完整模型（通用回退）：property → ModelValue。
+/// </summary>
 [ProtoContract]
 public sealed class ModelSnapshot
 {
     [ProtoMember(1)] public Dictionary<string, ModelValue> Data { get; set; } = [];
 }
 
-/// <summary>完整模型（生成器产出）：payload 是生成消息的 protobuf 字节，modelId = 模型序号
-/// （同 ModelUpdate，前端校验并解码）。</summary>
+/// <summary>
+/// 完整模型（生成器产出）：payload 是生成消息的 protobuf 字节，modelId = 模型序号。
+/// </summary>
 [ProtoContract]
 public sealed class GeneratedModel
 {
@@ -104,8 +99,9 @@ public sealed class GeneratedModel
     [ProtoMember(2)] public byte[]? Payload { get; set; }
 }
 
-/// <summary>集合差量操作类别（CollectionPatch.Action）。序号是线缆契约，与前端 descriptor 的枚举严格一致。
-/// protobuf-net 3.2 起枚举直通（序列化为底层 int 值），显式取值即线缆序号。</summary>
+/// <summary>
+/// 集合差量操作类别。序号是线缆契约，与前端 descriptor 的枚举一致。
+/// </summary>
 [ProtoContract]
 public enum CollectionPatchAction
 {
@@ -117,26 +113,43 @@ public enum CollectionPatchAction
 }
 
 /// <summary>
-/// .NET → 前端：集合属性（ObservableCollection 等）的增删差量补丁，前端对响应式数组原地 splice。
-/// 比整列表增量（update 消息）省流量、避免整列重建；Reset 无法编码差量时回退整列表（Items 承载全量）。
+/// .NET → 前端：集合属性的增删差量补丁，前端对响应式数组原地 splice，
+/// 比整列表增量省流量；Reset 无法编码差量时回退整列表（Items 承载全量）。
 /// </summary>
 [ProtoContract]
 public sealed class CollectionPatch
 {
     [ProtoMember(1)] public CollectionPatchAction Action { get; set; }
-    /// <summary>集合属性名（PascalCase，前端 toCamelCase 后定位数组）。</summary>
+
+    /// <summary>
+    /// 集合属性名（PascalCase，前端 toCamelCase 后定位数组）。
+    /// </summary>
     [ProtoMember(2)] public string Property { get; set; } = "";
-    /// <summary>Insert/Remove/Replace/Move 的起始索引。</summary>
+
+    /// <summary>
+    /// Insert/Remove/Replace/Move 的起始索引。
+    /// </summary>
     [ProtoMember(3)] public int Index { get; set; }
-    /// <summary>Remove/Replace/Move 的元素个数（Insert 与 Reset 用不到，0）。</summary>
+
+    /// <summary>
+    /// Remove/Replace/Move 的元素个数（Insert 与 Reset 用不到，0）。
+    /// </summary>
     [ProtoMember(4)] public int Count { get; set; }
-    /// <summary>Insert/Replace 的新元素 / Reset 的整列表（ModelValue，typed 元素为序数键 map）。</summary>
+
+    /// <summary>
+    /// Insert/Replace 的新元素 / Reset 的整列表（ModelValue，typed 元素为序数键 map）。
+    /// </summary>
     [ProtoMember(5)] public List<ModelValue> Items { get; set; } = [];
-    /// <summary>Move 的源索引（其余操作 0）。</summary>
+
+    /// <summary>
+    /// Move 的源索引（其余操作 0）。
+    /// </summary>
     [ProtoMember(6)] public int FromIndex { get; set; }
 }
 
-/// <summary>外层信封：一次 postMessage 只承载一种消息。</summary>
+/// <summary>
+/// 外层信封：一次 postMessage 只承载一种消息。
+/// </summary>
 [ProtoContract]
 public sealed class WebMessage
 {
@@ -148,33 +161,47 @@ public sealed class WebMessage
     [ProtoMember(6)] public ModelInvoke? Invoke { get; set; }
     [ProtoMember(7)] public CollectionPatch? Patch { get; set; }
 
-    /// <summary>实例唯一 ID（int64，进程内单调自增，见 WebWindowModel.ModelInstanceId）：统一信封 header，
-    /// 不进 oneof payload。.NET→JS 全部消息携带（前端桥从首个 full/snapshot 捕获并暴露为
-    /// model._modelInstanceId，对 update/patch 做防串守卫）；JS→.NET 的 ready/set/invoke 回传同字段，
-    /// 本侧校验来源实例（0 = 旧端未携带，容忍）。</summary>
+    /// <summary>
+    /// 实例唯一 ID（见 WebWindowModel.ModelInstanceId），统一信封 header，不进 oneof payload。
+    /// .NET→JS 全部携带；JS→.NET 回传同字段，本侧校验来源实例（0 = 未携带，容忍）。
+    /// </summary>
     [ProtoMember(8)] public long ModelInstanceId { get; set; }
 }
 
-/// <summary>Model 协议编解码与值转换。</summary>
+/// <summary>
+/// Model 协议编解码与值转换。
+/// </summary>
 public static class ModelProtocol
 {
-    /// <summary>POCO 重建转换器（object 属性 map → 实例）：返回 true 且 result 非 null 表示成功；返回 false 表示无法转换（失败）。</summary>
+    /// <summary>
+    /// POCO 重建转换器（ModelValueMap → 实例）：成功返回 true 且 result 非 null，失败返回 false。
+    /// </summary>
     public delegate bool PocoConvertFunc(ModelValueMap value, out object? result);
 
-    /// <summary>源生成器注册的 POCO 重建转换器（[ModuleInitializer] 在程序集加载时填入，替代反射）。</summary>
+    /// <summary>
+    /// 源生成器注册的 POCO 重建转换器（替代反射）。
+    /// </summary>
     internal static readonly Dictionary<Type, PocoConvertFunc> _pocoConverters = [];
 
-    /// <summary>注册 POCO 重建转换器（源生成器 [ModuleInitializer] 调用）。</summary>
+    /// <summary>
+    /// 注册 POCO 重建转换器（源生成器 [ModuleInitializer] 调用）。
+    /// </summary>
     public static void RegisterPocoConverter(Type type, PocoConvertFunc converter)
         => _pocoConverters[type] = converter;
 
-    /// <summary>POCO 序列化转换器（实例 → object map，序数键）：与 PocoConvertFunc 反向对称，替换反射序列化。</summary>
+    /// <summary>
+    /// POCO 序列化转换器（实例 → 序数键 map），与 PocoConvertFunc 对称，替换反射。
+    /// </summary>
     public delegate bool PocoToModelValueFunc(object value, out ModelValueMap? map);
 
-    /// <summary>源生成器注册的 POCO 序列化转换器（[ModuleInitializer] 填入，替代反射；键用 proto 字段号）。</summary>
+    /// <summary>
+    /// 源生成器注册的 POCO 序列化转换器（替代反射；键用 proto 字段号）。
+    /// </summary>
     internal static readonly Dictionary<Type, PocoToModelValueFunc> _pocoSerializers = [];
 
-    /// <summary>注册 POCO 序列化转换器（源生成器 [ModuleInitializer] 调用）。</summary>
+    /// <summary>
+    /// 注册 POCO 序列化转换器（源生成器 [ModuleInitializer] 调用）。
+    /// </summary>
     public static void RegisterPocoSerializer(Type type, PocoToModelValueFunc serializer)
         => _pocoSerializers[type] = serializer;
 
@@ -193,7 +220,9 @@ public static class ModelProtocol
         return Serializer.Deserialize<WebMessage>(ms);
     }
 
-    /// <summary>把任意属性值转成 ModelValue（复杂值递归展开）。</summary>
+    /// <summary>
+    /// 把任意属性值转成 ModelValue（复杂值递归展开）。
+    /// </summary>
     public static ModelValue ToModelValue(object? value)
         => ToModelValue(value, new HashSet<object>(ReferenceEqualityComparer.Instance));
 
@@ -265,11 +294,7 @@ public static class ModelProtocol
                     }
                     else
                     {
-                        // POCO：优先用源生成器注册的序数序列化器（键 = proto 字段号 "1"/"2"…，与
-                        // ConvertFromModelValue 对称；字段号是固定协议序号，不依赖命名一致）。
-                        // miss（未注册 POCO，如测试 GenericFallbackModel）走反射：键用 camelCase
-                        // （与生成器 descriptor/TS 的属性名约定一致）——List<模型> 的整列表增量 update
-                        // 走 ModelValue 兜底，元素以对象 map 序列化。
+                        // POCO：优先用源生成器注册的序数序列化器（键 = proto 字段号），miss 走反射（camelCase 键）。
                         if (_pocoSerializers.TryGetValue(value.GetType(), out PocoToModelValueFunc? serializer)
                             && serializer(value, out ModelValueMap? smap)
                             && smap is not null)
@@ -298,16 +323,20 @@ public static class ModelProtocol
         return v;
     }
 
-    /// <summary>PascalCase → camelCase（与前端 TS 属性名约定一致，仅首字母小写）。</summary>
+    /// <summary>
+    /// PascalCase → camelCase（与前端 TS 属性名约定一致，仅首字母小写）。
+    /// </summary>
     private static string ToCamelCase(string name)
         => string.IsNullOrEmpty(name) ? name : char.ToLowerInvariant(name[0]) + name[1..];
 
-    /// <summary>把 ModelValue 转换回目标类型的值。类型不匹配返回 false（TrySetProperty 语义）。</summary>
+    /// <summary>
+    /// 把 ModelValue 转换回目标类型的值。类型不匹配返回 false（TrySetProperty 语义）。
+    /// </summary>
     public static bool TryFromModelValue(ModelValue? value, Type targetType, out object? result)
     {
         result = null;
 
-        // 外部可能发送不带 value 字段的 ModelSet，message 字段缺省为 null，防御性处理（不抛异常）。
+        // ModelSet 可能不带 value 字段，防御性处理。
         if (value is null)
             return false;
 
@@ -366,7 +395,9 @@ public static class ModelProtocol
         return false;
     }
 
-    /// <summary>泛型包装：成功返回 true 并输出转换值；失败返回 false（result 为 default）。</summary>
+    /// <summary>
+    /// 泛型包装：成功返回 true 并输出转换值；失败返回 false（result 为 default）。
+    /// </summary>
     public static bool TryFromModelValue<T>(ModelValue? value, out T? result)
     {
         if (TryFromModelValue(value, typeof(T), out object? converted))
@@ -383,8 +414,7 @@ public static class ModelProtocol
         var t = Nullable.GetUnderlyingType(targetType) ?? targetType;
         if (t == typeof(object))
         {
-            // 前端 number 没有 int/long 的类型信息。整数值（long 范围内）还原成 long 以保留整数语义，
-            // 否则保留 double —— 否则 object 里的 int 回写后一律变成 double。
+            // 前端 number 无类型信息：整数值还原成 long 保留整数语义，否则保留 double。
             return d == Math.Floor(d) && d >= long.MinValue && d <= long.MaxValue ? (long)d : d;
         }
         if (t == typeof(int)) return checked((int)d);
@@ -475,10 +505,7 @@ public static class ModelProtocol
             return true;
         }
 
-        // List<T> 实现了 IList<T>/ICollection<T>/IReadOnlyList<T>/IReadOnlyCollection<T>/IEnumerable<T>，
-        // 用 List<T> 承载并赋给这些接口属性均可；ObservableCollection<T> 是具体类，
-        // 须实例化同类型（List<T> 不能赋给它），否则 .NET 侧 .Add()/.Remove() 的
-        // CollectionChanged 推送无从谈起。
+        // List<T> 可赋给各集合接口；ObservableCollection<T> 须实例化同类型，否则原地改推送无从谈起。
         var listType = t.GetGenericTypeDefinition() == typeof(ObservableCollection<>)
             ? typeof(ObservableCollection<>).MakeGenericType(elemType)
             : typeof(List<>).MakeGenericType(elemType);
@@ -503,9 +530,10 @@ public static class ModelProtocol
             || def == typeof(ObservableCollection<>);
     }
 
-    /// <summary>枚举 ModelValueMap 全部条目：name 键 Fields + 序数键 OrdinalFields（int → 字符串承载）。
-    /// object/Dictionary 消费路径经此合并——生成序列化器（ConvertToModelValue）产出的序数键 map
-    /// 走通用消费时不再静默丢字段（键以 "1"/"2" 字符串呈现，值完整保留）。</summary>
+    /// <summary>
+    /// 枚举 ModelValueMap 全部条目：name 键 Fields + 序数键 OrdinalFields（int → 字符串承载），
+    /// object/Dictionary 消费路径经此合并。
+    /// </summary>
     private static IEnumerable<KeyValuePair<string, ModelValue>> EnumerateMapEntries(ModelValueMap map)
     {
         foreach (var kv in map.Fields)
@@ -547,8 +575,7 @@ public static class ModelProtocol
             return true;
         }
 
-        // ObservableDictionary<,>（WebWindowUI 核心库，string 键）：与 Dictionary 同构，重建同类实例，
-        // 保留 .NET 侧原地改自动推送（CollectionChanged）能力。
+        // ObservableDictionary<,>（string 键）：重建同类实例，保留原地改自动推送能力。
         if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(ObservableDictionary<,>)
             && t.GetGenericArguments()[0] == typeof(string))
         {
@@ -564,15 +591,12 @@ public static class ModelProtocol
             return true;
         }
 
-        // 源生成器注册的转换器优先（[ModuleInitializer] 程序集加载即注册，无需 RunClassConstructor）；
-        // miss 走反射兜底。
+        // 源生成器注册的转换器优先，miss 走反射兜底。
         if (_pocoConverters.TryGetValue(t, out PocoConvertFunc? converter))
             return converter(map, out result);
 
         // POCO：反射构造目标类型，按属性名（忽略大小写）匹配写入；未知键跳过。
-        // 支撑 List<SomeModel> 回写——TryConvertList 对每个元素按元素类型调到这里实例化。
-        // 只读 name 键 Fields：序数键 map 只可能由已注册生成序列化器产出，而注册序列化器的类型必
-        // 同时注册了生成转换器（同 guard），已被上面 _pocoConverters 分支拦截——反射路径吃不到序数键。
+        // 支撑 List<SomeModel> 回写——TryConvertList 按元素类型调到这里实例化。
         if (t.IsClass && !t.IsAbstract && t.GetConstructor(Type.EmptyTypes) is not null)
         {
             PropertyInfo[] props = [.. t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanWrite && p.SetMethod is not null && !p.SetMethod.IsStatic && p.GetIndexParameters().Length == 0)];

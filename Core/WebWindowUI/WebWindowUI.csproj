@@ -116,11 +116,11 @@
   <Target Name="_WWUI_GeneratePlatformDispatch" BeforeTargets="_GenerateCompileInputs">
     <PropertyGroup>
       <_WWUI_DispatchImpl Condition="'$(UseCEF)' == 'true'">WebWindowUI.Cef.CefBootstrap.EnsureRegistered()%3B</_WWUI_DispatchImpl>
-      <_WWUI_DispatchImpl Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'Windows'">GC.KeepAlive(typeof(WebWindowUI.Windows.WindowsPlatform))%3B</_WWUI_DispatchImpl>
-      <_WWUI_DispatchImpl Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'Linux'">GC.KeepAlive(typeof(WebWindowUI.Linux.LinuxPlatform))%3B</_WWUI_DispatchImpl>
-      <_WWUI_DispatchImpl Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'MacOS'">GC.KeepAlive(typeof(WebWindowUI.MacOS.MacOSPlatform))%3B</_WWUI_DispatchImpl>
+      <_WWUI_DispatchImpl Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'Windows'">GC.KeepAlive(typeof(WebWindowUI.Platforms.Windows.WindowsPlatform))%3B</_WWUI_DispatchImpl>
+      <_WWUI_DispatchImpl Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'Linux'">GC.KeepAlive(typeof(WebWindowUI.Platforms.Linux.LinuxPlatform))%3B</_WWUI_DispatchImpl>
+      <_WWUI_DispatchImpl Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'MacOS'">GC.KeepAlive(typeof(WebWindowUI.Platforms.MacOS.MacOSPlatform))%3B</_WWUI_DispatchImpl>
       <_WWUI_DispatchImpl Condition="'$(_WWUI_DispatchImpl)' == ''">throw new PlatformNotSupportedException("当前操作系统不受支持（需 Windows/Linux/macOS）。")%3B</_WWUI_DispatchImpl>
-      <_WWUI_DispatchContent>namespace WebWindowUI%3B%0A%0Apublic static partial class Platform%0A{%0A    private static partial void EnsureRegisteredCore()%0A    {%0A        $(_WWUI_DispatchImpl)%0A    }%0A}%0A</_WWUI_DispatchContent>
+      <_WWUI_DispatchContent>namespace WebWindowUI%3B%0A%0Apublic static partial class WebWindowUIPlatform%0A{%0A    private static partial void EnsureRegisteredCore()%0A    {%0A        $(_WWUI_DispatchImpl)%0A    }%0A}%0A</_WWUI_DispatchContent>
     </PropertyGroup>
     <WriteLinesToFile File="$(IntermediateOutputPath)Platform.g.cs" Overwrite="true"
                       Lines="$(_WWUI_DispatchContent)" />

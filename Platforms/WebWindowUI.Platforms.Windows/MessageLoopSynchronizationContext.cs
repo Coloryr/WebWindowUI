@@ -1,6 +1,6 @@
 using WebWindowUI.Natives.Windows;
 
-namespace WebWindowUI.Windows;
+namespace WebWindowUI.Platforms.Windows;
 
 /// <summary>
 /// 把 async 延续派发回 UI 线程消息循环的 SynchronizationContext。
@@ -8,11 +8,9 @@ namespace WebWindowUI.Windows;
 /// </summary>
 public sealed class MessageLoopSynchronizationContext : SynchronizationContext
 {
-    public const uint WM_RUN = 0x8000; // WM_APP
-
     public static readonly MessageLoopSynchronizationContext Instance = new();
 
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly Queue<(SendOrPostCallback Callback, object? State)> _queue = new();
     private IntPtr _targetHwnd;
 
@@ -38,7 +36,7 @@ public sealed class MessageLoopSynchronizationContext : SynchronizationContext
     {
         lock (_lock)
             _queue.Enqueue((d, state));
-        Win32.PostMessageW(_targetHwnd, WM_RUN, IntPtr.Zero, IntPtr.Zero);
+        Win32.PostMessageW(_targetHwnd, Win32.WM_RUN, IntPtr.Zero, IntPtr.Zero);
     }
 
     public override void Send(SendOrPostCallback d, object? state)

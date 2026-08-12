@@ -2,21 +2,15 @@ using System.Collections;
 using System.Collections.Specialized;
 using System.ComponentModel;
 
-namespace WebWindowUI.Core;
+namespace WebWindowUI.Core.Observable;
 
 /// <summary>
-/// 可观察字典：.NET 侧原地改（<c>dict["k"]=v</c> / Add / Remove / Clear）即抛
-/// <see cref="INotifyCollectionChanged.CollectionChanged"/> 与
-/// <see cref="INotifyPropertyChanged.PropertyChanged"/>。绑定到 <see cref="WebWindowModel"/>
-/// 后经 <see cref="WebWindowModel"/> 的集合订阅自动挂接，原地变更由框架对字典 sender 做
-/// 「整属性重推」（键值语义无索引差量，复用增量 update 消息，ModelValue 对象 map 整体替换前端对象）。
-///
-/// 前端侧字典属性为 <c>Record&lt;string, unknown&gt;</c>：前端原地改经深 watch 整字典 name 键回写 .NET。
-/// net10 无内置 ObservableDictionary（System.ObjectModel 无该类型），本类型补足「像 ObservableCollection
-/// 一样」的原地变更自动推送能力。
+/// 可观察字典：.NET 侧原地改（dict[k]=v / Add / Remove / Clear）即抛 CollectionChanged 与
+/// PropertyChanged，绑定到 <see cref="WebWindowModel"/> 后原地变更整属性重推（键值语义无索引差量）。
+/// 前端原地改经深 watch 整字典回写 .NET。net10 无内置 ObservableDictionary，本类型补足该能力。
 /// </summary>
-/// <typeparam name="TKey">键类型（须 notnull，字符串最常见）。</typeparam>
-/// <typeparam name="TValue">值类型（可为标量/对象/模型值）。</typeparam>
+/// <typeparam name="TKey">键类型（须 notnull）。</typeparam>
+/// <typeparam name="TValue">值类型。</typeparam>
 public class ObservableDictionary<TKey, TValue> : IDictionary<TKey, TValue>, IDictionary,
     INotifyCollectionChanged, INotifyPropertyChanged where TKey : notnull
 {
@@ -28,7 +22,9 @@ public class ObservableDictionary<TKey, TValue> : IDictionary<TKey, TValue>, IDi
     public ObservableDictionary(IEqualityComparer<TKey> comparer)
         => _inner = new Dictionary<TKey, TValue>(comparer);
 
-    /// <summary>集合变更：Add（newItems）、Remove（oldItems）、Replace（this[key]=v 覆盖已有键）、Reset（Clear）。</summary>
+    /// <summary>
+    /// 集合变更事件（Add/Remove/Replace/Reset）。
+    /// </summary>
     public event NotifyCollectionChangedEventHandler? CollectionChanged;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -102,15 +98,20 @@ public class ObservableDictionary<TKey, TValue> : IDictionary<TKey, TValue>, IDi
 
     public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => _inner.GetEnumerator();
 
-    /// <summary>IDictionary 契约：枚举结果为 DictionaryEntry（ModelProtocol.ToModelValue 的 foreach 用）。</summary>
+    /// <summary>
+    /// IDictionary 契约：枚举结果为 DictionaryEntry（ModelProtocol.ToModelValue 的 foreach 用）。
+    /// </summary>
     IDictionaryEnumerator IDictionary.GetEnumerator() => new DictionaryEntryEnumerator(_inner);
 
-    /// <summary>非泛型 IEnumerable（经 IDictionary.GetEnumerator 承载）。</summary>
+    /// <summary>
+    /// 非泛型 IEnumerable（经 IDictionary.GetEnumerator 承载）。
+    /// </summary>
     IEnumerator IEnumerable.GetEnumerator() => ((IDictionary)this).GetEnumerator();
 
-    /// <summary>把 Dictionary 的 KeyValuePair 枚举包装成 IDictionaryEnumerator（Current = DictionaryEntry）。
-    /// 注意：_inner 是 struct 字段，<b>不能 readonly</b>——readonly struct 字段访问会防御性复制，
-    /// MoveNext() 改的是副本，存储的枚举器永远停在起点 → 无限循环。非 readonly 就地推进。</summary>
+    /// <summary>
+    /// 把 KeyValuePair 枚举包装成 IDictionaryEnumerator（Current = DictionaryEntry）。
+    /// 注意：_inner 不能 readonly——readonly 字段访问会防御性复制，MoveNext() 改的是副本，导致无限循环。
+    /// </summary>
     private sealed class DictionaryEntryEnumerator : IDictionaryEnumerator
     {
         private Dictionary<TKey, TValue>.Enumerator _inner;

@@ -1,14 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Win32 P/Invoke 共享层：Windows（WebView2）与 CEF 平台共用的裸 Win32 封装（常量/结构/P/Invoke/消息窗口）。
-       纯 native，无 WebWindowUI.Core 依赖；隐藏消息窗口的 WM_RUN 调度经 SetMarshalMessageHandler 由各平台接入
-       自己的 MessageLoopSynchronizationContext。平台包以普通 ProjectReference 引用并声明为 nuspec 依赖
-       （入口包不带 Natives，消费方必须经平台包还原到本程序集）。 -->
-
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
     <PackageId>WebWindowUI.Natives.Windows</PackageId>
     <Description>WebWindowUI Win32 P/Invoke 共享层（Windows/CEF 平台共用）。</Description>
@@ -16,12 +12,4 @@
     <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
   </PropertyGroup>
 
-  <!-- PDB 内嵌策略显式化：Debug=portable（独立 .pdb）、Release=embedded（符号随程序集，无独立 .pdb 文件）。 -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <DebugType>portable</DebugType>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <DebugType>embedded</DebugType>
-  </PropertyGroup>
 </Project>

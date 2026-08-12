@@ -149,6 +149,13 @@
     </ModelProtoFile>
   </ItemGroup>
 
+  <!-- 数据路由候选扫描：仅后端模型库，收集全部 .cs 源码（路由类无命名约束——DataProvider.cs 也可，
+       不能用 *Model.cs 式 glob；生成器按 DataRoute 基类过滤，见 ModelProtoGenerator.GenerateDataRoutes）。
+       与 ModelProtoFile 一样显式排除 obj/bin 中间产物。 -->
+  <ItemGroup Condition="'@(_WWUI_BackendRef)' != '' And '@(DataRouteFile)' == ''">
+    <DataRouteFile Include="**\*.cs" Exclude="obj\**\*.cs;bin\**\*.cs" />
+  </ItemGroup>
+
   <!-- 前端工程定位：默认靠「跨项目探测」——对每个 ProjectReference 运行 _WWUI_ReportFrontend，前端工程
        （自识别：引用了 WebWindowUI.Frontend 标记，见 _WWUI_FrontendMarkerRef）返回自己的工程文件路径，其余返回空；
        MSBuild 任务的 TargetOutputs 即前端路径。探测是构建期操作（MSBuild 任务只能执行目标、求值期不可得），
@@ -342,6 +349,16 @@
       <WebWindowUIAllModelSources>@(_WWUI_AllModelPaths)</WebWindowUIAllModelSources>
     </PropertyGroup>
   </Target>
+  <!-- 全路由清单落成属性：与 _WWUI_ComputeAllModels 同理——独立目标（无批处理元数据引用）+ 裸 @(Item) 进属性，
+       避 GenerateModelProto 批处理作用域（否则 %(DataRouteFile.Identity) 变换被限定到当前模型批次）。 -->
+  <Target Name="_WWUI_ComputeAllRoutes" Condition="'@(_WWUI_BackendRef)' != '' And '@(DataRouteFile)' != ''">
+    <ItemGroup>
+      <_WWUI_AllRoutePaths Include="@(DataRouteFile->'$(MSBuildProjectDirectory)/%(Identity)')" />
+    </ItemGroup>
+    <PropertyGroup>
+      <WebWindowUIAllRouteSources>@(_WWUI_AllRoutePaths)</WebWindowUIAllRouteSources>
+    </PropertyGroup>
+  </Target>
   <!-- 残留文件清理（生成前）：删除「当前模型集合不再产出的」旧桥 descriptor（改名/删除模型留下的孤儿文件）。
        只剪枝不复写：生成器 WriteIfChanged 幂等（内容不变保持 mtime）→ 原地文件不重写、不打扰前端 vite 增量
        （FrontendInput 含 src/bridge、src/models）。若整目录删除再全量重写，每次构建都刷所有文件时间戳 →
@@ -362,9 +379,9 @@
 
   <Target Name="GenerateModelProto"
           Condition="'@(_WWUI_BackendRef)' != '' And '@(ModelProtoFile)' != ''"
-          DependsOnTargets="_WWUI_DiscoverFrontend;_WWUI_ComputeAllModels;_WWUI_CleanBridgeOutputs"
+          DependsOnTargets="_WWUI_DiscoverFrontend;_WWUI_ComputeAllModels;_WWUI_ComputeAllRoutes;_WWUI_CleanBridgeOutputs"
           BeforeTargets="CoreCompile">
-    <Exec Command="dotnet &quot;$(WebWindowUIGeneratorDll)&quot; --model &quot;$(MSBuildProjectDirectory)/%(ModelProtoFile.Identity)&quot; --json-out &quot;$(WebWindowUIBridgeDir)/src/bridge/%(ModelProtoFile.ProtoBase).json&quot; --ts-out-dir &quot;$(WebWindowUIBridgeDir)/src/models&quot; --all-models &quot;$(WebWindowUIAllModelSources)&quot;" />
+    <Exec Command="dotnet &quot;$(WebWindowUIGeneratorDll)&quot; --model &quot;$(MSBuildProjectDirectory)/%(ModelProtoFile.Identity)&quot; --json-out &quot;$(WebWindowUIBridgeDir)/src/bridge/%(ModelProtoFile.ProtoBase).json&quot; --ts-out-dir &quot;$(WebWindowUIBridgeDir)/src/models&quot; --all-models &quot;$(WebWindowUIAllModelSources)&quot; --routes &quot;$(WebWindowUIAllRouteSources)&quot;" />
   </Target>
 
   <!-- 生成代码纳入编译不再需要目标：{Model}Proto.g.cs 已由源生成器（WebWindowUI.Generator.SourceGen.ProtoGenerator）

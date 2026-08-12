@@ -13,6 +13,7 @@
   <PropertyGroup>
     <DefineConstants>$(DefineConstants);LINUX</DefineConstants>
     <NoWarn>$(NoWarn);CA2255</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

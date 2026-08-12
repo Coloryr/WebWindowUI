@@ -46,19 +46,20 @@ public sealed class LinuxWindow : IWindowBackend
     }
 
     /// <summary>创建并注册一个尚未显示的窗口。</summary>
-    public static LinuxWindow Create(string title, WebWindowOptions options, int width, int height)
+    public static LinuxWindow Create(WebWindowOptions options)
     {
-        var w = new GtkWindowHost(title, width, height);
+        var w = new GtkWindowHost(options.Title, options.Width, options.Height);
 
         var v = WebKit2Native.CreateWebView(); // webkit_web_view_new + 持有引用
         w.SetChild(v);                            // gtk_container_add，窗口接管一个引用
 
         var window = new LinuxWindow(w, v, options);
 
-        // 自定义 scheme 每进程注册一次（默认 WebContext 跨窗口共享，register_uri_scheme 是 context 级）
-        RegisterSchemeOnce(options.Scheme);
-        if (!string.IsNullOrEmpty(options.DataScheme) && options.DataScheme != options.Scheme)
-            RegisterSchemeOnce(options.DataScheme!);
+        // 自定义 scheme 每进程注册一次（默认 WebContext 跨窗口共享，register_uri_scheme 是 context 级）。
+        // WebWindowResource 单入口同时接管 app:// 与 appdata://，两个 scheme 都须挂处理器（镜像 Windows 的
+        // CoreWebView2CustomSchemeRegistration 注册 app + appdata）。
+        RegisterSchemeOnce(WebWindowResource.Scheme);
+        RegisterSchemeOnce(WebWindowResource.SchemeData);
 
         // JS → native 通道：先连信号（含 script-message-received::wwui）再注册 handler，
         // 避免「消息已到但 handler 未就绪」的竞态（WebKit 文档建议的连接顺序）。
@@ -71,7 +72,7 @@ public sealed class LinuxWindow : IWindowBackend
         // 窗口销毁（用户关标题栏或 Close() 的 gtk_window_close → 默认处理器 destroy）→ 通知框架关闭
         w.Destroyed += window.OnDestroyed;
 
-        Log.Debug($"create window '{title}' (view={v})");
+        WebWindowLog.Debug($"create window '{options.Title}' (view={v})");
         return window;
     }
 
@@ -94,7 +95,7 @@ public sealed class LinuxWindow : IWindowBackend
         {
             if (!_options.Headless)
                 _window.Show();
-            WebKit2Native.LoadUri(_webView, _options.HomeUrl);
+            WebKit2Native.LoadUri(_webView, WebWindowResource.GetWindowIndexUrl(_options.WindowPath));
         });
     }
 
@@ -191,7 +192,7 @@ public sealed class LinuxWindow : IWindowBackend
         // message 是对本桥的 NUL 转义 Latin-1 字符串（trampoline 已用 jsc_value_to_string 还原）。
         if (message.Length == 0)
         {
-            Log.Debug("空 script message 收到");
+            WebWindowLog.Debug("空 script message 收到");
             return;
         }
         MessageReceived?.Invoke(WebView2StringCodec.Decode(message));
@@ -199,7 +200,7 @@ public sealed class LinuxWindow : IWindowBackend
 
     private void OnLoadChanged(int loadEvent)
     {
-        Log.Debug($"load-changed: {loadEvent}");
+        WebWindowLog.Debug($"load-changed: {loadEvent}");
         if (loadEvent == (int)WebKit2Native.LoadEvent.Finished)
             NavigationCompleted?.Invoke();
     }
@@ -209,7 +210,7 @@ public sealed class LinuxWindow : IWindowBackend
         if (_closed)
             return;
         _closed = true;
-        Log.Debug($"window closed (view={_webView})");
+        WebWindowLog.Debug($"window closed (view={_webView})");
         _windows.Remove(_webView);
         Closed?.Invoke();
         WebWindow.NotifyWindowClosed();
@@ -237,28 +238,20 @@ public sealed class LinuxWindow : IWindowBackend
     {
         try
         {
-            // 数据通道：请求来自 DataScheme 时交给 DataResolver，否则走 UI 资源（ResourceResolver）
+            // 单入口定位 app:// 与 appdata://（含自定义路由），镜像 Windows 的 OnWebResourceRequested。
             var uri = WebKit2Native.GetSchemeRequestUri(request);
-            var isData = WebResourceLocator.IsScheme(uri, _options.DataScheme);
-            var scheme = isData ? _options.DataScheme! : _options.Scheme;
-            var resolver = isData ? _options.DataResolver : _options.ResourceResolver;
-
-            if (resolver is not null && WebResourceLocator.TryResolvePath(uri, scheme, out string? relative, out string? mimeType))
+            if (WebWindowResource.TryResolvePath(uri, out string? relative, out string? mimeType) is { } stream)
             {
-                var stream = resolver(relative!);
-                if (stream is not null)
+                // 嵌入式流不可 seek，读全量进 byte[] 再构造 MemoryInputStream（内部 g_bytes_new 拷一份字节）。
+                using (stream)
                 {
-                    // 嵌入式流不可 seek，读全量进 byte[] 再构造 MemoryInputStream（内部 g_bytes_new 拷一份字节）。
-                    using (stream)
-                    {
-                        using var ms = new MemoryStream();
-                        stream.CopyTo(ms);
-                        var bytes = ms.ToArray();
-                        // WebKit 的 finish 接管 stream 所有权；FinishSchemeRequest 内部不保留引用。
-                        WebKit2Native.FinishSchemeRequest(request, bytes, mimeType!);
-                    }
-                    return;
+                    using var ms = new MemoryStream();
+                    stream.CopyTo(ms);
+                    var bytes = ms.ToArray();
+                    // WebKit 的 finish 接管 stream 所有权；FinishSchemeRequest 内部不保留引用。
+                    WebKit2Native.FinishSchemeRequest(request, bytes, mimeType!);
                 }
+                return;
             }
         }
         catch

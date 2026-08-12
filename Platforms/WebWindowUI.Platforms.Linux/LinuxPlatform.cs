@@ -28,8 +28,8 @@ public sealed class LinuxPlatform : IWebWindowPlatform
 
     public string Name => "Linux";
 
-    public IWindowBackend CreateWindow(string title, WebWindowOptions options, int width, int height)
-        => LinuxWindow.Create(title, options, width, height);
+    public IWindowBackend CreateWindow(WebWindowOptions options)
+        => LinuxWindow.Create(options);
 
     public void RunMessageLoop()
     {

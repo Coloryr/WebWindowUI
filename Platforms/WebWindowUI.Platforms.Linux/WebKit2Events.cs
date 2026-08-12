@@ -46,7 +46,7 @@ internal sealed class WebKit2SignalBridge
     {
         _loadChangedId = WebKit2Native.ConnectSignal(_webView, "load-changed", _loadChangedTrampoline, _handle);
         _scriptMessageId = WebKit2Native.ConnectSignal(_userContentManager, ScriptMessageSignal, _scriptMessageTrampoline, _handle);
-        Log.Debug($"connect signals: load-changed={_loadChangedId} script-message={_scriptMessageId}");
+        WebWindowLog.Debug($"connect signals: load-changed={_loadChangedId} script-message={_scriptMessageId}");
     }
 
     /// <summary>断开信号并释放路由 GCHandle。</summary>
@@ -80,13 +80,13 @@ internal sealed class WebKit2SignalBridge
             if (bridge is null || jsResult == IntPtr.Zero)
                 return;
             var message = WebKit2Native.JavascriptResultToString(jsResult);
-            Log.Debug($"script-message received ({message.Length} chars)");
+            WebWindowLog.Debug($"script-message received ({message.Length} chars)");
             bridge.ScriptMessageReceived?.Invoke(message);
         }
         catch (Exception ex)
         {
             // 窗口已销毁 / GCHandle 已释放等，忽略（Debug 记录便于排查）
-            Log.Debug($"script-message handler error: {ex}");
+            WebWindowLog.Debug($"script-message handler error: {ex}");
         }
     }
 }

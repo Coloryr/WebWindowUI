@@ -9,7 +9,7 @@ namespace WebWindowUI.Cef;
 /// <summary>
 /// CEF 自定义 scheme 支撑：app（UI 静态资源）+ appbin（数据通道）两套 scheme 的资源提供
 /// 与 JS → native 消息回传通道。逐行镜像 Windows/Linux 平台的资源路由：
-///   GET  → WebResourceLocator 定位 + ResourceResolver/DataResolver 读流，回填 status/mime/Cache-Control；
+///   GET  → WebResourceLocator 定位 + WebResourceResolver/DataRoutes 读流，回填 status/mime/Cache-Control；
 ///   POST → 消息回传通道（前端桥 resolveSendChannel 的 CEF 分支经 fetch POST 到 app://localhost/__wwui，
 ///          body 是 NUL 转义串的 UTF-8 编码），读 post data → UTF-8 解码 → WebView2StringCodec.Decode
 ///          还原 protobuf 字节 → marshal 回 UI 线程投递对应窗口的 MessageReceived。
@@ -173,11 +173,11 @@ internal static class CefSchemes
         {
             var uri = request.Url ?? "";
             var options = window.Options;
-            var isData = WebResourceLocator.IsScheme(uri, options.DataScheme);
+            var isData = WebWindowResource.IsScheme(uri, options.DataScheme);
             var scheme = isData ? options.DataScheme! : options.Scheme;
-            var resolver = isData ? options.DataResolver : options.ResourceResolver;
+            var resolver = isData ? (Func<string, Stream?>)DataRoutes.Resolve : WebResourceResolver.Resolve;
 
-            if (resolver is not null && WebResourceLocator.TryResolvePath(uri, scheme, out string? relative, out string? mimeType))
+            if (resolver is not null && WebWindowResource.TryResolvePath(uri, scheme, out string? relative, out string? mimeType))
             {
                 using var stream = resolver(relative!);
                 if (stream is not null)

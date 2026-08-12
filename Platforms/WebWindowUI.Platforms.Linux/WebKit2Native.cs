@@ -17,7 +17,7 @@ namespace WebWindowUI.Linux;
 ///  - GError 无 g_error_get_message() API，message 按公开结构体字段偏移直接读（见 <see cref="ReadAndFreeGError"/>）；
 ///  - EvaluateJavascriptAsync 的 GAsyncReadyCallback 在主循环线程触发（即框架主线程）。
 /// </summary>
-internal static class WebKit2Native
+internal static partial class WebKit2Native
 {
     // ---- 原生库 soname ----
     private const string WebKitLib = "libwebkit2gtk-4.1.so.0";
@@ -37,14 +37,14 @@ internal static class WebKit2Native
 
     // ==================== GObject ====================
 
-    [DllImport(GObjectLib, EntryPoint = "g_object_ref")]
-    public static extern IntPtr g_object_ref(IntPtr obj);
+    [LibraryImport(GObjectLib, EntryPoint = "g_object_ref")]
+    public static partial IntPtr g_object_ref(IntPtr obj);
 
-    [DllImport(GObjectLib, EntryPoint = "g_object_unref")]
-    public static extern void g_object_unref(IntPtr obj);
+    [LibraryImport(GObjectLib, EntryPoint = "g_object_unref")]
+    public static partial void g_object_unref(IntPtr obj);
 
-    [DllImport(GObjectLib, EntryPoint = "g_signal_connect_data")]
-    private static extern ulong g_signal_connect_data(
+    [LibraryImport(GObjectLib, EntryPoint = "g_signal_connect_data")]
+    private static partial ulong g_signal_connect_data(
         IntPtr instance,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string detailedSignal,
         IntPtr handler,
@@ -52,39 +52,39 @@ internal static class WebKit2Native
         IntPtr destroyData,
         uint connectFlags);
 
-    [DllImport(GObjectLib, EntryPoint = "g_signal_handler_disconnect")]
-    private static extern void g_signal_handler_disconnect(IntPtr instance, ulong handlerId);
+    [LibraryImport(GObjectLib, EntryPoint = "g_signal_handler_disconnect")]
+    private static partial void g_signal_handler_disconnect(IntPtr instance, ulong handlerId);
 
-    [DllImport(GLibLib, EntryPoint = "g_error_free")]
-    private static extern void g_error_free(IntPtr error);
+    [LibraryImport(GLibLib, EntryPoint = "g_error_free")]
+    private static partial void g_error_free(IntPtr error);
 
     // ==================== GLib / Gio ====================
 
-    [DllImport(GLibLib, EntryPoint = "g_free")]
-    private static extern void g_free(IntPtr mem);
+    [LibraryImport(GLibLib, EntryPoint = "g_free")]
+    private static partial void g_free(IntPtr mem);
 
-    [DllImport(GLibLib, EntryPoint = "g_bytes_new")]
-    private static extern IntPtr g_bytes_new(byte[] data, nuint len);
+    [LibraryImport(GLibLib, EntryPoint = "g_bytes_new")]
+    private static partial IntPtr g_bytes_new(byte[] data, nuint len);
 
-    [DllImport(GLibLib, EntryPoint = "g_bytes_unref")]
-    private static extern void g_bytes_unref(IntPtr bytes);
+    [LibraryImport(GLibLib, EntryPoint = "g_bytes_unref")]
+    private static partial void g_bytes_unref(IntPtr bytes);
 
-    [DllImport(GioLib, EntryPoint = "g_memory_input_stream_new_from_bytes")]
-    private static extern IntPtr g_memory_input_stream_new_from_bytes(IntPtr bytes);
+    [LibraryImport(GioLib, EntryPoint = "g_memory_input_stream_new_from_bytes")]
+    private static partial IntPtr g_memory_input_stream_new_from_bytes(IntPtr bytes);
 
     // ==================== WebKit2 4.1 ====================
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_web_view_new")]
-    private static extern IntPtr webkit_web_view_new();
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_web_view_new")]
+    private static partial IntPtr webkit_web_view_new();
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_web_view_load_uri")]
-    private static extern void webkit_web_view_load_uri(IntPtr view, [MarshalAs(UnmanagedType.LPUTF8Str)] string uri);
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_web_view_load_uri")]
+    private static partial void webkit_web_view_load_uri(IntPtr view, [MarshalAs(UnmanagedType.LPUTF8Str)] string uri);
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_web_view_get_user_content_manager")]
-    private static extern IntPtr webkit_web_view_get_user_content_manager(IntPtr view);
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_web_view_get_user_content_manager")]
+    private static partial IntPtr webkit_web_view_get_user_content_manager(IntPtr view);
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_web_view_evaluate_javascript")]
-    private static extern void webkit_web_view_evaluate_javascript(
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_web_view_evaluate_javascript")]
+    private static partial void webkit_web_view_evaluate_javascript(
         IntPtr view,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string script,
         nint length,
@@ -94,48 +94,50 @@ internal static class WebKit2Native
         IntPtr callback,
         IntPtr userData);
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_web_view_evaluate_javascript_finish")]
-    private static extern IntPtr webkit_web_view_evaluate_javascript_finish(IntPtr view, IntPtr result, out IntPtr error);
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_web_view_evaluate_javascript_finish")]
+    private static partial IntPtr webkit_web_view_evaluate_javascript_finish(IntPtr view, IntPtr result, out IntPtr error);
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_web_context_get_default")]
-    private static extern IntPtr webkit_web_context_get_default();
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_web_context_get_default")]
+    private static partial IntPtr webkit_web_context_get_default();
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_web_context_register_uri_scheme")]
-    private static extern void webkit_web_context_register_uri_scheme(
+    // LibraryImport 不支持回调委托参数（SYSLIB1051），改 IntPtr + GetFunctionPointerForDelegate；
+    // 委托实例由调用方静态字段保活（LinuxWindow._schemeCallback）。
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_web_context_register_uri_scheme")]
+    private static partial void webkit_web_context_register_uri_scheme(
         IntPtr context,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string scheme,
-        WebKitUriSchemeRequestCallback callback,
+        IntPtr callback,
         IntPtr userData,
         IntPtr destroyNotify);
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_user_content_manager_register_script_message_handler")]
-    private static extern int webkit_user_content_manager_register_script_message_handler(
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_user_content_manager_register_script_message_handler")]
+    private static partial int webkit_user_content_manager_register_script_message_handler(
         IntPtr manager,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_uri_scheme_request_get_uri")]
-    private static extern IntPtr webkit_uri_scheme_request_get_uri(IntPtr request);
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_uri_scheme_request_get_uri")]
+    private static partial IntPtr webkit_uri_scheme_request_get_uri(IntPtr request);
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_uri_scheme_request_get_web_view")]
-    private static extern IntPtr webkit_uri_scheme_request_get_web_view(IntPtr request);
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_uri_scheme_request_get_web_view")]
+    private static partial IntPtr webkit_uri_scheme_request_get_web_view(IntPtr request);
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_uri_scheme_request_finish")]
-    private static extern void webkit_uri_scheme_request_finish(
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_uri_scheme_request_finish")]
+    private static partial void webkit_uri_scheme_request_finish(
         IntPtr request,
         IntPtr stream,
         long streamLength,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string contentType);
 
-    [DllImport(WebKitLib, EntryPoint = "webkit_javascript_result_get_js_value")]
-    private static extern IntPtr webkit_javascript_result_get_js_value(IntPtr jsResult);
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_javascript_result_get_js_value")]
+    private static partial IntPtr webkit_javascript_result_get_js_value(IntPtr jsResult);
 
     // ==================== JavaScriptCore 4.1 ====================
 
-    [DllImport(JavaScriptCoreLib, EntryPoint = "jsc_value_to_json")]
-    private static extern IntPtr jsc_value_to_json(IntPtr value, uint indentation);
+    [LibraryImport(JavaScriptCoreLib, EntryPoint = "jsc_value_to_json")]
+    private static partial IntPtr jsc_value_to_json(IntPtr value, uint indentation);
 
-    [DllImport(JavaScriptCoreLib, EntryPoint = "jsc_value_to_string")]
-    private static extern IntPtr jsc_value_to_string(IntPtr value);
+    [LibraryImport(JavaScriptCoreLib, EntryPoint = "jsc_value_to_string")]
+    private static partial IntPtr jsc_value_to_string(IntPtr value);
 
     // ==================== 回调委托（须保活，见下方静态字段） ====================
 
@@ -194,12 +196,13 @@ internal static class WebKit2Native
     public static void RegisterScriptMessageHandler(IntPtr view, string name)
     {
         var ok = webkit_user_content_manager_register_script_message_handler(GetUserContentManager(view), name);
-        Log.Debug($"register_script_message_handler({name}) = {ok}"); // 0 表示注册失败（Debug 日志）
+        WebWindowLog.Debug($"register_script_message_handler({name}) = {ok}"); // 0 表示注册失败（Debug 日志）
     }
 
     /// <summary>在共享默认 WebContext 上注册自定义 scheme。回调委托必须保活（由调用方静态持有）。</summary>
     public static void RegisterUriScheme(string scheme, WebKitUriSchemeRequestCallback callback)
-        => webkit_web_context_register_uri_scheme(webkit_web_context_get_default(), scheme, callback, IntPtr.Zero, IntPtr.Zero);
+        => webkit_web_context_register_uri_scheme(webkit_web_context_get_default(), scheme,
+            Marshal.GetFunctionPointerForDelegate(callback), IntPtr.Zero, IntPtr.Zero);
 
     /// <summary>连接 WebKit 信号到托管回调。data 是调用方预先分配的 GCHandle（由调用方释放）；
     /// handler 委托必须被强引用保活。detail 支持 "signal::detail"。</summary>
@@ -306,7 +309,7 @@ internal static class WebKit2Native
         {
             if (!_liveViews.Contains(sourceObject))
             {
-                Log.Debug("evaluate_javascript 跳过：窗口已关闭，WebView 已销毁");
+                WebWindowLog.Debug("evaluate_javascript 跳过：窗口已关闭，WebView 已销毁");
                 tcs.TrySetException(new InvalidOperationException("窗口已关闭，WebView 已销毁。"));
                 return;
             }
@@ -316,7 +319,7 @@ internal static class WebKit2Native
         if (error != IntPtr.Zero)
         {
             var message = ReadAndFreeGError(error);
-            Log.Debug($"evaluate_javascript error: {message}");
+            WebWindowLog.Debug($"evaluate_javascript error: {message}");
             tcs.TrySetException(new InvalidOperationException(message));
             return;
         }

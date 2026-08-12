@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using WebWindowUI.Core;
 
-namespace WebWindowUI.Windows;
+namespace WebWindowUI.Platforms.Windows;
 
 /// <summary>
 /// 平台程序集自注册：入口包 <see cref="WebWindowUI.Platform.EnsureRegistered"/>（消费方 Main 首行调用）

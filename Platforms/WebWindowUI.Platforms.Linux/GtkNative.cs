@@ -10,39 +10,39 @@ namespace WebWindowUI.Linux;
 ///  - <see cref="SetChild"/> 用 gtk_container_add：收 WebView 的浮点引用（GTK3），窗口接管一个引用；
 ///  - 窗口句柄生命周期由 <see cref="GtkWindowHost"/> 管理（含 destroy 信号路由与释放）。
 /// </summary>
-internal static class GtkNative
+internal static partial class GtkNative
 {
     private const string GtkLib = "libgtk-3.so.0";
 
     // GtkWindowType 枚举：GTK_WINDOW_TOPLEVEL = 0
     private const int GtkWindowTopLevel = 0;
 
-    [DllImport(GtkLib, EntryPoint = "gtk_init")]
-    private static extern void gtk_init(IntPtr argc, IntPtr argv);
+    [LibraryImport(GtkLib, EntryPoint = "gtk_init")]
+    private static partial void gtk_init(IntPtr argc, IntPtr argv);
 
-    [DllImport(GtkLib, EntryPoint = "gtk_window_new")]
-    private static extern IntPtr gtk_window_new(int type);
+    [LibraryImport(GtkLib, EntryPoint = "gtk_window_new")]
+    private static partial IntPtr gtk_window_new(int type);
 
-    [DllImport(GtkLib, EntryPoint = "gtk_window_set_title")]
-    private static extern void gtk_window_set_title(IntPtr window, [MarshalAs(UnmanagedType.LPUTF8Str)] string title);
+    [LibraryImport(GtkLib, EntryPoint = "gtk_window_set_title")]
+    private static partial void gtk_window_set_title(IntPtr window, [MarshalAs(UnmanagedType.LPUTF8Str)] string title);
 
-    [DllImport(GtkLib, EntryPoint = "gtk_window_set_default_size")]
-    private static extern void gtk_window_set_default_size(IntPtr window, int width, int height);
+    [LibraryImport(GtkLib, EntryPoint = "gtk_window_set_default_size")]
+    private static partial void gtk_window_set_default_size(IntPtr window, int width, int height);
 
-    [DllImport(GtkLib, EntryPoint = "gtk_container_add")]
-    private static extern void gtk_container_add(IntPtr container, IntPtr child);
+    [LibraryImport(GtkLib, EntryPoint = "gtk_container_add")]
+    private static partial void gtk_container_add(IntPtr container, IntPtr child);
 
-    [DllImport(GtkLib, EntryPoint = "gtk_widget_show_all")]
-    private static extern void gtk_widget_show_all(IntPtr widget);
+    [LibraryImport(GtkLib, EntryPoint = "gtk_widget_show_all")]
+    private static partial void gtk_widget_show_all(IntPtr widget);
 
-    [DllImport(GtkLib, EntryPoint = "gtk_widget_hide")]
-    private static extern void gtk_widget_hide(IntPtr widget);
+    [LibraryImport(GtkLib, EntryPoint = "gtk_widget_hide")]
+    private static partial void gtk_widget_hide(IntPtr widget);
 
-    [DllImport(GtkLib, EntryPoint = "gtk_window_close")]
-    private static extern void gtk_window_close(IntPtr window);
+    [LibraryImport(GtkLib, EntryPoint = "gtk_window_close")]
+    private static partial void gtk_window_close(IntPtr window);
 
-    [DllImport(GtkLib, EntryPoint = "gtk_window_present")]
-    private static extern void gtk_window_present(IntPtr window);
+    [LibraryImport(GtkLib, EntryPoint = "gtk_window_present")]
+    private static partial void gtk_window_present(IntPtr window);
 
     /// <summary>初始化 GTK（gtk_init(null, null)：不处理命令行参数）。创建任何 GTK 控件前必须调用一次。</summary>
     public static void Initialize() => gtk_init(IntPtr.Zero, IntPtr.Zero);

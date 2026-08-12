@@ -1,7 +1,7 @@
 #if WINDOWS
 using System.Collections.Concurrent;
 using WebWindowUI.Natives.Windows;
-using WebWindowUI.Windows;
+using WebWindowUI.Platforms.Windows;
 
 namespace WebWindowUI.Tests.Platform.Support;
 

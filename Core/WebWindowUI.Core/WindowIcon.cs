@@ -1,26 +1,39 @@
 namespace WebWindowUI.Core;
 
 /// <summary>
-/// 窗口图标的来源：一个 .ico 文件路径，或内存中的图标数据流。
-/// 平台实现负责加载并应用到窗口（标题栏 + 任务栏）。
+/// 窗口图标
 /// </summary>
 public sealed class WindowIcon
 {
-    private WindowIcon(string? filePath, Stream? stream)
+    /// <summary>
+    /// 图标数据流
+    /// </summary>
+    public MemoryStream Stream { get; } = new();
+
+    /// <summary>
+    /// 从文件创建窗口图标
+    /// </summary>
+    /// <param name="path">文件路径</param>
+    /// <returns>窗口图标</returns>
+    public static WindowIcon FromFile(string path)
     {
-        FilePath = filePath;
-        Stream = stream;
+        using var file = File.OpenRead(path);
+
+        return FromStream(file);
     }
 
-    /// <summary>图标文件路径（Windows 上为 .ico）。</summary>
-    public string? FilePath { get; }
+    /// <summary>
+    /// 从数据流创建窗口图标
+    /// </summary>
+    /// <param name="stream">数据流</param>
+    /// <returns>窗口图标</returns>
+    public static WindowIcon FromStream(Stream stream)
+    {
+        var icon = new WindowIcon();
 
-    /// <summary>图标数据流（如 .ico 文件的字节）。</summary>
-    public Stream? Stream { get; }
+        stream.CopyTo(icon.Stream);
+        icon.Stream.Seek(0, SeekOrigin.Begin);
 
-    /// <summary>从 .ico 文件创建窗口图标。</summary>
-    public static WindowIcon FromFile(string path) => new(path, null);
-
-    /// <summary>从图标数据流创建窗口图标。</summary>
-    public static WindowIcon FromStream(Stream stream) => new(null, stream);
+        return icon;
+    }
 }

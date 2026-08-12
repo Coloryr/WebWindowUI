@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WebWindowUI.Sample.Items;
 using WebWindowUI.Core;
+using WebWindowUI.Core.Observable;
 
 namespace WebWindowUI.Sample;
 
@@ -28,7 +29,7 @@ public partial class NestedListModel : WebWindowModel
 
     /// <summary>元素列表：typed repeated（List&lt;NestedListItemModel&gt;），前端强类型数组。
     /// 显式 get-only 属性（不加 [ObservableProperty]）：前端整列回写经生成器原地清空重建。</summary>
-    public ObservableCollection<NestedListItemModel> Items { get; } = new();
+    public ObservableCollection<NestedListItemModel> Items { get; } = [];
 
     /// <summary>ObservableDictionary（字典原地增删自动推送）：.NET 侧原地改自动推前端，前端原地改回写 .NET。</summary>
     public ObservableDictionary<string, int> Counts { get; } = new()
@@ -47,8 +48,8 @@ public partial class NestedListModel : WebWindowModel
     [RelayCommand]
     public void Bump(string key)
     {
-        if (Counts.ContainsKey(key))
-            Counts[key] = Counts[key] + 1;
+        if (Counts.TryGetValue(key, out int value))
+            Counts[key] = value + 1;
     }
 
     public NestedListModel()
