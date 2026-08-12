@@ -10,8 +10,11 @@ namespace WebWindowUI.Platforms.Linux;
 ///
 /// 所有权约定（来自 GIR / WebKitGTK 文档）：
 ///  - <see cref="webkit_uri_scheme_request_get_uri"/> 返回借用字符串，不要释放；
-///  - 完成 scheme 请求走 WebKitURISchemeResponse（≥2.36，能带 HTTP 头）：响应对象以构造属性 ref
-///    stream 与 headers，finish_with_response 后调用方 unref 自己的引用（WebKit 内部已各自 ref）；
+///  - 完成 scheme 请求走 WebKitURISchemeResponse（≥2.36，能带 HTTP 头）：response_new 以构造属性 ref
+///    stream、set_http_headers 以 (transfer full) 接管 headers 所有权（不 ref，调用方不得再释放）、
+///    finish_with_response 对 response 也是 ref；故调用方各自 unref stream/response，headers 交出后不碰；
+///  - set_http_headers 的 SoupMessageHeaders 必须与 WebKitGTK 自身链接的 libsoup 同版本（soup2/soup3
+///    结构体不兼容、释放函数不同，错配即崩溃），初始化时按 /proc/self/maps 探测，见 libsoup 节；
 ///  - GMemoryInputStream 持有其 GBytes 的引用，故 g_bytes_new 后由 stream 接管、我们释放自己的引用；
 ///  - jsc_value_to_json / jsc_value_to_string 返回新分配字符串，须 g_free；
 ///  - GError 无 g_error_get_message() API，message 按公开结构体字段偏移直接读（见 <see cref="ReadAndFreeGError"/>）；
@@ -25,7 +28,8 @@ internal static partial class WebKit2Native
     private const string GObjectLib = "libgobject-2.0.so.0";
     private const string GLibLib = "libglib-2.0.so.0";
     private const string GioLib = "libgio-2.0.so.0";
-    private const string SoupLib = "libsoup-3.0.so.0"; // libsoup3（WebKitGTK ≥ 2.42 走 soup3，构造 scheme 响应头）
+    private const string SoupLib3 = "libsoup-3.0.so.0"; // soup3（WebKitGTK ≥ 2.42 / Ubuntu 24.04 等）
+    private const string SoupLib2 = "libsoup-2.4.so.1"; // soup2（WebKitGTK < 2.42 / Ubuntu 22.04、Debian 12 等）
 
     /// <summary>
     /// WebKitLoadEvent 枚举（WEBKIT_LOAD_*）。
@@ -153,23 +157,52 @@ internal static partial class WebKit2Native
     [LibraryImport(WebKitLib, EntryPoint = "webkit_javascript_result_get_js_value")]
     private static partial IntPtr webkit_javascript_result_get_js_value(IntPtr jsResult);
 
-    // ==================== libsoup 3（构造 WebKitURISchemeResponse 的 HTTP 头） ====================
+    // ==================== libsoup（构造 WebKitURISchemeResponse 的 HTTP 头） ====================
+
+    // 关键坑（durable）一：set_http_headers 是 (transfer full)——以 GUniquePtr 接管 headers 所有权、不 ref，
+    // 调用方传完绝不能自己再 unref/free（旧实现这么干 → response 持有的指针被提前释放，WebKit 异步读回调
+    // 迭代它 + 析构时 GUniquePtr 再释放一次 → double-free/UAF 段错误，且旧 finish 不碰 headers 所以「换旧
+    // API 就正常」）。headers 交出去后所有权归 WebKit 侧。
+    //
+    // 关键坑（durable）二：set_http_headers 期望的 SoupMessageHeaders 必须与 WebKitGTK 自身链接的 libsoup
+    // 同版本。webkit2gtk-4.1 的 libsoup 依赖随发行版/版本而异：
+    //   WebKitGTK < 2.42（Ubuntu 22.04、Debian 12 等）→ libsoup-2.4.so.1（soup2）
+    //   WebKitGTK ≥ 2.42（Ubuntu 24.04 等）→ libsoup-3.0.so.0（soup3）
+    // soup2/soup3 的 SoupMessageHeaders 内部布局不兼容、释放函数不同（unref vs free）：headers 最终由
+    // WebKit 侧按它链接的 soup 释放，我们用错版本构造 → WebKit 按错结构体迭代/释放 → 崩溃。故初始化时扫
+    // /proc/self/maps 探测（libwebkit2gtk 加载后其 DT_NEEDED 依赖含 libsoup 已映射进进程），用同版 API
+    // 构造。两个 LibraryImport 都惰性加载，只调用被选中的那个。
 
     // SoupMessageHeadersType 枚举：SOUP_MESSAGE_HEADERS_REQUEST = 0 / SOUP_MESSAGE_HEADERS_RESPONSE = 1
     private const int SoupMessageHeadersResponse = 1;
 
-    [LibraryImport(SoupLib, EntryPoint = "soup_message_headers_new")]
-    private static partial IntPtr soup_message_headers_new(int type);
+    private enum SoupVersion { Soup3, Soup2 }
+    private static SoupVersion _soupVersion = SoupVersion.Soup3;
 
-    [LibraryImport(SoupLib, EntryPoint = "soup_message_headers_append")]
-    private static partial void soup_message_headers_append(
+    // soup3 是引用计数 boxed 类型（soup2 是 soup_message_headers_free，勿混用）
+    [LibraryImport(SoupLib3, EntryPoint = "soup_message_headers_new")]
+    private static partial IntPtr soup3_message_headers_new(int type);
+
+    [LibraryImport(SoupLib3, EntryPoint = "soup_message_headers_append")]
+    private static partial void soup3_message_headers_append(
         IntPtr headers,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
         [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
 
-    // soup3 是引用计数 boxed 类型（soup2 是 soup_message_headers_free，勿混用）
-    [LibraryImport(SoupLib, EntryPoint = "soup_message_headers_unref")]
-    private static partial void soup_message_headers_unref(IntPtr headers);
+    [LibraryImport(SoupLib3, EntryPoint = "soup_message_headers_unref")]
+    private static partial void soup3_message_headers_unref(IntPtr headers);
+
+    [LibraryImport(SoupLib2, EntryPoint = "soup_message_headers_new")]
+    private static partial IntPtr soup2_message_headers_new(int type);
+
+    [LibraryImport(SoupLib2, EntryPoint = "soup_message_headers_append")]
+    private static partial void soup2_message_headers_append(
+        IntPtr headers,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
+
+    [LibraryImport(SoupLib2, EntryPoint = "soup_message_headers_free")]
+    private static partial void soup2_message_headers_free(IntPtr headers);
 
     // ==================== JavaScriptCore 4.1 ====================
 
@@ -209,6 +242,7 @@ internal static partial class WebKit2Native
     public static void Initialize()
     {
         webkit_web_context_get_default();
+        DetectSoupVersion(); // 探测 WebKitGTK 链接的 libsoup，之后构造响应头按同版 API
     }
 
     /// <summary>
@@ -312,8 +346,8 @@ internal static partial class WebKit2Native
     /// 以字节数据完成 scheme 请求，并回 Access-Control-Allow-Origin: *（跨源 appdata fetch 必需，
     /// 镜像 Windows 的 ResourceHeaders）与 Cache-Control（有 hash 资产长缓存 / 其余 no-store）。
     /// 走 WebKitGTK ≥ 2.36 的 WebKitURISchemeResponse（旧 finish 只能带 content-type，无法设响应头）。
-    /// 所有权：response 以构造属性 ref stream/headers，finish 后 WebKit 内部已 ref，本方法逐一
-    /// unref 自己的引用、不保留任何状态。
+    /// 所有权：response_new ref stream、set_http_headers (transfer full) 接管 headers（不得再释放）、
+    /// finish_with_response ref response——本方法只 unref stream 与 response，headers 交出去即不碰。
     /// </summary>
     public static void FinishSchemeRequest(IntPtr request, byte[] data, string contentType, string? cacheControl)
     {
@@ -333,11 +367,12 @@ internal static partial class WebKit2Native
 
             webkit_uri_scheme_response_set_content_type(response, contentType);
             headers = BuildResponseHeaders(cacheControl);
-            webkit_uri_scheme_response_set_http_headers(response, headers); // response 持有 headers 引用
-            soup_message_headers_unref(headers);
-            headers = IntPtr.Zero;
+            // (transfer full)：set_http_headers 以 GUniquePtr 接管 headers 所有权（不 ref），
+            // 之后由 WebKit 按它链接的 libsoup 释放——调用方绝不能再 unref/free（否则 double-free UAF）。
+            webkit_uri_scheme_response_set_http_headers(response, headers);
+            headers = IntPtr.Zero; // 所有权已转移，finally 不再释放
 
-            webkit_uri_scheme_request_finish_with_response(request, response); // WebKit 已 ref response
+            webkit_uri_scheme_request_finish_with_response(request, response); // GRefPtr 赋值 ref response
             g_object_unref(response);
             response = IntPtr.Zero;
         }
@@ -348,7 +383,7 @@ internal static partial class WebKit2Native
             if (stream != IntPtr.Zero)
                 g_object_unref(stream);
             if (headers != IntPtr.Zero)
-                soup_message_headers_unref(headers);
+                FreeSoupHeaders(headers);
             if (response != IntPtr.Zero)
                 g_object_unref(response);
         }
@@ -356,14 +391,33 @@ internal static partial class WebKit2Native
 
     /// <summary>
     /// 构造响应头容器：Access-Control-Allow-Origin: *（跨源数据通道契约，全平台一致）+ 可选 Cache-Control。
+    /// 按探测到的 libsoup 版本走同版 API（见 libsoup 节的 soup2/soup3 错配坑）。
     /// </summary>
     private static IntPtr BuildResponseHeaders(string? cacheControl)
     {
-        var headers = soup_message_headers_new(SoupMessageHeadersResponse);
-        soup_message_headers_append(headers, "Access-Control-Allow-Origin", "*");
+        var headers = _soupVersion == SoupVersion.Soup2
+            ? soup2_message_headers_new(SoupMessageHeadersResponse)
+            : soup3_message_headers_new(SoupMessageHeadersResponse);
+        AppendHeader(headers, "Access-Control-Allow-Origin", "*");
         if (!string.IsNullOrEmpty(cacheControl))
-            soup_message_headers_append(headers, "Cache-Control", cacheControl);
+            AppendHeader(headers, "Cache-Control", cacheControl);
         return headers;
+    }
+
+    private static void AppendHeader(IntPtr headers, string name, string value)
+    {
+        if (_soupVersion == SoupVersion.Soup2)
+            soup2_message_headers_append(headers, name, value);
+        else
+            soup3_message_headers_append(headers, name, value);
+    }
+
+    private static void FreeSoupHeaders(IntPtr headers)
+    {
+        if (_soupVersion == SoupVersion.Soup2)
+            soup2_message_headers_free(headers);
+        else
+            soup3_message_headers_unref(headers);
     }
 
     /// <summary>
@@ -440,5 +494,25 @@ internal static partial class WebKit2Native
         var text = msg == IntPtr.Zero ? "WebKit 错误" : Marshal.PtrToStringUTF8(msg) ?? "WebKit 错误";
         g_error_free(error);
         return text;
+    }
+
+    /// <summary>
+    /// 探测 WebKitGTK 实际链接的 libsoup 版本。libwebkit2gtk 一经加载，其 DT_NEEDED 依赖（含 libsoup）
+    /// 即映射进进程，扫 /proc/self/maps 即可（必须在 <see cref="Initialize"/> 首次 WebKit 调用之后）。
+    /// 两者同时在 maps（罕见，默认 webkit 走 soup3）时按 soup3，与旧行为一致。
+    /// </summary>
+    private static void DetectSoupVersion()
+    {
+        try
+        {
+            var text = File.ReadAllText("/proc/self/maps");
+            var hasSoup2 = text.Contains("libsoup-2.4", StringComparison.Ordinal);
+            var hasSoup3 = text.Contains("libsoup-3.0", StringComparison.Ordinal);
+            _soupVersion = hasSoup2 && !hasSoup3 ? SoupVersion.Soup2 : SoupVersion.Soup3;
+        }
+        catch
+        {
+            _soupVersion = SoupVersion.Soup3; // /proc 不可读等极端情况，按默认
+        }
     }
 }
