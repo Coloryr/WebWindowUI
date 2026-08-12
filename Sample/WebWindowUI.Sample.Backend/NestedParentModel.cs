@@ -13,15 +13,21 @@ namespace WebWindowUI.Sample;
 /// </summary>
 public partial class NestedParentModel : WebWindowModel
 {
-    /// <summary>父窗口标题（普通字段，双向绑定）。</summary>
+    /// <summary>
+    /// 父窗口标题（普通字段，双向绑定）。
+    /// </summary>
     [ObservableProperty]
     public partial string Title { get; set; } = "模型嵌套";
 
-    /// <summary>嵌套模型属性：单 POCO 属性，descriptor 里是 ModelValue 兜底（序数键，只读展示）。</summary>
+    /// <summary>
+    /// 嵌套模型属性：单 POCO 属性，descriptor 里是 ModelValue 兜底（序数键，只读展示）。
+    /// </summary>
     [ObservableProperty]
     public partial NestedDetailModel? Detail { get; set; }
 
-    /// <summary>打开嵌套详情子窗口：子窗口绑定同一个 Detail 实例。</summary>
+    /// <summary>
+    /// 打开嵌套详情子窗口：子窗口绑定同一个 Detail 实例。
+    /// </summary>
     public event Action? OpenDetailRequested;
 
     [RelayCommand]

@@ -49,7 +49,9 @@ internal sealed class StaThreadPump
         // 注意：不能在这里等 _ready —— 见类注释的 loader lock 说明。
     }
 
-    /// <summary>在泵线程执行一段 async 工作；返回的 Task 由 xUnit 线程 await。</summary>
+    /// <summary>
+    /// 在泵线程执行一段 async 工作；返回的 Task 由 xUnit 线程 await。
+    /// </summary>
     public Task RunAsync(Func<Task> body)
     {
         WaitReady();
@@ -76,7 +78,9 @@ internal sealed class StaThreadPump
         return tcs.Task;
     }
 
-    /// <summary>确保泵已初始化完成（消息窗口 + SynchronizationContext 已绑定泵线程）。</summary>
+    /// <summary>
+    /// 确保泵已初始化完成（消息窗口 + SynchronizationContext 已绑定泵线程）。
+    /// </summary>
     private void WaitReady()
     {
         if (_ready.IsSet)

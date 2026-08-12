@@ -14,7 +14,7 @@ internal static class ResourceHeaders
         => IsHashedAsset(relative) ? "public, max-age=31536000, immutable" : "no-store";
 
     /// <summary>
-    /// CORS 跨源头（含 \r\n，可直接拼进响应 header 字符串）。app:// fetch appbin:// 属跨源，
+    /// CORS 跨源头（含 \r\n，可直接拼进响应 header 字符串）。app:// fetch appdata:// 属跨源，
     /// 缺 ACAO 则 fetch 被拦；同源场景无副作用，故全平台无条件回 *。
     /// </summary>
     public const string AccessControlAllowOrigin = "Access-Control-Allow-Origin: *\r\n";

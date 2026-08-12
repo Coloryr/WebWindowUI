@@ -23,7 +23,9 @@ namespace WebWindowUI.Sample;
 /// </summary>
 public partial class NestedListModel : WebWindowModel
 {
-    /// <summary>窗口标题（普通字段，双向绑定）。</summary>
+    /// <summary>
+    /// 窗口标题（普通字段，双向绑定）。
+    /// </summary>
     [ObservableProperty]
     public partial string Title { get; set; } = "List<>嵌套";
 
@@ -31,20 +33,26 @@ public partial class NestedListModel : WebWindowModel
     /// 显式 get-only 属性（不加 [ObservableProperty]）：前端整列回写经生成器原地清空重建。</summary>
     public ObservableCollection<NestedListItemModel> Items { get; } = [];
 
-    /// <summary>ObservableDictionary（字典原地增删自动推送）：.NET 侧原地改自动推前端，前端原地改回写 .NET。</summary>
+    /// <summary>
+    /// ObservableDictionary（字典原地增删自动推送）：.NET 侧原地改自动推前端，前端原地改回写 .NET。
+    /// </summary>
     public ObservableDictionary<string, int> Counts { get; } = new()
     {
         ["items"] = 3,
         ["tags"] = 4,
     };
 
-    /// <summary>打开列表项详情子窗口：携带被点元素的索引。</summary>
+    /// <summary>
+    /// 打开列表项详情子窗口：携带被点元素的索引。
+    /// </summary>
     public event Action<int>? OpenItemRequested;
 
     [RelayCommand]
     public void OpenItem(int index) => OpenItemRequested?.Invoke(index);
 
-    /// <summary>把指定统计项 +1（演示 .NET 侧原地改字典自动推前端）。</summary>
+    /// <summary>
+    /// 把指定统计项 +1（演示 .NET 侧原地改字典自动推前端）。
+    /// </summary>
     [RelayCommand]
     public void Bump(string key)
     {
@@ -73,6 +81,8 @@ public partial class NestedListModel : WebWindowModel
         }
     }
 
-    /// <summary>子窗口（或 .NET 侧）改了元素 → 重推 Items（元素内部 Tags 增删也经同一 handler 推送）。</summary>
+    /// <summary>
+    /// 子窗口（或 .NET 侧）改了元素 → 重推 Items（元素内部 Tags 增删也经同一 handler 推送）。
+    /// </summary>
     private void OnItemChanged(object? sender, EventArgs e) => OnPropertyChanged(nameof(Items));
 }

@@ -20,14 +20,20 @@ public partial class ImageGalleryModel : WebWindowModel
 
     private readonly string _storeDir;
 
-    /// <summary>图片列表：get-only ObservableCollection（免 [ObservableProperty]），原地增删自动推前端。</summary>
+    /// <summary>
+    /// 图片列表：get-only ObservableCollection（免 [ObservableProperty]），原地增删自动推前端。
+    /// </summary>
     public ObservableCollection<ImageItemModel> Items { get; } = new();
 
-    /// <summary>状态提示（如「已保存 xxx.png（12 KB）」）。</summary>
+    /// <summary>
+    /// 状态提示（如「已保存 xxx.png（12 KB）」）。
+    /// </summary>
     [ObservableProperty]
     public partial string Status { get; set; } = "就绪";
 
-    /// <summary>存储目录（%LocalAppData%\WebWindowUI.Demo.ImageGallery\images）。</summary>
+    /// <summary>
+    /// 存储目录（%LocalAppData%\WebWindowUI.Demo.ImageGallery\images）。
+    /// </summary>
     [ObservableProperty]
     public partial string StoreDir { get; set; } = "";
 
@@ -92,7 +98,9 @@ public partial class ImageGalleryModel : WebWindowModel
 #endif
     }
 
-    /// <summary>两种上传模式共用的落盘逻辑：字节写盘 → 新条目插列表头 → 状态含源路径。</summary>
+    /// <summary>
+    /// 两种上传模式共用的落盘逻辑：字节写盘 → 新条目插列表头 → 状态含源路径。
+    /// </summary>
     private void StoreBytes(string name, byte[] data, string srcPath)
     {
         try
@@ -117,7 +125,9 @@ public partial class ImageGalleryModel : WebWindowModel
         }
     }
 
-    /// <summary>删除图片：前端传列表下标 → 命令 → 删磁盘文件 + 移除条目（补丁差量推送）。</summary>
+    /// <summary>
+    /// 删除图片：前端传列表下标 → 命令 → 删磁盘文件 + 移除条目（补丁差量推送）。
+    /// </summary>
     [RelayCommand]
     public void Remove(int index)
     {
@@ -136,7 +146,9 @@ public partial class ImageGalleryModel : WebWindowModel
         Status = $"已删除 {item.Name}";
     }
 
-    /// <summary>重新扫描存储目录（如外部放入图片后点刷新，后端重新发送图片）。</summary>
+    /// <summary>
+    /// 重新扫描存储目录（如外部放入图片后点刷新，后端重新发送图片）。
+    /// </summary>
     [RelayCommand]
     public void Refresh()
     {
@@ -170,7 +182,9 @@ public partial class ImageGalleryModel : WebWindowModel
         };
     }
 
-    /// <summary>文件名清洗：去掉路径分隔符与非法字符，防止写入越出存储目录。</summary>
+    /// <summary>
+    /// 文件名清洗：去掉路径分隔符与非法字符，防止写入越出存储目录。
+    /// </summary>
     private static string SanitizeFileName(string name)
     {
         string s = name.Trim();

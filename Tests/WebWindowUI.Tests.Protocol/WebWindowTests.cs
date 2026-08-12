@@ -3,7 +3,9 @@ using Xunit;
 
 namespace WebWindowUI.Tests;
 
-/// <summary>WebWindow 窗口模式的纯逻辑测试：窗口路径 → 首页地址推导（不创建窗口）。</summary>
+/// <summary>
+/// WebWindow 窗口模式的纯逻辑测试：窗口路径 → 首页地址推导（不创建窗口）。
+/// </summary>
 public class WebWindowTests
 {
     [Theory]

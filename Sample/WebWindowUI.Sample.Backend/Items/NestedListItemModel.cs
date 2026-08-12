@@ -13,23 +13,33 @@ namespace WebWindowUI.Sample.Items;
 /// </summary>
 public partial class NestedListItemModel : WebWindowModel
 {
-    /// <summary>标题（proto 字段号 1）。</summary>
+    /// <summary>
+    /// 标题（proto 字段号 1）。
+    /// </summary>
     [ObservableProperty]
     public partial string Title { get; set; } = "";
 
-    /// <summary>是否完成（proto 字段号 2）。</summary>
+    /// <summary>
+    /// 是否完成（proto 字段号 2）。
+    /// </summary>
     [ObservableProperty]
     public partial bool Done { get; set; }
 
-    /// <summary>优先级（proto 字段号 3）。</summary>
+    /// <summary>
+    /// 优先级（proto 字段号 3）。
+    /// </summary>
     [ObservableProperty]
     public partial int Priority { get; set; }
 
-    /// <summary>内层标签列表：typed repeated（嵌套 List&lt;Model&gt;，proto 字段号 4）。</summary>
+    /// <summary>
+    /// 内层标签列表：typed repeated（嵌套 List&lt;Model&gt;，proto 字段号 4）。
+    /// </summary>
     [ObservableProperty]
     public partial ObservableCollection<NestedItemTagModel> Tags { get; set; } = new();
 
-    /// <summary>内层单模型（ModelValue 兜底 / 序数键，proto 字段号 5，只读展示）。</summary>
+    /// <summary>
+    /// 内层单模型（ModelValue 兜底 / 序数键，proto 字段号 5，只读展示）。
+    /// </summary>
     [ObservableProperty]
     public partial NestedItemMetaModel? Meta { get; set; }
 }

@@ -10,19 +10,27 @@ namespace WebWindowUI.Demo.Monitor;
 /// </summary>
 public partial class MonitorSettingsModel : WebWindowModel
 {
-    /// <summary>采样间隔（毫秒）。</summary>
+    /// <summary>
+    /// 采样间隔（毫秒）。
+    /// </summary>
     [ObservableProperty]
     public partial int PollIntervalMs { get; set; } = 1000;
 
-    /// <summary>进程表最多显示条数。</summary>
+    /// <summary>
+    /// 进程表最多显示条数。
+    /// </summary>
     [ObservableProperty]
     public partial int MaxProcesses { get; set; } = 8;
 
-    /// <summary>是否显示进程表。</summary>
+    /// <summary>
+    /// 是否显示进程表。
+    /// </summary>
     [ObservableProperty]
     public partial bool ShowProcesses { get; set; } = true;
 
-    /// <summary>主题（light / dark）。</summary>
+    /// <summary>
+    /// 主题（light / dark）。
+    /// </summary>
     [ObservableProperty]
     public partial string Theme { get; set; } = "light";
 }

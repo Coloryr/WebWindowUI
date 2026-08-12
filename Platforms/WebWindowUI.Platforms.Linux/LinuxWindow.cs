@@ -8,24 +8,19 @@ namespace WebWindowUI.Platforms.Linux;
 /// WebKit 绑定是手写 P/Invoke（见 Native/WebKit2Native.cs），因 GirCore 只发布 WebKitGTK 6.0（GTK4）的绑定；
 /// GTK3 窗口壳也是手写（见 Native/GtkNative.cs + Native/GtkWindowHost.cs），因 GirCore 无 GTK3 绑定。
 /// 所有 WebView 共享默认 WebContext（webkit_web_context_get_default）——自定义 scheme 每进程注册一次，
-/// 请求回调按发起 WebView 指针经 <see cref="_windows"/> 分派回对应窗口。
+/// 窗口表在 <see cref="LinuxPlatform"/>（镜像 WindowsPlatform._windows），请求回调按发起 WebView 指针
+/// 经平台窗口表分派回对应窗口。
 ///
 /// 平台限制（与 Windows 有差异，README 也注明）：
 ///  - SetIcon 无操作：CSD/Wayland 不用 per-window 图标，只有主题图标（GTK3 虽有 gtk_window_set_icon 但不实现）。
-///  - 自定义 scheme 响应不设 Cache-Control：WebKitGTK 的 finish 只带 content-type（v1）。
+///  - 自定义 scheme 响应补 Access-Control-Allow-Origin:* 与 Cache-Control（镜像 Windows 的
+///    ResourceHeaders：hash 资产长缓存、其余 no-store；404 回 no-store）。请求完成走
+///    WebKitURISchemeResponse（≥2.36，能带 HTTP 头）。
 ///  - ExecuteScriptAsync 返回 JSC 值的 JSON 表示，与 WebView2 的 JSON 序列化对齐是 best-effort。
 /// </summary>
 public sealed class LinuxWindow : IWindowBackend
 {
     internal const string BridgeHandlerName = "wwui"; // 与前端桥 webwindowui-bridge 的 HANDLER_NAME 一致
-
-    // ---- 进程级共享状态 ----
-    private static readonly Dictionary<IntPtr, LinuxWindow> _windows = [];
-    private static readonly HashSet<string> _registeredSchemes = [];
-    private static readonly object _schemeLock = new();
-    // 保活：webkit_web_context_register_uri_scheme 的 C 回调只在调用期被 marshaller 生根，
-    // 注册本身是进程级的，委托实例必须由静态字段强引用存续。
-    private static readonly WebKit2Native.WebKitUriSchemeRequestCallback _schemeCallback = OnUriSchemeRequest;
 
     private readonly GtkWindowHost _window;
     private readonly IntPtr _webView;
@@ -33,7 +28,14 @@ public sealed class LinuxWindow : IWindowBackend
     private WebKit2SignalBridge? _signals;
     private bool _closed;
 
-    /// <summary>窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。</summary>
+    /// <summary>
+    /// 承载 WebView 的原生指针，作为窗口表（LinuxPlatform._windows）的键，镜像 Windows 的 Hwnd。
+    /// </summary>
+    internal IntPtr WebView => _webView;
+
+    /// <summary>
+    /// 窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。
+    /// </summary>
     public event Action? Closed;
 
     private LinuxWindow(GtkWindowHost window, IntPtr webView, WebWindowOptions options)
@@ -41,10 +43,12 @@ public sealed class LinuxWindow : IWindowBackend
         _window = window;
         _webView = webView;
         _options = options;
-        _windows[webView] = this;
+        LinuxPlatform.WindowOpen(this);
     }
 
-    /// <summary>创建并注册一个尚未显示的窗口。</summary>
+    /// <summary>
+    /// 创建并注册一个尚未显示的窗口。
+    /// </summary>
     public static LinuxWindow Create(WebWindowOptions options)
     {
         var w = new GtkWindowHost(options.Title, options.Width, options.Height);
@@ -52,17 +56,10 @@ public sealed class LinuxWindow : IWindowBackend
         var v = WebKit2Native.CreateWebView(); // webkit_web_view_new + 持有引用
         w.SetChild(v);                            // gtk_container_add，窗口接管一个引用
 
-        var window = new LinuxWindow(w, v, options);
-
-        // 自定义 scheme 每进程注册一次（默认 WebContext 跨窗口共享，register_uri_scheme 是 context 级）。
-        // WebWindowResource 单入口同时接管 app:// 与 appdata://，两个 scheme 都须挂处理器（镜像 Windows 的
-        // CoreWebView2CustomSchemeRegistration 注册 app + appdata）。
-        RegisterSchemeOnce(WebWindowResource.Scheme);
-        RegisterSchemeOnce(WebWindowResource.SchemeData);
-
-        // JS → native 通道：先连信号（含 script-message-received::wwui）再注册 handler，
-        // 避免「消息已到但 handler 未就绪」的竞态（WebKit 文档建议的连接顺序）。
-        window._signals = new WebKit2SignalBridge(v);
+        var window = new LinuxWindow(w, v, options)
+        {
+            _signals = new WebKit2SignalBridge(v)
+        };
         window._signals.Connect();
         window._signals.ScriptMessageReceived += window.OnScriptMessageReceived;
         window._signals.LoadChanged += window.OnLoadChanged;
@@ -73,15 +70,6 @@ public sealed class LinuxWindow : IWindowBackend
 
         WebWindowLog.Debug($"create window '{options.Title}' (view={v})");
         return window;
-    }
-
-    private static void RegisterSchemeOnce(string scheme)
-    {
-        lock (_schemeLock)
-        {
-            if (_registeredSchemes.Add(scheme))
-                WebKit2Native.RegisterUriScheme(scheme, _schemeCallback);
-        }
     }
 
     /// <summary>
@@ -98,10 +86,14 @@ public sealed class LinuxWindow : IWindowBackend
         });
     }
 
-    /// <summary>隐藏窗口（不关闭、不销毁）。</summary>
+    /// <summary>
+    /// 隐藏窗口（不关闭、不销毁）。
+    /// </summary>
     public void Hide() => RunOnUiThread(() => _window.Hide());
 
-    /// <summary>关闭窗口。gtk_window_close → 默认 close-request 处理器 destroy → OnDestroyed。</summary>
+    /// <summary>
+    /// 关闭窗口。gtk_window_close → 默认 close-request 处理器 destroy → OnDestroyed。
+    /// </summary>
     public void Close()
     {
         RunOnUiThread(() =>
@@ -112,13 +104,19 @@ public sealed class LinuxWindow : IWindowBackend
         });
     }
 
-    /// <summary>把窗口带到前台并聚焦。</summary>
+    /// <summary>
+    /// 把窗口带到前台并聚焦。
+    /// </summary>
     public void Activate() => RunOnUiThread(() => _window.Activate());
 
-    /// <summary>修改窗口标题（立即同步到标题栏）。</summary>
+    /// <summary>
+    /// 修改窗口标题（立即同步到标题栏）。
+    /// </summary>
     public void SetTitle(string title) => RunOnUiThread(() => _window.SetTitle(title));
 
-    /// <summary>设置窗口图标。GTK3 虽有 gtk_window_set_icon 但 CSD/Wayland 不显示 per-window 图标，无操作。</summary>
+    /// <summary>
+    /// 设置窗口图标。GTK3 虽有 gtk_window_set_icon 但 CSD/Wayland 不显示 per-window 图标，无操作。
+    /// </summary>
     public void SetIcon(WindowIcon icon)
     {
         // CSD/Wayland 只用主题图标（gtk_window_set_icon 实际不生效）。平台限制，文档注明。
@@ -180,10 +178,14 @@ public sealed class LinuxWindow : IWindowBackend
         return await WebKit2Native.EvaluateJavascriptAsync(_webView, script); // JSC 值 → JSON（best-effort 对齐 WebView2）
     }
 
-    /// <summary>页面导航完成时触发（用于在页面就绪后推送 Model 初始快照）。</summary>
+    /// <summary>
+    /// 页面导航完成时触发（用于在页面就绪后推送 Model 初始快照）。
+    /// </summary>
     public event Action? NavigationCompleted;
 
-    /// <summary>页面 JS 通过 script message handler 回传的消息（protobuf 字节，由 NUL 转义串还原）。</summary>
+    /// <summary>
+    /// 页面 JS 通过 script message handler 回传的消息（protobuf 字节，由 NUL 转义串还原）。
+    /// </summary>
     public event Action<byte[]>? MessageReceived;
 
     private void OnScriptMessageReceived(string message)
@@ -210,74 +212,20 @@ public sealed class LinuxWindow : IWindowBackend
             return;
         _closed = true;
         WebWindowLog.Debug($"window closed (view={_webView})");
-        _windows.Remove(_webView);
         Closed?.Invoke();
-        WebWindow.NotifyWindowClosed();
         // 断开信号、释放 .NET 侧持有的 webview 引用（窗口仍持有其子级引用，至此引用计数归零 → 销毁）
         _signals?.Dispose();
         _signals = null;
         WebKit2Native.ReleaseWebView(_webView);
         _window.Dispose(); // 断开 destroy 信号并释放路由 GCHandle
-        if (WebWindow.OpenCount == 0)
-            LinuxPlatform.QuitMainLoop(); // 最后一个窗口关闭，退出主循环
-    }
-
-    /// <summary>共享默认 WebContext 的 scheme 请求回调：按发起 WebView 指针分派回对应窗口。</summary>
-    private static void OnUriSchemeRequest(IntPtr request, IntPtr userData)
-    {
-        if (!_windows.TryGetValue(WebKit2Native.GetSchemeRequestWebView(request), out LinuxWindow? window))
-        {
-            FinishNotFound(request);
-            return;
-        }
-        window.HandleUriSchemeRequest(request);
-    }
-
-    private void HandleUriSchemeRequest(IntPtr request)
-    {
-        try
-        {
-            // 单入口定位 app:// 与 appdata://（含自定义路由），镜像 Windows 的 OnWebResourceRequested。
-            var uri = WebKit2Native.GetSchemeRequestUri(request);
-            if (WebWindowResource.TryResolvePath(uri, out string? relative, out string? mimeType) is { } stream)
-            {
-                // 嵌入式流不可 seek，读全量进 byte[] 再构造 MemoryInputStream（内部 g_bytes_new 拷一份字节）。
-                using (stream)
-                {
-                    using var ms = new MemoryStream();
-                    stream.CopyTo(ms);
-                    var bytes = ms.ToArray();
-                    // WebKit 的 finish 接管 stream 所有权；FinishSchemeRequest 内部不保留引用。
-                    WebKit2Native.FinishSchemeRequest(request, bytes, mimeType!);
-                }
-                return;
-            }
-        }
-        catch
-        {
-            // 读取或构造响应失败时回退 404
-        }
-        FinishNotFound(request);
-    }
-
-    private static void FinishNotFound(IntPtr request)
-    {
-        try
-        {
-            var bytes = Encoding.UTF8.GetBytes("404 Not Found");
-            WebKit2Native.FinishSchemeRequest(request, bytes, "text/plain; charset=utf-8");
-        }
-        catch
-        {
-            // 请求已被取消等，忽略
-        }
+        LinuxPlatform.WindowClose(this); // 注销窗口表 + 通知框架关闭 + 最后窗口退出主循环
     }
 
     /// <summary>
     /// 把动作 marshal 到主线程同步执行：主线程直接运行；非主线程经
     /// <see cref="LinuxMessageLoopSynchronizationContext.Send"/>（回主线程并阻塞等待）。
     /// </summary>
-    private void RunOnUiThread(Action action)
+    private static void RunOnUiThread(Action action)
     {
         if (Environment.CurrentManagedThreadId == LinuxMessageLoopSynchronizationContext.UiThreadId)
         {

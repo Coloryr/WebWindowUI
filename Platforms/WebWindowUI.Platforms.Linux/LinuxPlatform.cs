@@ -10,39 +10,120 @@ namespace WebWindowUI.Platforms.Linux;
 /// </summary>
 public sealed class LinuxPlatform : IWebWindowPlatform
 {
+    private static readonly Dictionary<IntPtr, LinuxWindow> _windows = [];
+    private static readonly WebKit2Native.WebKitUriSchemeRequestCallback _schemeCallback = OnUriSchemeRequest;
+
     private static MainLoop? _mainLoop;
 
     public LinuxPlatform()
     {
-        // GirCore 只发布 GLib-2.0 绑定（消息循环用），注册其 DllImport 解析器（把 "GLib" 解析到真实 soname），
-        // 缺失时 GLib.MainLoop/MainContext 的 DllImport 直接 DllNotFoundException。须在创建任何窗口前调用。
-        GLib.Module.Initialize();
+        Module.Initialize();
 
-        // 初始化手写 GTK3 绑定：gtk_init(null, null)，创建任何 GTK 控件前必须调用。
         GtkNative.Initialize();
-        // 初始化手写 WebKit2 绑定：webkit_web_context_get_default 触发 WebKit 子系统注册。
         WebKit2Native.Initialize();
+
+        RegisterUriScheme(WebWindowResource.Scheme);
+        RegisterUriScheme(WebWindowResource.SchemeData);
+
         LinuxMessageLoopSynchronizationContext.Initialize();
         SynchronizationContext.SetSynchronizationContext(LinuxMessageLoopSynchronizationContext.Instance);
     }
-
-    public string Name => "Linux";
 
     public IWindowBackend CreateWindow(WebWindowOptions options)
         => LinuxWindow.Create(options);
 
     public void RunMessageLoop()
     {
-        // 幂等兜底（覆盖未经过窗口创建直接调消息循环的宿主）
         LinuxMessageLoopSynchronizationContext.Initialize();
         SynchronizationContext.SetSynchronizationContext(LinuxMessageLoopSynchronizationContext.Instance);
 
-        var loop = MainLoop.New(null, false); // null = 默认 MainContext（与 SyncContext.Post 用的同一上下文）
+        var loop = MainLoop.New(null, false);
         _mainLoop = loop;
-        loop.RunWithSynchronizationContext(); // 最后一个窗口关闭 → Quit() → 返回
+        loop.RunWithSynchronizationContext(); 
         _mainLoop = null;
     }
 
-    /// <summary>最后一个窗口销毁时调用，退出主循环。</summary>
+    /// <summary>
+    /// 注册单个自定义 scheme（镜像 Windows 的 CoreWebView2CustomSchemeRegistration 项）。
+    /// 平台构造时对 app 与 appdata 各调用一次；默认 WebContext 跨窗口共享，register_uri_scheme
+    /// 是 context 级，进程内注册一次即可。
+    /// </summary>
+    private static void RegisterUriScheme(string scheme)
+        => WebKit2Native.RegisterUriScheme(scheme, _schemeCallback);
+
+    /// <summary>
+    /// 窗口注册：按 WebView 指针登记，供 scheme 请求回调分派（镜像 Windows 平台 WindowOpen 的窗口表登记）。
+    /// </summary>
+    internal static void WindowOpen(LinuxWindow window)
+    {
+        _windows[window.WebView] = window;
+    }
+
+    /// <summary>
+    /// 窗口注销：移除登记、通知框架关闭；最后一个窗口关闭时退出主循环（镜像 Windows 平台 WindowClose：
+    /// 含 NotifyWindowClosed + PostQuitMessage）。
+    /// </summary>
+    internal static void WindowClose(LinuxWindow window)
+    {
+        _windows.Remove(window.WebView);
+        WebWindow.NotifyWindowClosed();
+        if (WebWindow.OpenCount == 0)
+            QuitMainLoop(); // 最后一个窗口关闭，退出主循环
+    }
+
+    /// <summary>
+    /// 共享默认 WebContext 的 scheme 请求回调：按发起 WebView 指针经窗口表分派回对应窗口
+    /// （镜像 Windows 的 WndProc 经 <see cref="_windows"/> 查 HWND）。
+    /// </summary>
+    private static void OnUriSchemeRequest(IntPtr request, IntPtr userData)
+    {
+        if (!_windows.TryGetValue(WebKit2Native.GetSchemeRequestWebView(request), out LinuxWindow? _))
+        {
+            FinishNotFound(request);
+            return;
+        }
+        HandleUriSchemeRequest(request);
+    }
+
+    /// <summary>
+    /// 处理单个 scheme 请求（镜像 Windows 的 OnWebResourceRequested）。
+    /// </summary>
+    private static void HandleUriSchemeRequest(IntPtr request)
+    {
+        try
+        {
+            var uri = WebKit2Native.GetSchemeRequestUri(request);
+            if (WebWindowResource.TryResolvePath(uri, out string? relative, out string? mimeType) is { } stream)
+            {
+                var bytes = new byte[stream.Length];
+                stream.ReadExactly(bytes);
+                WebKit2Native.FinishSchemeRequest(request, bytes, mimeType!, ResourceHeaders.CacheControl(relative!));
+                stream.Dispose();
+                return;
+            }
+        }
+        catch
+        {
+            // 读取或构造响应失败时回退 404
+        }
+        FinishNotFound(request);
+    }
+
+    private static void FinishNotFound(IntPtr request)
+    {
+        try
+        {
+            var bytes = Encoding.UTF8.GetBytes("404 Not Found");
+            WebKit2Native.FinishSchemeRequest(request, bytes, "text/plain; charset=utf-8", "no-store");
+        }
+        catch
+        {
+            // 请求已被取消等，忽略
+        }
+    }
+
+    /// <summary>
+    /// 最后一个窗口销毁时调用，退出主循环。
+    /// </summary>
     internal static void QuitMainLoop() => _mainLoop?.Quit();
 }

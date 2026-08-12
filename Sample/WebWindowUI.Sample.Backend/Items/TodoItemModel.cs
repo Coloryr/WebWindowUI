@@ -10,11 +10,15 @@ namespace WebWindowUI.Sample.Items;
 /// </summary>
 public partial class TodoItemModel : WebWindowModel
 {
-    /// <summary>任务标题。</summary>
+    /// <summary>
+    /// 任务标题。
+    /// </summary>
     [ObservableProperty]
     public partial string Title { get; set; } = "";
 
-    /// <summary>是否完成。</summary>
+    /// <summary>
+    /// 是否完成。
+    /// </summary>
     [ObservableProperty]
     public partial bool Done { get; set; }
 }

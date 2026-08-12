@@ -9,23 +9,33 @@ namespace WebWindowUI.Demo.ImageGallery;
 /// </summary>
 public partial class ImageItemModel : WebWindowModel
 {
-    /// <summary>磁盘文件名（含扩展名）。</summary>
+    /// <summary>
+    /// 磁盘文件名（含扩展名）。
+    /// </summary>
     [ObservableProperty]
     public partial string Name { get; set; } = "";
 
-    /// <summary>文件大小（字节）。</summary>
+    /// <summary>
+    /// 文件大小（字节）。
+    /// </summary>
     [ObservableProperty]
     public partial long Size { get; set; }
 
-    /// <summary>修改时间（格式化字符串，与 .NET 时间戳对应）。</summary>
+    /// <summary>
+    /// 修改时间（格式化字符串，与 .NET 时间戳对应）。
+    /// </summary>
     [ObservableProperty]
     public partial string Modified { get; set; } = "";
 
-    /// <summary>文件地址（磁盘完整路径，如 C:\Users\…\images\sunset.png）。</summary>
+    /// <summary>
+    /// 文件地址（磁盘完整路径，如 C:\Users\…\images\sunset.png）。
+    /// </summary>
     [ObservableProperty]
     public partial string Path { get; set; } = "";
 
-    /// <summary>图片字节（png/jpg/gif/webp/…），前端按扩展名推断 MIME 后转 blob URL 渲染。</summary>
+    /// <summary>
+    /// 图片字节（png/jpg/gif/webp/…），前端按扩展名推断 MIME 后转 blob URL 渲染。
+    /// </summary>
     [ObservableProperty]
     public partial byte[]? Data { get; set; }
 }

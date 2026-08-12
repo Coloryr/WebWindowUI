@@ -38,7 +38,9 @@ public static class CefRuntimeManager
     private static readonly string DownloadDir = Path.Combine(Root, "_download");
     private static readonly string DownloadPath = Path.Combine(DownloadDir, FileName);
 
-    /// <summary>版本化缓存根：%LocalAppData%\WebWindowUI\cef\&lt;版本&gt;。</summary>
+    /// <summary>
+    /// 版本化缓存根：%LocalAppData%\WebWindowUI\cef\&lt;版本&gt;。
+    /// </summary>
     public static string CacheRoot => Path.Combine(Root, Version);
 
     /// <summary>
@@ -49,14 +51,18 @@ public static class CefRuntimeManager
     /// </summary>
     public static string ReleaseDir => Path.Combine(CacheRoot, "Release");
 
-    /// <summary>cef_settings_t.cache_path——CEF 自己建目录，这里预建保证可写。</summary>
+    /// <summary>
+    /// cef_settings_t.cache_path——CEF 自己建目录，这里预建保证可写。
+    /// </summary>
     public static string CacheDir => Path.Combine(CacheRoot, "cache");
 
     private static string MarkerPath => Path.Combine(CacheRoot, "version.txt");
 
     private static bool _ready;
 
-    /// <summary>幂等（进程内一次）。首次调用下载/校验/解压并 SetDllDirectory；必须先于任何 cef_* 调用。</summary>
+    /// <summary>
+    /// 幂等（进程内一次）。首次调用下载/校验/解压并 SetDllDirectory；必须先于任何 cef_* 调用。
+    /// </summary>
     public static void EnsureRuntime()
     {
         if (_ready)
@@ -173,7 +179,9 @@ public static class CefRuntimeManager
         Console.WriteLine($"[WebWindowUI] CEF 运行时就绪：{CacheRoot}");
     }
 
-    /// <summary>把 Release 目录加进 DLL 搜索路径，DllImport("libcef") 才能解析到缓存里的 libcef.dll 及其依赖。</summary>
+    /// <summary>
+    /// 把 Release 目录加进 DLL 搜索路径，DllImport("libcef") 才能解析到缓存里的 libcef.dll 及其依赖。
+    /// </summary>
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern bool SetDllDirectory(string? lpPathName);
 }

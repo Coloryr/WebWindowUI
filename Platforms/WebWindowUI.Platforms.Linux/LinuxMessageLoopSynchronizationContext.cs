@@ -16,17 +16,21 @@ public sealed class LinuxMessageLoopSynchronizationContext : SynchronizationCont
 {
     public static readonly LinuxMessageLoopSynchronizationContext Instance = new();
 
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly Queue<(SendOrPostCallback Callback, object? State)> _queue = new();
 
     private LinuxMessageLoopSynchronizationContext()
     {
     }
 
-    /// <summary>UI 线程（主循环线程）的托管线程 id，供「当前是否在 UI 线程」判断使用。</summary>
+    /// <summary>
+    /// UI 线程（主循环线程）的托管线程 id，供「当前是否在 UI 线程」判断使用。
+    /// </summary>
     public static int UiThreadId { get; private set; } = -1;
 
-    /// <summary>记录 UI 线程 id。总是在主线程调用（平台构造 + RunMessageLoop），幂等。</summary>
+    /// <summary>
+    /// 记录 UI 线程 id。总是在主线程调用（平台构造 + RunMessageLoop），幂等。
+    /// </summary>
     public static void Initialize()
     {
         if (UiThreadId == -1)

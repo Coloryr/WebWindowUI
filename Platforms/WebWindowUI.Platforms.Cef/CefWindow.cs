@@ -44,10 +44,14 @@ public sealed class CefWindow : IWindowBackend
 
     public IntPtr Hwnd => _hwnd;
 
-    /// <summary>窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。</summary>
+    /// <summary>
+    /// 窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。
+    /// </summary>
     public event Action? Closed;
 
-    /// <summary>窗口选项（scheme / resolver），scheme 处理器按请求分派到对应窗口时读取。</summary>
+    /// <summary>
+    /// 窗口选项（scheme / resolver），scheme 处理器按请求分派到对应窗口时读取。
+    /// </summary>
     internal WebWindowOptions Options => _options;
 
     private CefWindow(IntPtr hwnd, WebWindowOptions options)
@@ -57,7 +61,9 @@ public sealed class CefWindow : IWindowBackend
         _windows[hwnd] = this;
     }
 
-    /// <summary>创建并注册一个尚未显示的窗口。</summary>
+    /// <summary>
+    /// 创建并注册一个尚未显示的窗口。
+    /// </summary>
     public static CefWindow Create(string title, WebWindowOptions options, int width, int height)
     {
         EnsureClassRegistered();
@@ -74,7 +80,9 @@ public sealed class CefWindow : IWindowBackend
         return window;
     }
 
-    /// <summary>显示窗口并创建 CEF 浏览器（CefWindowInfo 设父窗口，CEF 子窗口铺满客户区）。无头模式只建浏览器、窗口永不显示。</summary>
+    /// <summary>
+    /// 显示窗口并创建 CEF 浏览器（CefWindowInfo 设父窗口，CEF 子窗口铺满客户区）。无头模式只建浏览器、窗口永不显示。
+    /// </summary>
     public void Show()
     {
         if (!_options.Headless)
@@ -82,7 +90,9 @@ public sealed class CefWindow : IWindowBackend
         CreateBrowser();
     }
 
-    /// <summary>隐藏窗口（不关闭、不销毁）。</summary>
+    /// <summary>
+    /// 隐藏窗口（不关闭、不销毁）。
+    /// </summary>
     public void Hide() => Win32.ShowWindow(_hwnd, Win32.SW_HIDE);
 
     /// <summary>
@@ -103,7 +113,9 @@ public sealed class CefWindow : IWindowBackend
         });
     }
 
-    /// <summary>把窗口带到前台并聚焦：先恢复最小化，再置前、设焦点。</summary>
+    /// <summary>
+    /// 把窗口带到前台并聚焦：先恢复最小化，再置前、设焦点。
+    /// </summary>
     public void Activate()
     {
         RunOnUiThread(() =>
@@ -115,11 +127,15 @@ public sealed class CefWindow : IWindowBackend
         });
     }
 
-    /// <summary>修改窗口标题（立即同步到标题栏）。</summary>
+    /// <summary>
+    /// 修改窗口标题（立即同步到标题栏）。
+    /// </summary>
     public void SetTitle(string title)
         => RunOnUiThread(() => Win32.SetWindowTextW(_hwnd, title));
 
-    /// <summary>设置窗口图标（标题栏 + 任务栏）。替换旧图标时释放旧的句柄。</summary>
+    /// <summary>
+    /// 设置窗口图标（标题栏 + 任务栏）。替换旧图标时释放旧的句柄。
+    /// </summary>
     public void SetIcon(WindowIcon icon)
     {
         RunOnUiThread(() =>
@@ -208,26 +224,38 @@ public sealed class CefWindow : IWindowBackend
         return "";
     }
 
-    /// <summary>页面导航完成时触发（用于在页面就绪后推送 Model 初始快照）。</summary>
+    /// <summary>
+    /// 页面导航完成时触发（用于在页面就绪后推送 Model 初始快照）。
+    /// </summary>
     public event Action? NavigationCompleted;
 
-    /// <summary>页面 JS 经 fetch POST（app://localhost/__wwui）回传的消息（protobuf 字节，scheme 处理器还原后投递）。</summary>
+    /// <summary>
+    /// 页面 JS 经 fetch POST（app://localhost/__wwui）回传的消息（protobuf 字节，scheme 处理器还原后投递）。
+    /// </summary>
     public event Action<byte[]>? MessageReceived;
 
-    /// <summary>scheme 处理器（CefSchemes）在 IO 线程收到 JS 回传，marshal 回 UI 线程后调用本方法。回调在 UI 线程。</summary>
+    /// <summary>
+    /// scheme 处理器（CefSchemes）在 IO 线程收到 JS 回传，marshal 回 UI 线程后调用本方法。回调在 UI 线程。
+    /// </summary>
     internal void OnMessageFromWeb(byte[] payload) => MessageReceived?.Invoke(payload);
 
-    /// <summary>CEF on_load_end（is_main）→ 主页面导航完成。回调在 UI 线程。</summary>
+    /// <summary>
+    /// CEF on_load_end（is_main）→ 主页面导航完成。回调在 UI 线程。
+    /// </summary>
     internal void OnNavigationCompleted() => NavigationCompleted?.Invoke();
 
-    /// <summary>CEF on_after_created：记录浏览器包装并注册 scheme 映射。回调在 UI 线程。</summary>
+    /// <summary>
+    /// CEF on_after_created：记录浏览器包装并注册 scheme 映射。回调在 UI 线程。
+    /// </summary>
     internal void OnBrowserCreated(CefBrowser browser)
     {
         _browser = browser;
         CefSchemes.RegisterBrowser(browser, this); // scheme 处理器按浏览器 id 分派回本窗口
     }
 
-    /// <summary>CEF on_before_close：摘除浏览器映射、置空浏览器引用，销毁宿主顶层窗口完成收尾（→ WM_DESTROY → 末窗 PostQuitMessage）。</summary>
+    /// <summary>
+    /// CEF on_before_close：摘除浏览器映射、置空浏览器引用，销毁宿主顶层窗口完成收尾（→ WM_DESTROY → 末窗 PostQuitMessage）。
+    /// </summary>
     internal void OnBrowserClosing()
     {
         if (_browser is not null)
@@ -249,7 +277,9 @@ public sealed class CefWindow : IWindowBackend
         _client = new WwuiCefClient(this, _lifeSpanHandler, _loadHandler);
     }
 
-    /// <summary>创建 CEF 浏览器。必须在 UI 线程（Show 从 Main 的 UI 线程调用）。</summary>
+    /// <summary>
+    /// 创建 CEF 浏览器。必须在 UI 线程（Show 从 Main 的 UI 线程调用）。
+    /// </summary>
     private void CreateBrowser()
     {
         if (_browser is not null)
@@ -273,7 +303,9 @@ public sealed class CefWindow : IWindowBackend
             windowInfo, _client, new CefBrowserSettings(), _options.HomeUrl, null, null);
     }
 
-    /// <summary>正常关闭浏览器（forceClose=false：让 CEF 跑 beforeunload 等再关）。CEF 随后调 DoClose → on_before_close。</summary>
+    /// <summary>
+    /// 正常关闭浏览器（forceClose=false：让 CEF 跑 beforeunload 等再关）。CEF 随后调 DoClose → on_before_close。
+    /// </summary>
     private void CloseBrowserGraceful()
     {
         if (_browser is null)
@@ -282,7 +314,9 @@ public sealed class CefWindow : IWindowBackend
         host.CloseBrowser(false);
     }
 
-    /// <summary>在浏览器主 frame 里执行一段 JS。必须在 UI 线程且浏览器存活。</summary>
+    /// <summary>
+    /// 在浏览器主 frame 里执行一段 JS。必须在 UI 线程且浏览器存活。
+    /// </summary>
     private void ExecuteJavaScriptOnBrowser(string js)
     {
         if (_browser is null)
@@ -291,7 +325,9 @@ public sealed class CefWindow : IWindowBackend
         frame.ExecuteJavaScript(js, string.Empty, 0);
     }
 
-    /// <summary>把 WindowIcon（文件或流）加载成 HICON。流会先落到临时文件再加载。</summary>
+    /// <summary>
+    /// 把 WindowIcon（文件或流）加载成 HICON。流会先落到临时文件再加载。
+    /// </summary>
     private static IntPtr LoadIconHandle(WindowIcon icon)
     {
         if (icon.FilePath is not null)
@@ -343,7 +379,9 @@ public sealed class CefWindow : IWindowBackend
         _classRegistered = true;
     }
 
-    /// <summary>窗口过程入口：通过 HWND 找到对应的窗口实例。</summary>
+    /// <summary>
+    /// 窗口过程入口：通过 HWND 找到对应的窗口实例。
+    /// </summary>
     private static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
         => _windows.TryGetValue(hwnd, out CefWindow? window)
             ? window.OnWndProc(msg, wParam, lParam)
@@ -385,7 +423,9 @@ public sealed class CefWindow : IWindowBackend
         }
     }
 
-    /// <summary>父窗口尺寸变化：通知 CEF 重排（CEF 会把自己的子窗口铺满父客户区）。</summary>
+    /// <summary>
+    /// 父窗口尺寸变化：通知 CEF 重排（CEF 会把自己的子窗口铺满父客户区）。
+    /// </summary>
     private void ResizeBrowser()
     {
         if (_browser is null)
@@ -395,25 +435,33 @@ public sealed class CefWindow : IWindowBackend
     }
 }
 
-/// <summary>本窗口的 CefClient 子类：返回生命期与加载期处理器（CEF 在浏览器创建时读取并缓存）。</summary>
+/// <summary>
+/// 本窗口的 CefClient 子类：返回生命期与加载期处理器（CEF 在浏览器创建时读取并缓存）。
+/// </summary>
 internal sealed class WwuiCefClient(CefWindow window, WwuiCefLifeSpanHandler lifeSpan, WwuiCefLoadHandler load) : CefClient
 {
     protected override CefLifeSpanHandler? GetLifeSpanHandler() => lifeSpan;
     protected override CefLoadHandler? GetLoadHandler() => load;
 }
 
-/// <summary>本窗口的 CefLifeSpanHandler 子类：创建 / 关闭浏览器回调路由回窗口。</summary>
+/// <summary>
+/// 本窗口的 CefLifeSpanHandler 子类：创建 / 关闭浏览器回调路由回窗口。
+/// </summary>
 internal sealed class WwuiCefLifeSpanHandler(CefWindow window) : CefLifeSpanHandler
 {
     protected override void OnAfterCreated(CefBrowser browser) => window.OnBrowserCreated(browser);
 
-    /// <summary>返回 false：让 CEF 继续关闭流程（会触发 on_before_close → 本平台销毁顶层窗口）。</summary>
+    /// <summary>
+    /// 返回 false：让 CEF 继续关闭流程（会触发 on_before_close → 本平台销毁顶层窗口）。
+    /// </summary>
     protected override bool DoClose(CefBrowser browser) => false;
 
     protected override void OnBeforeClose(CefBrowser browser) => window.OnBrowserClosing();
 }
 
-/// <summary>本窗口的 CefLoadHandler 子类：主 frame 加载完成触发 NavigationCompleted。</summary>
+/// <summary>
+/// 本窗口的 CefLoadHandler 子类：主 frame 加载完成触发 NavigationCompleted。
+/// </summary>
 internal sealed class WwuiCefLoadHandler(CefWindow window) : CefLoadHandler
 {
     protected override void OnLoadEnd(CefBrowser browser, CefFrame frame, int httpStatusCode)

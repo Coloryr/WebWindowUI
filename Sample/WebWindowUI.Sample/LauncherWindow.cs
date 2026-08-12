@@ -90,7 +90,9 @@ internal sealed class LauncherWindow : WebWindow
         }
     }
 
-    /// <summary>多窗口共享演示一次开 3 个窗口：共享A/B 绑同一 MultiWindowModel 实例 + 独立实例。</summary>
+    /// <summary>
+    /// 多窗口共享演示一次开 3 个窗口：共享A/B 绑同一 MultiWindowModel 实例 + 独立实例。
+    /// </summary>
     private static WebWindow[] CreateMultiGroup()
     {
         MultiWindowModel shared = new("共享实例");

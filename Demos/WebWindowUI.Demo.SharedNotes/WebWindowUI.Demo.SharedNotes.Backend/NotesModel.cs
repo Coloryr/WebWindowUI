@@ -10,10 +10,14 @@ namespace WebWindowUI.Demo.SharedNotes;
 /// </summary>
 public partial class NotesModel : WebWindowModel
 {
-    /// <summary>get-only ObservableCollection（免 [ObservableProperty]），原地增删自动推送整列表。</summary>
+    /// <summary>
+    /// get-only ObservableCollection（免 [ObservableProperty]），原地增删自动推送整列表。
+    /// </summary>
     public ObservableCollection<NoteModel> Notes { get; } = new();
 
-    /// <summary>与各窗口输入框双向绑定；发送后由命令清空并推回。</summary>
+    /// <summary>
+    /// 与各窗口输入框双向绑定；发送后由命令清空并推回。
+    /// </summary>
     [ObservableProperty]
     public partial string Input { get; set; } = "";
 
@@ -23,7 +27,9 @@ public partial class NotesModel : WebWindowModel
     [ObservableProperty]
     public partial int Total { get; set; }
 
-    /// <summary>发送便签：把 Input 追加进 Notes（同模型多窗口即时广播），随后清空输入。</summary>
+    /// <summary>
+    /// 发送便签：把 Input 追加进 Notes（同模型多窗口即时广播），随后清空输入。
+    /// </summary>
     [RelayCommand]
     public void Send()
     {
@@ -41,7 +47,9 @@ public partial class NotesModel : WebWindowModel
         Status = $"已发送（共 {Notes.Count} 条）";
     }
 
-    /// <summary>按序数键删除指定位置的便签（typed repeated 双向：前端传 index）。</summary>
+    /// <summary>
+    /// 按序数键删除指定位置的便签（typed repeated 双向：前端传 index）。
+    /// </summary>
     [RelayCommand]
     public void Remove(int index)
     {

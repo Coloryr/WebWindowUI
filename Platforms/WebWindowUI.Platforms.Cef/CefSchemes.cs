@@ -56,10 +56,14 @@ internal static class CefSchemes
     private static WwuiSchemeHandlerFactory? _factoryApp;
     private static WwuiSchemeHandlerFactory? _factoryData;
 
-    /// <summary>创建进程期 app 实例（OnRegisterCustomSchemes + --disable-gpu），供 ExecuteProcess/Initialize 使用。幂等。</summary>
+    /// <summary>
+    /// 创建进程期 app 实例（OnRegisterCustomSchemes + --disable-gpu），供 ExecuteProcess/Initialize 使用。幂等。
+    /// </summary>
     internal static CefApp CreateApp() => _app ??= new WwuiCefApp();
 
-    /// <summary>注册 app/appbin 的 scheme handler 工厂。必须在 cef_initialize 之后、任何浏览器请求之前调用。幂等。</summary>
+    /// <summary>
+    /// 注册 app/appbin 的 scheme handler 工厂。必须在 cef_initialize 之后、任何浏览器请求之前调用。幂等。
+    /// </summary>
     internal static void RegisterHandlerFactories()
     {
         if (_factoryApp is not null)
@@ -72,11 +76,15 @@ internal static class CefSchemes
         CefRuntime.RegisterSchemeHandlerFactory(DataSchemeName, null, _factoryData);
     }
 
-    /// <summary>on_after_created：记录浏览器 id → 窗口映射，供工厂 Create 分派回对应窗口。</summary>
+    /// <summary>
+    /// on_after_created：记录浏览器 id → 窗口映射，供工厂 Create 分派回对应窗口。
+    /// </summary>
     internal static void RegisterBrowser(CefBrowser browser, CefWindow window)
         => _browsers[browser.Identifier] = window;
 
-    /// <summary>on_before_close：摘除映射，避免回调落到已关闭窗口。</summary>
+    /// <summary>
+    /// on_before_close：摘除映射，避免回调落到已关闭窗口。
+    /// </summary>
     internal static void UnregisterBrowser(CefBrowser browser)
         => _browsers.TryRemove(browser.Identifier, out _);
 
@@ -157,7 +165,9 @@ internal static class CefSchemes
         }
     }
 
-    /// <summary>POST 消息通道：读 post data 还原 protobuf 字节 → marshal 回 UI 线程投递窗口；响应 204。</summary>
+    /// <summary>
+    /// POST 消息通道：读 post data 还原 protobuf 字节 → marshal 回 UI 线程投递窗口；响应 204。
+    /// </summary>
     private static CefResourceHandler CreateMessageHandler(CefBrowser browser, CefRequest request)
     {
         var payload = ReadPostDataPayload(request);
@@ -166,7 +176,9 @@ internal static class CefSchemes
         return CreateHandler([], "text/plain; charset=utf-8", 204, null);
     }
 
-    /// <summary>GET 资源：WebResourceLocator 定位 + 窗口 resolver 读流 → 整读进 byte[]（与 Linux 平台同策略）。</summary>
+    /// <summary>
+    /// GET 资源：WebResourceLocator 定位 + 窗口 resolver 读流 → 整读进 byte[]（与 Linux 平台同策略）。
+    /// </summary>
     private static CefResourceHandler CreateResourceHandler(CefWindow window, CefRequest request)
     {
         try
@@ -203,12 +215,16 @@ internal static class CefSchemes
     private static CefResourceHandler CreateNotFoundHandler()
         => CreateHandler(Encoding.UTF8.GetBytes("404 Not Found"), "text/plain; charset=utf-8", 404, "no-store");
 
-    /// <summary>单请求 resource handler：整读进内存后同步输出（Open 即完成 → GetResponseHeaders → Read）。</summary>
+    /// <summary>
+    /// 单请求 resource handler：整读进内存后同步输出（Open 即完成 → GetResponseHeaders → Read）。
+    /// </summary>
     internal sealed class WwuiResourceHandler(byte[] data, string mime, int status, string? cacheControl) : CefResourceHandler
     {
         private int _offset;
 
-        /// <summary>同步处理：handle_request=1 + 返回 true → CEF 继续 GetResponseHeaders → Read。</summary>
+        /// <summary>
+        /// 同步处理：handle_request=1 + 返回 true → CEF 继续 GetResponseHeaders → Read。
+        /// </summary>
         protected override bool Open(CefRequest request, out bool handleRequest, CefCallback callback)
         {
             handleRequest = true;
@@ -254,7 +270,9 @@ internal static class CefSchemes
             return _offset < data.Length;
         }
 
-        /// <summary>请求被取消：byte[] 可 GC（CefGlue 的 HANDLER 引用计数归零时释放原生包装）。</summary>
+        /// <summary>
+        /// 请求被取消：byte[] 可 GC（CefGlue 的 HANDLER 引用计数归零时释放原生包装）。
+        /// </summary>
         protected override void Cancel() { }
     }
 

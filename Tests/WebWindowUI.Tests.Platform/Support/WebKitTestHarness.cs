@@ -95,7 +95,9 @@ internal static class WebKitTestHarness
         });
     }
 
-    /// <summary>轮询直到页面脚本桥接（window.__model）就绪。</summary>
+    /// <summary>
+    /// 轮询直到页面脚本桥接（window.__model）就绪。
+    /// </summary>
     private static async Task WaitBridgeReadyAsync(TestWindow win, TimeSpan timeout)
     {
         var sw = Stopwatch.StartNew();
@@ -117,7 +119,9 @@ internal static class WebKitTestHarness
         throw new TimeoutException("页面桥接未就绪（window.__model 未出现）");
     }
 
-    /// <summary>轮询 JS 表达式直到为 true（ExecuteScriptAsync 对布尔返回 "true"/"false"）。</summary>
+    /// <summary>
+    /// 轮询 JS 表达式直到为 true（ExecuteScriptAsync 对布尔返回 "true"/"false"）。
+    /// </summary>
     public static async Task WaitJsAsync(TestWindow win, string jsExpr, string description, TimeSpan? timeout = null)
     {
         TimeSpan t = timeout ?? TimeSpan.FromSeconds(20);
@@ -137,7 +141,9 @@ internal static class WebKitTestHarness
         throw new TimeoutException($"{description} 超时：{jsExpr} 未在 {t.TotalSeconds}s 内为 true");
     }
 
-    /// <summary>轮询 .NET 侧条件（在泵线程内执行，直接读模型属性）。</summary>
+    /// <summary>
+    /// 轮询 .NET 侧条件（在泵线程内执行，直接读模型属性）。
+    /// </summary>
     public static async Task WaitDotNetAsync(Func<bool> condition, string description, TimeSpan? timeout = null)
     {
         TimeSpan t = timeout ?? TimeSpan.FromSeconds(20);

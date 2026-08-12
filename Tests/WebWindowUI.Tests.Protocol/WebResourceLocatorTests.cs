@@ -3,7 +3,9 @@ using Xunit;
 
 namespace WebWindowUI.Tests;
 
-/// <summary>WebResourceLocator 的纯逻辑测试（路径解析 + MIME，不访问文件系统）。</summary>
+/// <summary>
+/// WebResourceLocator 的纯逻辑测试（路径解析 + MIME，不访问文件系统）。
+/// </summary>
 public class WebResourceLocatorTests
 {
     [Theory]
@@ -55,7 +57,9 @@ public class WebResourceLocatorTests
         Assert.DoesNotContain("..", relative!.Split('/'));
     }
 
-    /// <summary>数据通道 scheme（appbin://）与 UI scheme 一样按路径解析，只是走独立的 resolver。</summary>
+    /// <summary>
+    /// 数据通道 scheme（appbin://）与 UI scheme 一样按路径解析，只是走独立的 resolver。
+    /// </summary>
     [Theory]
     [InlineData("appbin://localhost/bin/blob.bin", "bin/blob.bin", "application/octet-stream")]
     [InlineData("appbin://localhost/bin/hello.txt", "bin/hello.txt", "text/plain; charset=utf-8")]
@@ -68,7 +72,9 @@ public class WebResourceLocatorTests
         Assert.Equal(expectedMime, mimeType);
     }
 
-    /// <summary>IsScheme 用于多 scheme 按请求分发：大小写不敏感，不误判其它 scheme。</summary>
+    /// <summary>
+    /// IsScheme 用于多 scheme 按请求分发：大小写不敏感，不误判其它 scheme。
+    /// </summary>
     [Theory]
     [InlineData("appbin://localhost/x.bin", "appbin", true)]
     [InlineData("APP://localhost/x", "app", true)]

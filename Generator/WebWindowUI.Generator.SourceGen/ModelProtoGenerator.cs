@@ -6,7 +6,9 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace WebWindowUI.Generator;
 
-/// <summary>生成结果：C# DTO 代码、.proto schema、protobufjs descriptor JSON、TS 模型镜像、命名空间。</summary>
+/// <summary>
+/// 生成结果：C# DTO 代码、.proto schema、protobufjs descriptor JSON、TS 模型镜像、命名空间。
+/// </summary>
 public sealed record ModelProtoResult(
     string CsCode,
     string ProtoText,
@@ -121,7 +123,9 @@ public static class ModelProtoGenerator
         return (int)(hash & 0x7FFFFFFF);
     }
 
-    /// <summary>全模型「类名 → 命名空间」表（typed repeated 元素解析用）。null 输入 → null。</summary>
+    /// <summary>
+    /// 全模型「类名 → 命名空间」表（typed repeated 元素解析用）。null 输入 → null。
+    /// </summary>
     private static IReadOnlyDictionary<string, string>? BuildNamespaceMap(IReadOnlyDictionary<string, string>? allModelSources)
     {
         if (allModelSources is null)
@@ -235,7 +239,9 @@ public static class ModelProtoGenerator
         return commands;
     }
 
-    /// <summary>把全模型已解析表收敛成 类名 → 字段 表，供全量 descriptor 使用（无需重新解析源码）。</summary>
+    /// <summary>
+    /// 把全模型已解析表收敛成 类名 → 字段 表，供全量 descriptor 使用（无需重新解析源码）。
+    /// </summary>
     private static IReadOnlyList<KeyValuePair<string, List<ProtoField>>> BuildAllModelFields(
         IReadOnlyDictionary<string, ModelParsed> allParsed)
     {
@@ -247,7 +253,9 @@ public static class ModelProtoGenerator
 
     // ---- 类型映射 ----
 
-    /// <summary>字段映射元数据。internal：被 ModelParsed 暴露给 ProtoGenerator（GenerateParsed/BuildEmits）。</summary>
+    /// <summary>
+    /// 字段映射元数据。internal：被 ModelParsed 暴露给 ProtoGenerator（GenerateParsed/BuildEmits）。
+    /// </summary>
     internal sealed record ProtoField(
         string CsName,     // C# DTO 属性名（PascalCase）
         string WireName,   // proto/descriptor 字段名（camelCase，与 TS 模型一致）
@@ -743,7 +751,9 @@ public static class ModelProtoGenerator
         return sb.ToString();
     }
 
-    /// <summary>TS 属性类型：repeated → T[]；List&lt;模型&gt; → 元素模型[]；ModelValue 兜底按是否枚举取 number / Record&lt;string, unknown&gt;。</summary>
+    /// <summary>
+    /// TS 属性类型：repeated → T[]；List&lt;模型&gt; → 元素模型[]；ModelValue 兜底按是否枚举取 number / Record&lt;string, unknown&gt;。
+    /// </summary>
     private static string TsType(ProtoField f)
     {
         if (f.IsRepeated)
@@ -759,7 +769,9 @@ public static class ModelProtoGenerator
         return TsScalar(f.ProtoType);
     }
 
-    /// <summary>命令方法参数类型 → TS 参数类型（标量映射，其它复杂参数按 unknown 透传）。</summary>
+    /// <summary>
+    /// 命令方法参数类型 → TS 参数类型（标量映射，其它复杂参数按 unknown 透传）。
+    /// </summary>
     private static string TsCommandParamType(string? csType)
     {
         var bare = (csType ?? "").Trim().TrimEnd('?');
@@ -835,7 +847,9 @@ public static class ModelProtoGenerator
         return "";
     }
 
-    /// <summary>两个 TS 模型子路径（src/models 下相对目录）之间的相对 import 路径：同目录 ./X、跨目录 ../ 补全。</summary>
+    /// <summary>
+    /// 两个 TS 模型子路径（src/models 下相对目录）之间的相对 import 路径：同目录 ./X、跨目录 ../ 补全。
+    /// </summary>
     private static string RelativeTsImport(string fromSubPath, string toSubPath, string className)
     {
         var from = fromSubPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);

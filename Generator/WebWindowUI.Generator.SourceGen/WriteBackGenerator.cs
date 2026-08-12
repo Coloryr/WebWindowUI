@@ -142,7 +142,9 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
             hasParameterlessCtor);
     }
 
-    /// <summary>基类链是否落在 WebWindowUI.Core.WebWindowModel（WriteBack/Proto 两个生成器共用）。</summary>
+    /// <summary>
+    /// 基类链是否落在 WebWindowUI.Core.WebWindowModel（WriteBack/Proto 两个生成器共用）。
+    /// </summary>
     internal static bool IsDerivedFromWebWindowModel(INamedTypeSymbol sym)
     {
         for (INamedTypeSymbol? b = sym.BaseType; b is not null; b = b.BaseType)
@@ -154,7 +156,9 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
     private static bool HasAttribute(ISymbol symbol, string attributeDisplayName)
         => symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == attributeDisplayName);
 
-    /// <summary>精确复刻 CommunityToolkit 字段→属性名：剥**一个**前导 '_'，再首字母转大写（_name→Name、name→Name、__name→_Name）。</summary>
+    /// <summary>
+    /// 精确复刻 CommunityToolkit 字段→属性名：剥**一个**前导 '_'，再首字母转大写（_name→Name、name→Name、__name→_Name）。
+    /// </summary>
     private static string FieldToPropertyName(string fieldName)
     {
         var name = fieldName.Length > 0 && fieldName[0] == '_' ? fieldName.Substring(1) : fieldName;

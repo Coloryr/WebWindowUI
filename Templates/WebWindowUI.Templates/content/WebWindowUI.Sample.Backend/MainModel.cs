@@ -10,15 +10,21 @@ namespace WebWindowUI.Sample;
 /// </summary>
 public partial class MainModel : WebWindowModel
 {
-    /// <summary>与前端输入框双向绑定。</summary>
+    /// <summary>
+    /// 与前端输入框双向绑定。
+    /// </summary>
     [ObservableProperty]
     public partial string Title { get; set; } = "WebWindowUI 应用";
 
-    /// <summary>由前端命令更新，推送到前端。</summary>
+    /// <summary>
+    /// 由前端命令更新，推送到前端。
+    /// </summary>
     [ObservableProperty]
     public partial int Count { get; set; }
 
-    /// <summary>前端按钮调用 model.bump() → ModelInvoke → 执行本命令 → 推送回前端。</summary>
+    /// <summary>
+    /// 前端按钮调用 model.bump() → ModelInvoke → 执行本命令 → 推送回前端。
+    /// </summary>
     [RelayCommand]
     public void Bump() => Count++;
 }

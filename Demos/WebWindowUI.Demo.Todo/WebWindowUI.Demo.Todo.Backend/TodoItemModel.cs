@@ -9,19 +9,27 @@ namespace WebWindowUI.Demo.Todo;
 /// </summary>
 public partial class TodoItemModel : WebWindowModel
 {
-    /// <summary>任务标题。</summary>
+    /// <summary>
+    /// 任务标题。
+    /// </summary>
     [ObservableProperty]
     public partial string Title { get; set; } = "";
 
-    /// <summary>是否完成。</summary>
+    /// <summary>
+    /// 是否完成。
+    /// </summary>
     [ObservableProperty]
     public partial bool Done { get; set; }
 
-    /// <summary>优先级 1-3（1 高）。</summary>
+    /// <summary>
+    /// 优先级 1-3（1 高）。
+    /// </summary>
     [ObservableProperty]
     public partial int Priority { get; set; } = 1;
 
-    /// <summary>创建时间（格式化字符串，与 .NET 时间戳对应）。</summary>
+    /// <summary>
+    /// 创建时间（格式化字符串，与 .NET 时间戳对应）。
+    /// </summary>
     [ObservableProperty]
     public partial string CreatedAt { get; set; } = DateTime.Now.ToString("MM-dd HH:mm");
 }

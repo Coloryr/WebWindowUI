@@ -46,7 +46,9 @@ internal sealed class GtkPump
         // 构造不能等 _ready：loader lock 语义同 StaThreadPump 的说明，就绪等待在首次 RunAsync。
     }
 
-    /// <summary>在泵线程执行一段 async 工作；返回的 Task 由 xUnit 线程 await。</summary>
+    /// <summary>
+    /// 在泵线程执行一段 async 工作；返回的 Task 由 xUnit 线程 await。
+    /// </summary>
     public Task RunAsync(Func<Task> body)
     {
         WaitReady();
@@ -71,7 +73,9 @@ internal sealed class GtkPump
         return tcs.Task;
     }
 
-    /// <summary>确保泵已初始化完成（GTK/WebKit 已初始化、主循环已就绪）。</summary>
+    /// <summary>
+    /// 确保泵已初始化完成（GTK/WebKit 已初始化、主循环已就绪）。
+    /// </summary>
     private void WaitReady()
     {
         if (_ready.IsSet)

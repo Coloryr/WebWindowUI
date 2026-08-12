@@ -216,7 +216,9 @@ public class ModelProtoTests
         }
     }
 
-    /// <summary>int64 在 descriptor 里是 int64、枚举/object 落到 ModelValue、集合是 repeated string。</summary>
+    /// <summary>
+    /// int64 在 descriptor 里是 int64、枚举/object 落到 ModelValue、集合是 repeated string。
+    /// </summary>
     [Fact]
     public void SettingsDescriptor_TypeMap()
     {
@@ -324,7 +326,9 @@ public class ModelProtoTests
         }
     }
 
-    /// <summary>从测试 bin 向上找仓库根，再定位仓库里的文件。</summary>
+    /// <summary>
+    /// 从测试 bin 向上找仓库根，再定位仓库里的文件。
+    /// </summary>
     private static string? FindRepoFile(params string[] relative)
     {
         DirectoryInfo? dir = new DirectoryInfo(AppContext.BaseDirectory);

@@ -11,7 +11,9 @@ namespace WebWindowUI.Sample.Items;
 /// </summary>
 public partial class NestedItemTagModel : WebWindowModel
 {
-    /// <summary>标签名（proto 字段号 1）。</summary>
+    /// <summary>
+    /// 标签名（proto 字段号 1）。
+    /// </summary>
     [ObservableProperty]
     public partial string Name { get; set; } = "";
 }

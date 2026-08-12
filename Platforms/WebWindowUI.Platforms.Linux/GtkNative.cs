@@ -43,10 +43,14 @@ internal static partial class GtkNative
     [LibraryImport(GtkLib, EntryPoint = "gtk_window_present")]
     private static partial void gtk_window_present(IntPtr window);
 
-    /// <summary>初始化 GTK（gtk_init(null, null)：不处理命令行参数）。创建任何 GTK 控件前必须调用一次。</summary>
+    /// <summary>
+    /// 初始化 GTK（gtk_init(null, null)：不处理命令行参数）。创建任何 GTK 控件前必须调用一次。
+    /// </summary>
     public static void Initialize() => gtk_init(IntPtr.Zero, IntPtr.Zero);
 
-    /// <summary>创建顶层窗口并设置标题/默认尺寸。</summary>
+    /// <summary>
+    /// 创建顶层窗口并设置标题/默认尺寸。
+    /// </summary>
     public static IntPtr CreateWindow(string title, int width, int height)
     {
         var window = gtk_window_new(GtkWindowTopLevel);
@@ -55,18 +59,26 @@ internal static partial class GtkNative
         return window;
     }
 
-    /// <summary>把 WebView（GtkWidget*）挂到窗口。gtk_container_add 收浮点引用，窗口接管一个引用。</summary>
+    /// <summary>
+    /// 把 WebView（GtkWidget*）挂到窗口。gtk_container_add 收浮点引用，窗口接管一个引用。
+    /// </summary>
     public static void SetChild(IntPtr window, IntPtr child) => gtk_container_add(window, child);
 
-    /// <summary>显示窗口及其全部子控件（GTK3 子控件默认不可见，须递归 show）。</summary>
+    /// <summary>
+    /// 显示窗口及其全部子控件（GTK3 子控件默认不可见，须递归 show）。
+    /// </summary>
     public static void Show(IntPtr window) => gtk_widget_show_all(window);
 
-    /// <summary>把窗口带到前台并聚焦。</summary>
+    /// <summary>
+    /// 把窗口带到前台并聚焦。
+    /// </summary>
     public static void Activate(IntPtr window) => gtk_window_present(window);
 
     public static void Hide(IntPtr window) => gtk_widget_hide(window);
 
-    /// <summary>关闭窗口（close-request → 默认处理器 destroy → destroy 信号）。</summary>
+    /// <summary>
+    /// 关闭窗口（close-request → 默认处理器 destroy → destroy 信号）。
+    /// </summary>
     public static void Close(IntPtr window) => gtk_window_close(window);
 
     public static void SetTitle(IntPtr window, string title) => gtk_window_set_title(window, title);

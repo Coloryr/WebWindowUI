@@ -9,7 +9,9 @@ namespace WebWindowUI.Sample;
 /// </summary>
 public class DataProvider : IDataRoute
 {
-    /// <summary>模拟的"大块"数据：2 MB 确定性字节（用长度校验能否完整传输）。</summary>
+    /// <summary>
+    /// 模拟的"大块"数据：2 MB 确定性字节（用长度校验能否完整传输）。
+    /// </summary>
     private const int BlobSize = 2 * 1024 * 1024;
     private static readonly byte[] Blob = BuildBlob();
 

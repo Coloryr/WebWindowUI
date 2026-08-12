@@ -9,11 +9,15 @@ namespace WebWindowUI.Sample.Items;
 /// </summary>
 public partial class NestedItemMetaModel : WebWindowModel
 {
-    /// <summary>作者（proto 字段号 1）。</summary>
+    /// <summary>
+    /// 作者（proto 字段号 1）。
+    /// </summary>
     [ObservableProperty]
     public partial string Author { get; set; } = "";
 
-    /// <summary>备注（proto 字段号 2）。</summary>
+    /// <summary>
+    /// 备注（proto 字段号 2）。
+    /// </summary>
     [ObservableProperty]
     public partial string Note { get; set; } = "";
 }

@@ -27,7 +27,9 @@ public sealed class MacOSWindow : IWindowBackend
     private readonly MacScriptMessageHandler _scriptMessageHandler;
     private readonly MacSchemeHandler _schemeHandler;
 
-    /// <summary>窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。</summary>
+    /// <summary>
+    /// 窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。
+    /// </summary>
     public event Action? Closed;
 
     private MacOSWindow(NSWindow window, WebWindowOptions options)
@@ -62,7 +64,9 @@ public sealed class MacOSWindow : IWindowBackend
         _webView.NavigationDelegate = _navigationDelegate;
     }
 
-    /// <summary>创建并注册一个尚未显示的窗口。</summary>
+    /// <summary>
+    /// 创建并注册一个尚未显示的窗口。
+    /// </summary>
     public static MacOSWindow Create(string title, WebWindowOptions options, int width, int height)
     {
         var window = new NSWindow(
@@ -92,10 +96,14 @@ public sealed class MacOSWindow : IWindowBackend
         });
     }
 
-    /// <summary>隐藏窗口（不关闭、不销毁）。</summary>
+    /// <summary>
+    /// 隐藏窗口（不关闭、不销毁）。
+    /// </summary>
     public void Hide() => RunOnMainThread(() => _window.OrderOut(null));
 
-    /// <summary>关闭窗口。windowWillClose: → 通知框架关闭。</summary>
+    /// <summary>
+    /// 关闭窗口。windowWillClose: → 通知框架关闭。
+    /// </summary>
     public void Close()
     {
         RunOnMainThread(() =>
@@ -106,7 +114,9 @@ public sealed class MacOSWindow : IWindowBackend
         });
     }
 
-    /// <summary>把窗口带到前台并聚焦。进程本身不带 bundle 时无法跨 App 置前，仅激活本窗口。</summary>
+    /// <summary>
+    /// 把窗口带到前台并聚焦。进程本身不带 bundle 时无法跨 App 置前，仅激活本窗口。
+    /// </summary>
     public void Activate()
     {
         RunOnMainThread(() =>
@@ -116,10 +126,14 @@ public sealed class MacOSWindow : IWindowBackend
         });
     }
 
-    /// <summary>修改窗口标题（立即同步到标题栏）。</summary>
+    /// <summary>
+    /// 修改窗口标题（立即同步到标题栏）。
+    /// </summary>
     public void SetTitle(string title) => RunOnMainThread(() => _window.Title = title);
 
-    /// <summary>设置窗口图标。macOS 窗口无 per-window 图标（图标属于 App Bundle），无操作。</summary>
+    /// <summary>
+    /// 设置窗口图标。macOS 窗口无 per-window 图标（图标属于 App Bundle），无操作。
+    /// </summary>
     public void SetIcon(WindowIcon icon)
     {
         // 平台限制，文档注明
@@ -172,10 +186,14 @@ public sealed class MacOSWindow : IWindowBackend
         return result?.ToString() ?? "null";
     }
 
-    /// <summary>页面导航完成时触发（用于在页面就绪后推送 Model 初始快照）。</summary>
+    /// <summary>
+    /// 页面导航完成时触发（用于在页面就绪后推送 Model 初始快照）。
+    /// </summary>
     public event Action? NavigationCompleted;
 
-    /// <summary>页面 JS 通过 script message handler 回传的消息（protobuf 字节，由 NUL 转义串还原）。</summary>
+    /// <summary>
+    /// 页面 JS 通过 script message handler 回传的消息（protobuf 字节，由 NUL 转义串还原）。
+    /// </summary>
     public event Action<byte[]>? MessageReceived;
 
     private void OnWindowWillClose()
@@ -203,20 +221,26 @@ public sealed class MacOSWindow : IWindowBackend
         MacOSMessageLoopSynchronizationContext.Instance.Send(_ => action(), null);
     }
 
-    /// <summary>窗口关闭回调（windowWillClose:）。</summary>
+    /// <summary>
+    /// 窗口关闭回调（windowWillClose:）。
+    /// </summary>
     private sealed class MacWindowDelegate(Action onWillClose) : NSWindowDelegate
     {
         public override void WillClose(NSNotification notification) => onWillClose();
     }
 
-    /// <summary>导航完成回调（webView:didFinishNavigation:）。</summary>
+    /// <summary>
+    /// 导航完成回调（webView:didFinishNavigation:）。
+    /// </summary>
     private sealed class MacNavigationDelegate(Action onFinished) : NSObject, IWKNavigationDelegate
     {
         [Export("webView:didFinishNavigation:")]
         public void DidFinishNavigation(WKWebView webView, WKNavigation navigation) => onFinished();
     }
 
-    /// <summary>JS → native：window.webkit.messageHandlers.wwui.postMessage(...) 的回调。</summary>
+    /// <summary>
+    /// JS → native：window.webkit.messageHandlers.wwui.postMessage(...) 的回调。
+    /// </summary>
     private sealed class MacScriptMessageHandler(Action<byte[]> onMessage) : NSObject, IWKScriptMessageHandler
     {
         [Export("userContentController:didReceiveScriptMessage:")]

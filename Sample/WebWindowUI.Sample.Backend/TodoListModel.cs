@@ -13,7 +13,9 @@ namespace WebWindowUI.Sample;
 /// </summary>
 public partial class TodoListModel : WebWindowModel
 {
-    /// <summary>TodoItemModel 列表：前端强类型 TodoItemModel[]，勾选/改名/增删即整列表回写。</summary>
+    /// <summary>
+    /// TodoItemModel 列表：前端强类型 TodoItemModel[]，勾选/改名/增删即整列表回写。
+    /// </summary>
     [ObservableProperty]
     public partial ObservableCollection<TodoItemModel> Todos { get; set; } = new();
 }

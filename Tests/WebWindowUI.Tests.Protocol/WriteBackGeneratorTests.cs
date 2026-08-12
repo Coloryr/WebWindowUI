@@ -213,7 +213,9 @@ public class WriteBackGeneratorTests
         Assert.Contains(run.Keys, k => k == "MultiWindowModelProto.g.cs");
     }
 
-    /// <summary>CSharpGeneratorDriver 驱动：编译真实/内联源码 + 元数据引用，返回 hintName → 生成源码。</summary>
+    /// <summary>
+    /// CSharpGeneratorDriver 驱动：编译真实/内联源码 + 元数据引用，返回 hintName → 生成源码。
+    /// </summary>
     private static class Driver
     {
         public static ImmutableDictionary<string, string> RunOnSampleModels()
@@ -264,7 +266,9 @@ public class WriteBackGeneratorTests
                 .ToImmutableDictionary(s => s.HintName, s => s.SourceText.ToString());
         }
 
-        /// <summary>从测试 bin 向上找仓库根。</summary>
+        /// <summary>
+        /// 从测试 bin 向上找仓库根。
+        /// </summary>
         private static string? FindRepoRoot()
         {
             DirectoryInfo? d = new(AppContext.BaseDirectory);

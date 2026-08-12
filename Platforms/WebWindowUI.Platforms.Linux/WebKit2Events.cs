@@ -27,10 +27,14 @@ internal sealed class WebKit2SignalBridge
     private ulong _loadChangedId;
     private ulong _scriptMessageId;
 
-    /// <summary>页面加载进度变化（参数为 <see cref="WebKit2Native.LoadEvent"/> 的值）。</summary>
+    /// <summary>
+    /// 页面加载进度变化（参数为 <see cref="WebKit2Native.LoadEvent"/> 的值）。
+    /// </summary>
     public event Action<int>? LoadChanged;
 
-    /// <summary>页面 JS 经 window.webkit.messageHandlers.wwui.postMessage 回传的字符串。</summary>
+    /// <summary>
+    /// 页面 JS 经 window.webkit.messageHandlers.wwui.postMessage 回传的字符串。
+    /// </summary>
     public event Action<string>? ScriptMessageReceived;
 
     public WebKit2SignalBridge(IntPtr webView)
@@ -40,7 +44,9 @@ internal sealed class WebKit2SignalBridge
         _handle = GCHandle.Alloc(this);
     }
 
-    /// <summary>连接两个信号（须在注册 script message handler 之前调用）。</summary>
+    /// <summary>
+    /// 连接两个信号（须在注册 script message handler 之前调用）。
+    /// </summary>
     public void Connect()
     {
         _loadChangedId = WebKit2Native.ConnectSignal(_webView, "load-changed", _loadChangedTrampoline, _handle);
@@ -48,7 +54,9 @@ internal sealed class WebKit2SignalBridge
         WebWindowLog.Debug($"connect signals: load-changed={_loadChangedId} script-message={_scriptMessageId}");
     }
 
-    /// <summary>断开信号并释放路由 GCHandle。</summary>
+    /// <summary>
+    /// 断开信号并释放路由 GCHandle。
+    /// </summary>
     public void Dispose()
     {
         WebKit2Native.DisconnectSignal(_webView, _loadChangedId);

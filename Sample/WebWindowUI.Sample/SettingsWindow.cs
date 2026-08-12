@@ -2,7 +2,9 @@
 
 namespace WebWindowUI.Sample;
 
-/// <summary>设置窗口：对应前端 src/window/settings/，绑定 SettingsModel（多类型模型）。</summary>
+/// <summary>
+/// 设置窗口：对应前端 src/window/settings/，绑定 SettingsModel（多类型模型）。
+/// </summary>
 internal sealed class SettingsWindow : WebWindow
 {
     private readonly Timer _timer;

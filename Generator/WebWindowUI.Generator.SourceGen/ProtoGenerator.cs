@@ -45,11 +45,15 @@ public sealed class ProtoGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(parsed.Collect(), static (spc, list) => BuildEmits(spc, list));
     }
 
-    /// <summary>纯语法预筛：带基类列表的类（模型必须有基类）。比 WriteBack 宽——显式属性模型也要覆盖。</summary>
+    /// <summary>
+    /// 纯语法预筛：带基类列表的类（模型必须有基类）。比 WriteBack 宽——显式属性模型也要覆盖。
+    /// </summary>
     private static bool IsCandidate(SyntaxNode node)
         => node is Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax { BaseList: not null };
 
-    /// <summary>transform：只留纯数据（类名/命名空间/源码文本），不保留 ISymbol。</summary>
+    /// <summary>
+    /// transform：只留纯数据（类名/命名空间/源码文本），不保留 ISymbol。
+    /// </summary>
     private static ModelSourceInfo? Transform(GeneratorSyntaxContext ctx, CancellationToken ct)
     {
         var cds = (Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax)ctx.Node;
@@ -80,7 +84,9 @@ public sealed class ProtoGenerator : IIncrementalGenerator
         }
     }
 
-    /// <summary>全模型清单 → 「类名 → 命名空间」序列（排序保序，EquatableArray 值相等供增量缓存）。</summary>
+    /// <summary>
+    /// 全模型清单 → 「类名 → 命名空间」序列（排序保序，EquatableArray 值相等供增量缓存）。
+    /// </summary>
     private static EquatableArray<KeyValuePair<string, string>> BuildNamespaceMap(ImmutableArray<ModelSourceInfo?> models)
     {
         var pairs = new List<KeyValuePair<string, string>>();
@@ -94,7 +100,9 @@ public sealed class ProtoGenerator : IIncrementalGenerator
         return new EquatableArray<KeyValuePair<string, string>>(pairs.ToArray());
     }
 
-    /// <summary>用「类名 → 命名空间」图解析单个模型；解析失败返回 null（防御，缺该消息时 typed 引用无法解析）。</summary>
+    /// <summary>
+    /// 用「类名 → 命名空间」图解析单个模型；解析失败返回 null（防御，缺该消息时 typed 引用无法解析）。
+    /// </summary>
     private static ParsedModel? ParseModel(ModelSourceInfo m, EquatableArray<KeyValuePair<string, string>> nsPairs)
     {
         if (nsPairs.Length == 0)
@@ -112,6 +120,8 @@ public sealed class ProtoGenerator : IIncrementalGenerator
         }
     }
 
-    /// <summary>纯数据：类名、命名空间、该类的源码文本（供 ParseModel 解析；transform 阶段只收集不解析）。</summary>
+    /// <summary>
+    /// 纯数据：类名、命名空间、该类的源码文本（供 ParseModel 解析；transform 阶段只收集不解析）。
+    /// </summary>
     private sealed record ModelSourceInfo(string ClassName, string Namespace, string SourceText);
 }

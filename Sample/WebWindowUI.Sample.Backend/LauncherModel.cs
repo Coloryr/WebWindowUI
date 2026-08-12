@@ -18,7 +18,9 @@ public partial class LauncherModel : WebWindowModel
     [ObservableProperty]
     public partial string? Request { get; set; }
 
-    /// <summary>CanExecute 门控源：为 false 时 CommandWithArg 命令拒绝执行，前端按钮禁用。</summary>
+    /// <summary>
+    /// CanExecute 门控源：为 false 时 CommandWithArg 命令拒绝执行，前端按钮禁用。
+    /// </summary>
     [ObservableProperty]
     public partial bool ButtonEnable { get; set; }
 
@@ -27,11 +29,15 @@ public partial class LauncherModel : WebWindowModel
     /// 也不出现在快照/update 里——纯 .NET 侧命令逻辑的出口。</summary>
     public event Action<string>? OpenRequested;
 
-    /// <summary>无参命令：打开主窗口。</summary>
+    /// <summary>
+    /// 无参命令：打开主窗口。
+    /// </summary>
     [RelayCommand]
     public void OpenWindow() => OpenRequested?.Invoke("main");
 
-    /// <summary>带参命令：打开指定路径的窗口（CanExecute = ButtonEnable 门控）。</summary>
+    /// <summary>
+    /// 带参命令：打开指定路径的窗口（CanExecute = ButtonEnable 门控）。
+    /// </summary>
     [RelayCommand(CanExecute = "ButtonEnable")]
     public void CommandWithArg(string arg) => OpenRequested?.Invoke(arg);
 }

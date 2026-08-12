@@ -15,7 +15,9 @@ internal sealed class GtkWindowHost : IDisposable
     private readonly GCHandle _handle;
     private ulong _destroyHandlerId;
 
-    /// <summary>窗口被销毁时触发（用户关标题栏或 Close() → destroy）。</summary>
+    /// <summary>
+    /// 窗口被销毁时触发（用户关标题栏或 Close() → destroy）。
+    /// </summary>
     public event EventHandler? Destroyed;
 
     public GtkWindowHost(string title, int width, int height)
@@ -37,7 +39,9 @@ internal sealed class GtkWindowHost : IDisposable
 
     public void Close() => GtkNative.Close(_window);
 
-    /// <summary>断开 destroy 信号并释放路由 GCHandle。窗口已销毁时 DisconnectSignal 吞掉异常。</summary>
+    /// <summary>
+    /// 断开 destroy 信号并释放路由 GCHandle。窗口已销毁时 DisconnectSignal 吞掉异常。
+    /// </summary>
     public void Dispose()
     {
         WebKit2Native.DisconnectSignal(_window, _destroyHandlerId);

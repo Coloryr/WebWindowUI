@@ -10,7 +10,8 @@ namespace WebWindowUI.Platforms.Linux;
 ///
 /// 所有权约定（来自 GIR / WebKitGTK 文档）：
 ///  - <see cref="webkit_uri_scheme_request_get_uri"/> 返回借用字符串，不要释放；
-///  - <see cref="webkit_uri_scheme_request_finish"/> 接管 stream 所有权（WebKit 最终 unref）；
+///  - 完成 scheme 请求走 WebKitURISchemeResponse（≥2.36，能带 HTTP 头）：响应对象以构造属性 ref
+///    stream 与 headers，finish_with_response 后调用方 unref 自己的引用（WebKit 内部已各自 ref）；
 ///  - GMemoryInputStream 持有其 GBytes 的引用，故 g_bytes_new 后由 stream 接管、我们释放自己的引用；
 ///  - jsc_value_to_json / jsc_value_to_string 返回新分配字符串，须 g_free；
 ///  - GError 无 g_error_get_message() API，message 按公开结构体字段偏移直接读（见 <see cref="ReadAndFreeGError"/>）；
@@ -24,8 +25,11 @@ internal static partial class WebKit2Native
     private const string GObjectLib = "libgobject-2.0.so.0";
     private const string GLibLib = "libglib-2.0.so.0";
     private const string GioLib = "libgio-2.0.so.0";
+    private const string SoupLib = "libsoup-3.0.so.0"; // libsoup3（WebKitGTK ≥ 2.42 走 soup3，构造 scheme 响应头）
 
-    /// <summary>WebKitLoadEvent 枚举（WEBKIT_LOAD_*）。</summary>
+    /// <summary>
+    /// WebKitLoadEvent 枚举（WEBKIT_LOAD_*）。
+    /// </summary>
     public enum LoadEvent
     {
         Started = 0,
@@ -63,7 +67,7 @@ internal static partial class WebKit2Native
     private static partial void g_free(IntPtr mem);
 
     [LibraryImport(GLibLib, EntryPoint = "g_bytes_new")]
-    private static partial IntPtr g_bytes_new(byte[] data, nuint len);
+    private static partial IntPtr g_bytes_new(in byte[] data, nuint len);
 
     [LibraryImport(GLibLib, EntryPoint = "g_bytes_unref")]
     private static partial void g_bytes_unref(IntPtr bytes);
@@ -100,7 +104,7 @@ internal static partial class WebKit2Native
     private static partial IntPtr webkit_web_context_get_default();
 
     // LibraryImport 不支持回调委托参数（SYSLIB1051），改 IntPtr + GetFunctionPointerForDelegate；
-    // 委托实例由调用方静态字段保活（LinuxWindow._schemeCallback）。
+    // 委托实例由调用方静态字段保活（LinuxPlatform._schemeCallback）。
     [LibraryImport(WebKitLib, EntryPoint = "webkit_web_context_register_uri_scheme")]
     private static partial void webkit_web_context_register_uri_scheme(
         IntPtr context,
@@ -120,15 +124,52 @@ internal static partial class WebKit2Native
     [LibraryImport(WebKitLib, EntryPoint = "webkit_uri_scheme_request_get_web_view")]
     private static partial IntPtr webkit_uri_scheme_request_get_web_view(IntPtr request);
 
-    [LibraryImport(WebKitLib, EntryPoint = "webkit_uri_scheme_request_finish")]
-    private static partial void webkit_uri_scheme_request_finish(
-        IntPtr request,
-        IntPtr stream,
-        long streamLength,
-        [MarshalAs(UnmanagedType.LPUTF8Str)] string contentType);
+    // WebKitURISchemeResponse（≥ 2.36）：旧 finish 只能带 content-type，响应头（ACAO）须走 response API。
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_uri_scheme_response_new")]
+    private static partial IntPtr webkit_uri_scheme_response_new(IntPtr stream, long streamLength);
+
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_uri_scheme_response_set_content_type")]
+    private static partial void webkit_uri_scheme_response_set_content_type(
+        IntPtr response, [MarshalAs(UnmanagedType.LPUTF8Str)] string contentType);
+
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_uri_scheme_response_set_http_headers")]
+    private static partial void webkit_uri_scheme_response_set_http_headers(IntPtr response, IntPtr headers);
+
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_uri_scheme_request_finish_with_response")]
+    private static partial void webkit_uri_scheme_request_finish_with_response(IntPtr request, IntPtr response);
+
+    // 跨源 fetch 门控：自定义 scheme 默认不开放跨源，须在 security manager 注册为 CORS-enabled。
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_web_context_get_security_manager")]
+    private static partial IntPtr webkit_web_context_get_security_manager(IntPtr context);
+
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_security_manager_register_uri_scheme_as_cors_enabled")]
+    private static partial void webkit_security_manager_register_uri_scheme_as_cors_enabled(
+        IntPtr manager, [MarshalAs(UnmanagedType.LPUTF8Str)] string scheme);
+
+    [LibraryImport(WebKitLib, EntryPoint = "webkit_security_manager_register_uri_scheme_as_secure")]
+    private static partial void webkit_security_manager_register_uri_scheme_as_secure(
+        IntPtr manager, [MarshalAs(UnmanagedType.LPUTF8Str)] string scheme);
 
     [LibraryImport(WebKitLib, EntryPoint = "webkit_javascript_result_get_js_value")]
     private static partial IntPtr webkit_javascript_result_get_js_value(IntPtr jsResult);
+
+    // ==================== libsoup 3（构造 WebKitURISchemeResponse 的 HTTP 头） ====================
+
+    // SoupMessageHeadersType 枚举：SOUP_MESSAGE_HEADERS_REQUEST = 0 / SOUP_MESSAGE_HEADERS_RESPONSE = 1
+    private const int SoupMessageHeadersResponse = 1;
+
+    [LibraryImport(SoupLib, EntryPoint = "soup_message_headers_new")]
+    private static partial IntPtr soup_message_headers_new(int type);
+
+    [LibraryImport(SoupLib, EntryPoint = "soup_message_headers_append")]
+    private static partial void soup_message_headers_append(
+        IntPtr headers,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
+        [MarshalAs(UnmanagedType.LPUTF8Str)] string value);
+
+    // soup3 是引用计数 boxed 类型（soup2 是 soup_message_headers_free，勿混用）
+    [LibraryImport(SoupLib, EntryPoint = "soup_message_headers_unref")]
+    private static partial void soup_message_headers_unref(IntPtr headers);
 
     // ==================== JavaScriptCore 4.1 ====================
 
@@ -162,13 +203,17 @@ internal static partial class WebKit2Native
 
     // ==================== 公开 API ====================
 
-    /// <summary>初始化 WebKit（触发类型/子系统注册，等价于旧 WebKit.Module.Initialize()）。</summary>
+    /// <summary>
+    /// 初始化 WebKit（触发类型/子系统注册，等价于旧 WebKit.Module.Initialize()）。
+    /// </summary>
     public static void Initialize()
     {
         webkit_web_context_get_default();
     }
 
-    /// <summary>创建 WebKitWebView（GtkWidget*），并给 .NET 侧持有一个引用（窗口销毁时 <see cref="ReleaseWebView"/> 释放）。</summary>
+    /// <summary>
+    /// 创建 WebKitWebView（GtkWidget*），并给 .NET 侧持有一个引用（窗口销毁时 <see cref="ReleaseWebView"/> 释放）。
+    /// </summary>
     public static IntPtr CreateWebView()
     {
         var view = webkit_web_view_new();
@@ -178,7 +223,9 @@ internal static partial class WebKit2Native
         return view;
     }
 
-    /// <summary>释放 .NET 侧持有的 webview 引用（先移出存活集合，之后异步回调不再触碰它）。</summary>
+    /// <summary>
+    /// 释放 .NET 侧持有的 webview 引用（先移出存活集合，之后异步回调不再触碰它）。
+    /// </summary>
     public static void ReleaseWebView(IntPtr view)
     {
         lock (_liveViews)
@@ -188,20 +235,34 @@ internal static partial class WebKit2Native
 
     public static void LoadUri(IntPtr view, string uri) => webkit_web_view_load_uri(view, uri);
 
-    /// <summary>取 WebView 的 UserContentManager（用于注册 script message handler）。</summary>
+    /// <summary>
+    /// 取 WebView 的 UserContentManager（用于注册 script message handler）。
+    /// </summary>
     public static IntPtr GetUserContentManager(IntPtr view) => webkit_web_view_get_user_content_manager(view);
 
-    /// <summary>注册 script message handler「wwui」，JS 侧 window.webkit.messageHandlers.wwui.postMessage(...)。</summary>
+    /// <summary>
+    /// 注册 script message handler「wwui」，JS 侧 window.webkit.messageHandlers.wwui.postMessage(...)。
+    /// </summary>
     public static void RegisterScriptMessageHandler(IntPtr view, string name)
     {
         var ok = webkit_user_content_manager_register_script_message_handler(GetUserContentManager(view), name);
         WebWindowLog.Debug($"register_script_message_handler({name}) = {ok}"); // 0 表示注册失败（Debug 日志）
     }
 
-    /// <summary>在共享默认 WebContext 上注册自定义 scheme。回调委托必须保活（由调用方静态持有）。</summary>
+    /// <summary>
+    /// 在共享默认 WebContext 上注册自定义 scheme，并把 scheme 注册为 CORS-enabled（镜像 Windows 的
+    /// AllowedOrigins="*"；不注册则 appdata 跨源 fetch 被 WebKit 的 CORS 门控拦截）与 secure
+    /// （镜像 Windows 的 TreatAsSecure=true，页面按 https 安全上下文求值）。回调委托必须保活（由调用方静态持有）。
+    /// </summary>
     public static void RegisterUriScheme(string scheme, WebKitUriSchemeRequestCallback callback)
-        => webkit_web_context_register_uri_scheme(webkit_web_context_get_default(), scheme,
+    {
+        var context = webkit_web_context_get_default();
+        webkit_web_context_register_uri_scheme(context, scheme,
             Marshal.GetFunctionPointerForDelegate(callback), IntPtr.Zero, IntPtr.Zero);
+        var securityManager = webkit_web_context_get_security_manager(context);
+        webkit_security_manager_register_uri_scheme_as_cors_enabled(securityManager, scheme);
+        webkit_security_manager_register_uri_scheme_as_secure(securityManager, scheme);
+    }
 
     /// <summary>连接 WebKit 信号到托管回调。data 是调用方预先分配的 GCHandle（由调用方释放）；
     /// handler 委托必须被强引用保活。detail 支持 "signal::detail"。</summary>
@@ -209,7 +270,9 @@ internal static partial class WebKit2Native
         => g_signal_connect_data(instance, detailedSignal,
             Marshal.GetFunctionPointerForDelegate(handler), GCHandle.ToIntPtr(data), IntPtr.Zero, 0);
 
-    /// <summary>断开信号。实例已销毁时忽略错误。</summary>
+    /// <summary>
+    /// 断开信号。实例已销毁时忽略错误。
+    /// </summary>
     public static void DisconnectSignal(IntPtr instance, ulong handlerId)
     {
         if (handlerId != 0 && instance != IntPtr.Zero)
@@ -231,28 +294,52 @@ internal static partial class WebKit2Native
         return tcs.Task;
     }
 
-    /// <summary>读取 scheme 请求的 URI（借用字符串，不释放）。</summary>
+    /// <summary>
+    /// 读取 scheme 请求的 URI（借用字符串，不释放）。
+    /// </summary>
     public static string GetSchemeRequestUri(IntPtr request)
     {
         var p = webkit_uri_scheme_request_get_uri(request);
         return p == IntPtr.Zero ? "" : Marshal.PtrToStringUTF8(p) ?? "";
     }
 
-    /// <summary>scheme 请求发起的 webview 指针（用于回查窗口）。</summary>
+    /// <summary>
+    /// scheme 请求发起的 webview 指针（用于回查窗口）。
+    /// </summary>
     public static IntPtr GetSchemeRequestWebView(IntPtr request) => webkit_uri_scheme_request_get_web_view(request);
 
-    /// <summary>以字节数据完成 scheme 请求。WebKit 接管 stream 所有权，本方法内部不保留任何引用。</summary>
-    public static void FinishSchemeRequest(IntPtr request, byte[] data, string contentType)
+    /// <summary>
+    /// 以字节数据完成 scheme 请求，并回 Access-Control-Allow-Origin: *（跨源 appdata fetch 必需，
+    /// 镜像 Windows 的 ResourceHeaders）与 Cache-Control（有 hash 资产长缓存 / 其余 no-store）。
+    /// 走 WebKitGTK ≥ 2.36 的 WebKitURISchemeResponse（旧 finish 只能带 content-type，无法设响应头）。
+    /// 所有权：response 以构造属性 ref stream/headers，finish 后 WebKit 内部已 ref，本方法逐一
+    /// unref 自己的引用、不保留任何状态。
+    /// </summary>
+    public static void FinishSchemeRequest(IntPtr request, byte[] data, string contentType, string? cacheControl)
     {
         var bytes = g_bytes_new(data, (nuint)data.Length);
         var stream = IntPtr.Zero;
+        var response = IntPtr.Zero;
+        var headers = IntPtr.Zero;
         try
         {
             stream = g_memory_input_stream_new_from_bytes(bytes); // stream 持有 bytes 引用
             g_bytes_unref(bytes);                                  // 释放我们自己的引用
             bytes = IntPtr.Zero;
-            webkit_uri_scheme_request_finish(request, stream, data.LongLength, contentType);
-            stream = IntPtr.Zero; // WebKit 已接管
+
+            response = webkit_uri_scheme_response_new(stream, data.LongLength); // response 持有 stream 引用
+            g_object_unref(stream);
+            stream = IntPtr.Zero;
+
+            webkit_uri_scheme_response_set_content_type(response, contentType);
+            headers = BuildResponseHeaders(cacheControl);
+            webkit_uri_scheme_response_set_http_headers(response, headers); // response 持有 headers 引用
+            soup_message_headers_unref(headers);
+            headers = IntPtr.Zero;
+
+            webkit_uri_scheme_request_finish_with_response(request, response); // WebKit 已 ref response
+            g_object_unref(response);
+            response = IntPtr.Zero;
         }
         finally
         {
@@ -260,10 +347,28 @@ internal static partial class WebKit2Native
                 g_bytes_unref(bytes);
             if (stream != IntPtr.Zero)
                 g_object_unref(stream);
+            if (headers != IntPtr.Zero)
+                soup_message_headers_unref(headers);
+            if (response != IntPtr.Zero)
+                g_object_unref(response);
         }
     }
 
-    /// <summary>把 script-message-received 信号里的 WebKitJavascriptResult 转成消息字符串。</summary>
+    /// <summary>
+    /// 构造响应头容器：Access-Control-Allow-Origin: *（跨源数据通道契约，全平台一致）+ 可选 Cache-Control。
+    /// </summary>
+    private static IntPtr BuildResponseHeaders(string? cacheControl)
+    {
+        var headers = soup_message_headers_new(SoupMessageHeadersResponse);
+        soup_message_headers_append(headers, "Access-Control-Allow-Origin", "*");
+        if (!string.IsNullOrEmpty(cacheControl))
+            soup_message_headers_append(headers, "Cache-Control", cacheControl);
+        return headers;
+    }
+
+    /// <summary>
+    /// 把 script-message-received 信号里的 WebKitJavascriptResult 转成消息字符串。
+    /// </summary>
     public static string JavascriptResultToString(IntPtr jsResult)
     {
         var jscValue = webkit_javascript_result_get_js_value(jsResult);
@@ -294,7 +399,9 @@ internal static partial class WebKit2Native
         finally { g_free(p); }
     }
 
-    /// <summary>evaluate_javascript 异步完成回调（主循环线程）。userData 是本次调用的 GCHandle。</summary>
+    /// <summary>
+    /// evaluate_javascript 异步完成回调（主循环线程）。userData 是本次调用的 GCHandle。
+    /// </summary>
     private static void OnEvaluateJavascriptReady(IntPtr sourceObject, IntPtr result, IntPtr userData)
     {
         var gch = GCHandle.FromIntPtr(userData);

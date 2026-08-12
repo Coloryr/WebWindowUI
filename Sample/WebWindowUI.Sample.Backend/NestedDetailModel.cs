@@ -10,11 +10,15 @@ namespace WebWindowUI.Sample;
 /// </summary>
 public partial class NestedDetailModel : WebWindowModel
 {
-    /// <summary>名称（proto 字段号 1）。</summary>
+    /// <summary>
+    /// 名称（proto 字段号 1）。
+    /// </summary>
     [ObservableProperty]
     public partial string Name { get; set; } = "";
 
-    /// <summary>层级（proto 字段号 2）。</summary>
+    /// <summary>
+    /// 层级（proto 字段号 2）。
+    /// </summary>
     [ObservableProperty]
     public partial int Level { get; set; }
 }

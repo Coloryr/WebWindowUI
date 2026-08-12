@@ -8,12 +8,18 @@ namespace WebWindowUI.Demo.ImageGallery;
 /// </summary>
 public sealed class UploadFile
 {
-    /// <summary>原始文件名（含扩展名）。</summary>
+    /// <summary>
+    /// 原始文件名（含扩展名）。
+    /// </summary>
     public string Name { get; set; } = "";
 
-    /// <summary>源文件地址（前端选中的本地文件完整路径；WebView2 经 File.path 提供，其余平台可能为空）。</summary>
+    /// <summary>
+    /// 源文件地址（前端选中的本地文件完整路径；WebView2 经 File.path 提供，其余平台可能为空）。
+    /// </summary>
     public string Path { get; set; } = "";
 
-    /// <summary>文件字节。</summary>
+    /// <summary>
+    /// 文件字节。
+    /// </summary>
     public byte[]? Data { get; set; }
 }

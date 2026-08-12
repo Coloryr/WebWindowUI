@@ -96,7 +96,9 @@ public sealed class WindowsPlatform : IWebWindowPlatform
         _coreWebView2Environment = await CoreWebView2Environment.CreateAsync(null, null, options);
     }
 
-    /// <summary>窗口过程入口：通过 HWND 找到对应的窗口实例。</summary>
+    /// <summary>
+    /// 窗口过程入口：通过 HWND 找到对应的窗口实例。
+    /// </summary>
     private static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
         return _windows.TryGetValue(hwnd, out WindowsWindow? window)

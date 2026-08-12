@@ -4,7 +4,9 @@ using Xunit;
 
 namespace WebWindowUI.Tests;
 
-/// <summary>生成器测试：对样例的真实模型源码跑 ModelProtoGenerator，断言输出的 .proto / C# / descriptor。</summary>
+/// <summary>
+/// 生成器测试：对样例的真实模型源码跑 ModelProtoGenerator，断言输出的 .proto / C# / descriptor。
+/// </summary>
 public class GeneratorTests
 {
     [Fact]
@@ -275,7 +277,9 @@ public class GeneratorTests
         Assert.Contains("todos: TodoItemModel[] = []", result.TsCode);
     }
 
-    /// <summary>从测试 bin 向上找仓库根，读样例模型源码。</summary>
+    /// <summary>
+    /// 从测试 bin 向上找仓库根，读样例模型源码。
+    /// </summary>
     private static string? ReadRepoSource(string modelFile)
     {
         DirectoryInfo? dir = new DirectoryInfo(AppContext.BaseDirectory);

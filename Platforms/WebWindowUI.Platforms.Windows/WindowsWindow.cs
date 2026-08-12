@@ -21,7 +21,9 @@ public sealed class WindowsWindow : IWindowBackend
 
     public IntPtr Hwnd => _hwnd;
 
-    /// <summary>窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。</summary>
+    /// <summary>
+    /// 窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。
+    /// </summary>
     public event Action? Closed;
 
     internal WindowsWindow(IntPtr hwnd, WebWindowOptions options)
@@ -31,7 +33,9 @@ public sealed class WindowsWindow : IWindowBackend
         WindowsPlatform.WindowOpen(this);
     }
 
-    /// <summary>显示窗口并初始化 WebView2。无头模式下只初始化 WebView，窗口永不显示（SW_SHOW 也跳过）。</summary>
+    /// <summary>
+    /// 显示窗口并初始化 WebView2。无头模式下只初始化 WebView，窗口永不显示（SW_SHOW 也跳过）。
+    /// </summary>
     public void Show()
     {
         if (!_options.Headless)
@@ -39,10 +43,14 @@ public sealed class WindowsWindow : IWindowBackend
         _ = InitWebViewAsync();
     }
 
-    /// <summary>隐藏窗口（不关闭、不销毁）。</summary>
+    /// <summary>
+    /// 隐藏窗口（不关闭、不销毁）。
+    /// </summary>
     public void Hide() => Win32.ShowWindow(_hwnd, Win32.SW_HIDE);
 
-    /// <summary>关闭窗口。关闭最后一个窗口后程序自动退出。</summary>
+    /// <summary>
+    /// 关闭窗口。关闭最后一个窗口后程序自动退出。
+    /// </summary>
     public void Close()
     {
         // DestroyWindow 必须在创建窗口的线程调用；宿主可能从任意线程关窗，marshal 回 UI 线程同步执行。
@@ -55,7 +63,9 @@ public sealed class WindowsWindow : IWindowBackend
         });
     }
 
-    /// <summary>把窗口带到前台并聚焦：先恢复最小化，再置前、设焦点。</summary>
+    /// <summary>
+    /// 把窗口带到前台并聚焦：先恢复最小化，再置前、设焦点。
+    /// </summary>
     public void Activate()
     {
         RunOnUiThread(() =>
@@ -67,11 +77,15 @@ public sealed class WindowsWindow : IWindowBackend
         });
     }
 
-    /// <summary>修改窗口标题（立即同步到标题栏）。</summary>
+    /// <summary>
+    /// 修改窗口标题（立即同步到标题栏）。
+    /// </summary>
     public void SetTitle(string title)
         => RunOnUiThread(() => Win32.SetWindowTextW(_hwnd, title));
 
-    /// <summary>设置窗口图标（标题栏 + 任务栏）。替换旧图标时释放旧的句柄。</summary>
+    /// <summary>
+    /// 设置窗口图标（标题栏 + 任务栏）。替换旧图标时释放旧的句柄。
+    /// </summary>
     public void SetIcon(WindowIcon icon)
     {
         RunOnUiThread(() =>
@@ -155,13 +169,19 @@ public sealed class WindowsWindow : IWindowBackend
         return await _controller.CoreWebView2.ExecuteScriptAsync(script);
     }
 
-    /// <summary>页面导航完成时触发（用于在页面就绪后推送 Model 初始快照）。</summary>
+    /// <summary>
+    /// 页面导航完成时触发（用于在页面就绪后推送 Model 初始快照）。
+    /// </summary>
     public event Action? NavigationCompleted;
 
-    /// <summary>页面 JS 通过 postMessage 回传的消息（protobuf 字节，由 Latin-1 字节串还原）。</summary>
+    /// <summary>
+    /// 页面 JS 通过 postMessage 回传的消息（protobuf 字节，由 Latin-1 字节串还原）。
+    /// </summary>
     public event Action<byte[]>? MessageReceived;
 
-    /// <summary>把 WindowIcon（文件或流）加载成 HICON。流会先落到临时文件再加载。</summary>
+    /// <summary>
+    /// 把 WindowIcon（文件或流）加载成 HICON。流会先落到临时文件再加载。
+    /// </summary>
     private static IntPtr LoadIconHandle(WindowIcon icon)
     {
         var tmp = Path.Combine(Path.GetTempPath(), "webwindowui_" + Guid.NewGuid().ToString("N") + ".ico");

@@ -39,7 +39,9 @@ public static partial class Win32
     private static WndProcDelegate _marshalWndProc = null!; // 保活，防止被 GC 回收
     private static Func<IntPtr, uint, IntPtr, IntPtr, IntPtr?>? _marshalHandler;
 
-    /// <summary>跑 Win32 消息循环，直到收到 WM_QUIT 为止。</summary>
+    /// <summary>
+    /// 跑 Win32 消息循环，直到收到 WM_QUIT 为止。
+    /// </summary>
     public static void MessageLoop()
     {
         while (GetMessageW(out MSG msg, IntPtr.Zero, 0, 0) > 0)
@@ -78,7 +80,9 @@ public static partial class Win32
         return _marshalHwnd;
     }
 
-    /// <summary>注册隐藏消息窗口的附加消息处理（各平台接自己的 WM_RUN → RunQueued）。返回 null 表示未处理，回落到 DefWindowProcW。</summary>
+    /// <summary>
+    /// 注册隐藏消息窗口的附加消息处理（各平台接自己的 WM_RUN → RunQueued）。返回 null 表示未处理，回落到 DefWindowProcW。
+    /// </summary>
     public static void SetMarshalMessageHandler(Func<IntPtr, uint, IntPtr, IntPtr, IntPtr?>? handler)
         => _marshalHandler = handler;
 
@@ -102,7 +106,9 @@ public static partial class Win32
     [CustomMarshaller(typeof(WNDCLASSEXW), MarshalMode.Default, typeof(WndClassExMarshaller))]
     internal static class WndClassExMarshaller
     {
-        /// <summary>原生布局（blittable，字段序与 WNDCLASSEXW 一致）。</summary>
+        /// <summary>
+        /// 原生布局（blittable，字段序与 WNDCLASSEXW 一致）。
+        /// </summary>
         [StructLayout(LayoutKind.Sequential)]
         internal struct Native
         {

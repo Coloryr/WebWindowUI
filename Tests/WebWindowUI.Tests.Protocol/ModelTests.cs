@@ -11,7 +11,9 @@ using Xunit;
 
 namespace WebWindowUI.Tests;
 
-/// <summary>无生成编码器的模型：完整快照回退到通用 ModelSnapshot，属性变化不推送增量。</summary>
+/// <summary>
+/// 无生成编码器的模型：完整快照回退到通用 ModelSnapshot，属性变化不推送增量。
+/// </summary>
 public partial class GenericFallbackModel : WebWindowModel
 {
     [ObservableProperty]
