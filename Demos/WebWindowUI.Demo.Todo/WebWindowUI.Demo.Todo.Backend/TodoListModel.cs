@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using WebWindowUI.Core;
@@ -100,7 +101,7 @@ public partial class TodoListModel : WebWindowModel
         {
             if (!File.Exists(_saveFile))
                 return;
-            var dto = JsonSerializer.Deserialize<List<TodoItemDto>>(File.ReadAllText(_saveFile));
+            var dto = JsonSerializer.Deserialize(File.ReadAllText(_saveFile), TodoJsonContext.Default.ListTodoItemDto);
             if (dto is null)
                 return;
             foreach (var d in dto)
@@ -128,7 +129,7 @@ public partial class TodoListModel : WebWindowModel
             var dto = Items
                 .Select(i => new TodoItemDto { Title = i.Title, Done = i.Done, Priority = i.Priority, CreatedAt = i.CreatedAt })
                 .ToList();
-            File.WriteAllText(_saveFile, JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(_saveFile, JsonSerializer.Serialize(dto, TodoJsonContext.Default.ListTodoItemDto));
             Status = $"已保存 {DateTime.Now:HH:mm:ss}（{Items.Count} 项）";
         }
         catch (Exception e)
@@ -146,5 +147,15 @@ public partial class TodoListModel : WebWindowModel
         public bool Done { get; set; }
         public int Priority { get; set; }
         public string CreatedAt { get; set; } = "";
+    }
+
+    /// <summary>
+    /// 源生成 JSON 上下文：macOS Release 强制裁剪，反射式 JsonSerializer 的 DTO 成员会被剪掉
+    /// （IL2026）→ 持久化运行时 break。source-gen 后成员静态保留，无警告无风险。
+    /// </summary>
+    [JsonSerializable(typeof(List<TodoItemDto>))]
+    [JsonSourceGenerationOptions(WriteIndented = true)]
+    private sealed partial class TodoJsonContext : JsonSerializerContext
+    {
     }
 }
