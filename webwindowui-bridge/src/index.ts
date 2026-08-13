@@ -1,1 +1,2 @@
-export { bindModel, ModelCommandHost } from './model'
+export { bindModel } from './bind-model'
+export { ModelCommandHost } from './protocol'
