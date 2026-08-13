@@ -33,6 +33,43 @@ internal static partial class Win32
     public const uint LR_DEFAULTSIZE = 0x0040;
     public const uint WM_RUN = 0x8000; // WM_APP
 
+    public const uint MB_OK = 0x00000000;
+    public const uint MB_ICONINFORMATION = 0x00000040;
+    public const uint MB_ICONWARNING = 0x00000030;
+    public const uint MB_ICONERROR = 0x00000010;
+
+    public const uint OFN_READONLY = 0x00000001;
+    public const uint OFN_OVERWRITEPROMPT = 0x00000002;
+    public const uint OFN_HIDEREADONLY = 0x00000004;
+    public const uint OFN_NOCHANGEDIR = 0x00000008;
+    public const uint OFN_SHOWHELP = 0x00000010;
+    public const uint OFN_ENABLEHOOK = 0x00000020;
+    public const uint OFN_ENABLETEMPLATE = 0x00000040;
+    public const uint OFN_ENABLETEMPLATEHANDLE = 0x00000080;
+    public const uint OFN_NOVALIDATE = 0x00000100;
+    public const uint OFN_ALLOWMULTISELECT = 0x00000200;
+    public const uint OFN_EXTENSIONDIFFERENT = 0x00000400;
+    public const uint OFN_PATHMUSTEXIST = 0x00000800;
+    public const uint OFN_FILEMUSTEXIST = 0x00001000;
+    public const uint OFN_CREATEPROMPT = 0x00002000;
+    public const uint OFN_SHAREAWARE = 0x00004000;
+    public const uint OFN_NOREADONLYRETURN = 0x00008000;
+    public const uint OFN_NOTESTFILECREATE = 0x00010000;
+    public const uint OFN_NONETWORKBUTTON = 0x00020000;
+    public const uint OFN_NOLONGNAMES = 0x00040000;
+    public const uint OFN_EXPLORER = 0x00080000;
+    public const uint OFN_NODEREFERENCELINKS = 0x00100000;
+    public const uint OFN_LONGNAMES = 0x00200000;
+    public const uint OFN_ENABLEINCLUDENOTIFY = 0x00400000;
+    public const uint OFN_ENABLESIZING = 0x00800000;
+    public const uint OFN_DONTADDTORECENT = 0x02000000;
+    public const uint OFN_FORCESHOWHIDDEN = 0x10000000;
+
+    // OPENFILENAME.lpstrFile 输出缓冲区（字符数）：多选列表可能很长（NUL 分隔多个条目），
+    // 官方推荐 32K；单选 4K 足够覆盖长路径。
+    public const int OFN_MULTISELECT_BUFFER = 32768;
+    public const int OFN_SINGLE_SELECT_BUFFER = 4096;
+
     private const int HWND_MESSAGE = -3;
 
     private static IntPtr _marshalHwnd;
@@ -74,7 +111,7 @@ internal static partial class Win32
         _marshalHwnd = CreateWindowExW(
             0, windowClassName, "", 0,
             0, 0, 0, 0,
-            (IntPtr)HWND_MESSAGE, IntPtr.Zero, GetModuleHandleW(null), IntPtr.Zero);
+            HWND_MESSAGE, IntPtr.Zero, GetModuleHandleW(null), IntPtr.Zero);
         if (_marshalHwnd == IntPtr.Zero)
             throw new Win32Exception(Marshal.GetLastWin32Error(), "创建消息窗口失败 (CreateWindowExW)");
         return _marshalHwnd;
@@ -210,9 +247,208 @@ internal static partial class Win32
         public int Y;
     }
 
+    [CustomMarshaller(typeof(OPENFILENAME), MarshalMode.Default, typeof(OpenFileNameMarshaller))]
+    internal static class OpenFileNameMarshaller
+    {
+        /// <summary>
+        /// 原生布局，字段序与 tagOFNW（OPENFILENAMEW）完全一致，含 lpEditInfo/lpstrPrompt 两个保留字段
+        /// ——缺了它们结构体尺寸就小于真实 OPENFILENAMEW（x64 应为 168 字节），对话框按 lStructSize 读越界。
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct Native
+        {
+            public int lStructSize;
+            public IntPtr hwndOwner;
+            public IntPtr hInstance;
+            public IntPtr lpstrFilter;          // 输入过滤器（只读）
+            public IntPtr lpstrCustomFilter;    // 缓冲 in/out（nMaxCustFilter）
+            public int nMaxCustFilter;
+            public int nFilterIndex;
+            public IntPtr lpstrFile;            // 缓冲 in/out（nMaxFile，返回选中路径/多选列表）
+            public int nMaxFile;
+            public IntPtr lpstrFileTitle;       // 缓冲 out（nMaxFileTitle，不带路径的文件名）
+            public int nMaxFileTitle;
+            public IntPtr lpstrInitialDir;
+            public IntPtr lpstrTitle;
+            public int Flags;
+            public short nFileOffset;
+            public short nFileExtension;
+            public IntPtr lpstrDefExt;
+            public IntPtr lCustData;
+            public IntPtr lpfnHook;
+            public IntPtr lpstrTemplateName;
+            public IntPtr lpEditInfo;           // 保留（占位）
+            public IntPtr lpstrPrompt;          // 保留（占位，LPCSTR）
+            public IntPtr pvReserved;
+            public int dwReserved;
+            public int FlagsEx;
+        }
+
+        public static Native ConvertToUnmanaged(OPENFILENAME managed) => new()
+        {
+            lStructSize = managed.lStructSize,
+            hwndOwner = managed.hwndOwner,
+            hInstance = managed.hInstance,
+            lpstrFilter = ToCoTaskMem(managed.lpstrFilter),
+            lpstrCustomFilter = AllocBuffer(managed.lpstrCustomFilter, managed.nMaxCustFilter),
+            nMaxCustFilter = managed.nMaxCustFilter,
+            nFilterIndex = managed.nFilterIndex,
+            lpstrFile = AllocBuffer(managed.lpstrFile, managed.nMaxFile),
+            nMaxFile = managed.nMaxFile,
+            lpstrFileTitle = AllocBuffer(managed.lpstrFileTitle, managed.nMaxFileTitle),
+            nMaxFileTitle = managed.nMaxFileTitle,
+            lpstrInitialDir = ToCoTaskMem(managed.lpstrInitialDir),
+            lpstrTitle = ToCoTaskMem(managed.lpstrTitle),
+            Flags = managed.Flags,
+            nFileOffset = managed.nFileOffset,
+            nFileExtension = managed.nFileExtension,
+            lpstrDefExt = ToCoTaskMem(managed.lpstrDefExt),
+            lCustData = managed.lCustData,
+            lpfnHook = managed.lpfnHook,
+            lpstrTemplateName = ToCoTaskMem(managed.lpstrTemplateName),
+            lpEditInfo = managed.lpEditInfo,
+            lpstrPrompt = managed.lpstrPrompt,
+            pvReserved = managed.pvReserved,
+            dwReserved = managed.dwReserved,
+            FlagsEx = managed.FlagsEx,
+        };
+
+        public static OPENFILENAME ConvertToManaged(Native unmanaged) => new()
+        {
+            lStructSize = unmanaged.lStructSize,
+            hwndOwner = unmanaged.hwndOwner,
+            hInstance = unmanaged.hInstance,
+            lpstrFilter = ReadCString(unmanaged.lpstrFilter),
+            lpstrCustomFilter = ReadCString(unmanaged.lpstrCustomFilter),
+            nMaxCustFilter = unmanaged.nMaxCustFilter,
+            nFilterIndex = unmanaged.nFilterIndex,
+            lpstrFile = ReadFileBuffer(unmanaged.lpstrFile, unmanaged.nMaxFile),
+            nMaxFile = unmanaged.nMaxFile,
+            lpstrFileTitle = ReadCString(unmanaged.lpstrFileTitle),
+            nMaxFileTitle = unmanaged.nMaxFileTitle,
+            lpstrInitialDir = ReadCString(unmanaged.lpstrInitialDir),
+            lpstrTitle = ReadCString(unmanaged.lpstrTitle),
+            Flags = unmanaged.Flags,
+            nFileOffset = unmanaged.nFileOffset,
+            nFileExtension = unmanaged.nFileExtension,
+            lpstrDefExt = ReadCString(unmanaged.lpstrDefExt),
+            lCustData = unmanaged.lCustData,
+            lpfnHook = unmanaged.lpfnHook,
+            lpstrTemplateName = ReadCString(unmanaged.lpstrTemplateName),
+            lpEditInfo = unmanaged.lpEditInfo,
+            lpstrPrompt = unmanaged.lpstrPrompt,
+            pvReserved = unmanaged.pvReserved,
+            dwReserved = unmanaged.dwReserved,
+            FlagsEx = unmanaged.FlagsEx,
+        };
+
+        /// <summary>
+        /// 释放 ConvertToUnmanaged 分配的全部 CoTaskMem（LPWSTR 缓冲区 + 输入字符串）。
+        /// 生成器在 P/Invoke 返回后自动调用；只释放我方分配的指针，句柄类字段（hwndOwner/hInstance/lCustData/lpfnHook）不动。
+        /// </summary>
+        public static void Free(Native unmanaged)
+        {
+            Marshal.FreeCoTaskMem(unmanaged.lpstrFilter);
+            Marshal.FreeCoTaskMem(unmanaged.lpstrCustomFilter);
+            Marshal.FreeCoTaskMem(unmanaged.lpstrFile);
+            Marshal.FreeCoTaskMem(unmanaged.lpstrFileTitle);
+            Marshal.FreeCoTaskMem(unmanaged.lpstrInitialDir);
+            Marshal.FreeCoTaskMem(unmanaged.lpstrTitle);
+            Marshal.FreeCoTaskMem(unmanaged.lpstrDefExt);
+            Marshal.FreeCoTaskMem(unmanaged.lpstrTemplateName);
+        }
+
+        private static IntPtr ToCoTaskMem(string? s)
+            => s is null ? IntPtr.Zero : Marshal.StringToCoTaskMemUni(s);
+
+        /// <summary>
+        /// 分配 LPWSTR 输出缓冲区：容量 max(capacity, 初值长度)+1 个字符（含终止符），整块清零后拷入初值。
+        /// </summary>
+        private static IntPtr AllocBuffer(string? initial, int capacity)
+        {
+            int chars = Math.Max(capacity, (initial?.Length ?? 0) + 1);
+            IntPtr ptr = Marshal.StringToCoTaskMemUni(new string('\0', chars));
+            if (initial is not null)
+                Marshal.Copy(initial.ToCharArray(), 0, ptr, initial.Length);
+            return ptr;
+        }
+
+        private static string? ReadCString(IntPtr ptr)
+            => ptr == IntPtr.Zero ? null : Marshal.PtrToStringUni(ptr);
+
+        /// <summary>
+        /// 读回文件缓冲区。单选 = 普通 NUL 结尾字符串；多选（OFN_ALLOWMULTISELECT）=
+        /// "目录\0文件1\0文件2\0\0"，逐字符扫到双 NUL 收进带内嵌 NUL 的原始字符串，由调用方 Split。
+        /// </summary>
+        private static string? ReadFileBuffer(IntPtr ptr, int maxChars)
+        {
+            if (ptr == IntPtr.Zero)
+                return null;
+            int length = 0;
+            while (length < maxChars)
+            {
+                char c = (char)Marshal.ReadInt16(ptr, length * sizeof(char));
+                if (c == '\0')
+                {
+                    // 双 NUL = 列表结束（单选中 API 只写一个 NUL，其后仍是清零残留 → 同样命中，长度正确）
+                    if (length + 1 < maxChars && (char)Marshal.ReadInt16(ptr, (length + 1) * sizeof(char)) == '\0')
+                        break;
+                }
+                length++;
+            }
+            return Marshal.PtrToStringUni(ptr, length);
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct OPENFILENAME
+    {
+        public int lStructSize;
+        public IntPtr hwndOwner;
+        public IntPtr hInstance;
+        public string? lpstrFilter;          // 输入过滤器（"描述\0*.ext\0"，封送器补终止符成双 NUL）
+        public string? lpstrCustomFilter;    // in/out 缓冲（nMaxCustFilter）
+        public int nMaxCustFilter;
+        public int nFilterIndex;
+        public string? lpstrFile;            // in/out 缓冲：初值=默认文件名，返回=选中路径（多选为 NUL 分隔列表）
+        public int nMaxFile;
+        public string? lpstrFileTitle;       // out 缓冲：返回不带路径的文件名
+        public int nMaxFileTitle;
+        public string? lpstrInitialDir;
+        public string? lpstrTitle;
+        public int Flags;
+        public short nFileOffset;
+        public short nFileExtension;
+        public string? lpstrDefExt;
+        public IntPtr lCustData;
+        public IntPtr lpfnHook;
+        public string? lpstrTemplateName;
+        public IntPtr lpEditInfo;            // 保留字段（OPENFILENAMEW 布局占位）
+        public IntPtr lpstrPrompt;           // 保留字段（LPCSTR，OPENFILENAMEW 布局占位）
+        public IntPtr pvReserved;
+        public int dwReserved;
+        public int FlagsEx;
+    }
+
     // ------------------------------------------------------------------
     // P/Invoke
     // ------------------------------------------------------------------
+
+    [LibraryImport("comdlg32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetOpenFileNameW([MarshalUsing(typeof(OpenFileNameMarshaller))] ref OPENFILENAME lpofn);
+
+    [LibraryImport("comdlg32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetSaveFileNameW([MarshalUsing(typeof(OpenFileNameMarshaller))] ref OPENFILENAME lpofn);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.I4)]
+    public static partial int MessageBoxW(
+        IntPtr hWnd,
+        [MarshalAs(UnmanagedType.LPWStr)] string lpText,
+        [MarshalAs(UnmanagedType.LPWStr)] string lpCaption,
+        uint uType);
 
     [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
     public static partial IntPtr GetModuleHandleW(string? lpModuleName);

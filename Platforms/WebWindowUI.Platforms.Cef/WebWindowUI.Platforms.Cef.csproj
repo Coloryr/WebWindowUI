@@ -1,19 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- Windows 上引用 Natives.Windows（net10.0-windows，Win32 共享层）→ TFM 须镜像；其余平台无 native 依赖保持 net10.0 -->
-    <TargetFramework Condition="'$(WWUIPlatform)' == 'Windows'">net10.0-windows</TargetFramework>
-    <TargetFramework Condition="'$(WWUIPlatform)' != 'Windows'">net10.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>WebWindowUI.Platforms.Cef</PackageId>
     <Description>WebWindowUI CEF 平台实现</Description>
     <PackageTags>webwindowui;cef;chromium</PackageTags>
     <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
-  </PropertyGroup>
-
-  <PropertyGroup>
-    <DefineConstants>$(DefineConstants);WWUI_CEF</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,8 +17,10 @@
     <PackageReference Include="cef.runtime.osx-x64" Condition="'$(WWUIPlatform)' == 'MacOS' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'X64'" />
     <PackageReference Include="chromiumembeddedframework.runtime.win-arm64" Condition="'$(WWUIPlatform)' == 'Windows' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'" />
     <PackageReference Include="chromiumembeddedframework.runtime.win-x64" Condition="'$(WWUIPlatform)' == 'Windows' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'X64'" />
-    <PackageReference Include="SharpCompress" />
+	  <PackageReference Include="CefGlue.Next.Common" />
+	  <PackageReference Include="CefGlue.Next.Common.Shared" />
     <PackageReference Include="CefGlue.Next.Core" />
+	<PackageReference Include="CefGlue.Next.BrowserProcess.Core" />
   </ItemGroup>
 
   <ItemGroup>

@@ -98,20 +98,42 @@
   <!-- 角色判定（求值期）：按引用项过滤标记库。
        WithMetadataValue 过滤 ItemGroup 内允许；PropertyGroup 条件不允许引用 item（MSB4099），
        故角色不落属性、直接以项列表信号贯穿：_WWUI_BackendRef / _WWUI_FrontendMarkerRef 非空即命中角色。
-       精确匹配（而非子串）保证 WebWindowUI.Sample.Backend 这类「名字里带 Backend」的工程不误判为标记库。 -->
+       精确匹配（而非子串）保证 WebWindowUI.Sample.Backend 这类「名字里带 Backend」的工程不误判为标记库。
+       _WWUI_EntryRef = 直接引用入口（WebWindowUI 工程/包）的工程——应用 exe 独有信号
+       （标记库工程也引用入口，但会被各自的 marker 信号排除）。 -->
   <ItemGroup>
     <!-- 项目引用按 Filename（工程文件名）；包引用按 Identity（包名，Identity 精确匹配，
          因为包名无扩展名时 Filename 会把 .Backend 剥掉）。两个信号并集即角色证明。 -->
     <_WWUI_BackendRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Backend'));@(PackageReference->WithMetadataValue('Identity', 'WebWindowUI.Backend'))" />
     <_WWUI_FrontendMarkerRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Frontend'));@(PackageReference->WithMetadataValue('Identity', 'WebWindowUI.Frontend'))" />
+    <_WWUI_EntryRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI'));@(PackageReference->WithMetadataValue('Identity', 'WebWindowUI'))" />
   </ItemGroup>
 
-  <!-- 平台实现（WebWindowUI.Platforms.{Windows,Linux,MacOS} 独立包）的引入完全走引用图，本文件不再注入：
+  <!-- 平台实现（WebWindowUI.Platforms.{Windows,Linux,MacOS,Cef} 独立包）的选择与分派在应用工程侧完成
+       （不再由共享的入口 dll 烘焙——UseCEF 只在消费方应用可见，MSBuild 属性不跨 ProjectReference
+       传播，旧设计把分派烤进入口导致 CEF 永远选不中，且分派引用已删除的 CefBootstrap 类）：
        包模式：入口包 nuspec 带对应平台包依赖（打包时 -p:WWUI_PlatformRef=true 才写入），消费方只引
-               WebWindowUI 即按系统自动带回平台包 + 平台自身依赖（WebView2 等）。
-       仓库模式：入口工程 WebWindowUI.csproj 在 WWUI_PlatformRef != 'true' 时条件 ProjectReference 相邻平台
-               工程，经引用图传递进消费方产物（测试工程另有自己的直接条件引用，见 WebWindowUI.Tests.Platform.csproj）。
-       消费方 Main 首行调用 WebWindowUI.Platform.EnsureRegistered() 触发平台加载注册（AOT 安全：编译期静态引用）。 -->
+               WebWindowUI 即按系统自动带回平台包 + 平台自身依赖（WebView2 等）；CEF 消费方另显式
+               引用 WebWindowUI.Platforms.Cef。
+       仓库模式：本 ItemGroup（求值期）给应用工程补平台 ProjectReference（相邻平台工程存在才补），
+               经引用图进消费方产物；应用 = 直接引入口 + 可执行 OutputType（Exe/WinExe）——
+               标记库工程（WebWindowUI.Backend/Frontend 自身）虽也直接引入口，但 OutputType=Library 排除
+               （否则 Windows 平台会经标记库泄进消费方图，实测 CEF 构建 bin 混入 WebView2）。
+               测试工程另有自己的直接条件引用（见 WebWindowUI.Tests.Platform.csproj），且 OutputType=Library
+               不被注入分派（泵线程注册语义不受干扰）。
+       分派：_WWUI_GeneratePlatformDispatch 给应用工程注入 PlatformBootstrap.g.cs（[ModuleInitializer]
+       惰性登记加载委托），消费方 Main 首行调用 WebWindowUIPlatform.Init() 触发加载注册
+       （AOT 安全：编译期静态引用，无 Assembly.Load）。 -->
+  <ItemGroup Condition="'@(_WWUI_EntryRef)' != '' And '$(OutputType)' != 'Library'">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Platforms\WebWindowUI.Platforms.Cef\WebWindowUI.Platforms.Cef.csproj"
+                      Condition="'$(UseCEF)' == 'true' And Exists('$(MSBuildThisFileDirectory)Platforms\WebWindowUI.Platforms.Cef\WebWindowUI.Platforms.Cef.csproj')" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Platforms\WebWindowUI.Platforms.Windows\WebWindowUI.Platforms.Windows.csproj"
+                      Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'Windows' And Exists('$(MSBuildThisFileDirectory)Platforms\WebWindowUI.Platforms.Windows\WebWindowUI.Platforms.Windows.csproj')" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Platforms\WebWindowUI.Platforms.Linux\WebWindowUI.Platforms.Linux.csproj"
+                      Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'Linux' And Exists('$(MSBuildThisFileDirectory)Platforms\WebWindowUI.Platforms.Linux\WebWindowUI.Platforms.Linux.csproj')" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Platforms\WebWindowUI.Platforms.MacOS\WebWindowUI.Platforms.MacOS.csproj"
+                      Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'MacOS' And Exists('$(MSBuildThisFileDirectory)Platforms\WebWindowUI.Platforms.MacOS\WebWindowUI.Platforms.MacOS.csproj')" />
+  </ItemGroup>
 
   <!-- 桥 descriptor 输出目录默认（零配置）：工程名以 .Backend 结尾的模型库工程，默认写到「去掉 .Backend 后缀的
        兄弟前端工程」的 src。约定 App=<名>、后端=<名>.Backend、前端=<名>.Frontend 三工程同目录平铺（模板/样例/演示
@@ -465,6 +487,33 @@
           DependsOnTargets="_WWUI_DiscoverFrontend">
     <ItemGroup Condition="'$(WebWindowUIFrontendProject)' != ''">
       <Compile Include="$(_WWUI_FrameworkSrcDir)FrontendLoad.cs" Link="FrontendLoad.cs" />
+    </ItemGroup>
+  </Target>
+
+  <!-- 平台分派注入（应用工程：_WWUI_EntryRef 非空且 OutputType 非 Library——标记库工程引用入口但
+       是 Library，不注入）：
+       UseCEF / WWUIPlatform 只对应用工程自身可见，平台选择在此处烤进应用工程的 PlatformBootstrap.g.cs——
+       [ModuleInitializer] 惰性登记加载委托（只存 Action，不加载任何平台程序集），真正加载由
+       WebWindowUIPlatform.Init()（消费方 Main 首行调用）触发。惰性登记而非直接加载：
+       测试进程等只加载应用 dll、不调用 Init 的宿主不会提前注册平台（泵线程注册语义不受干扰）。
+       AOT 安全：委托体里的 typeof(平台类型) 编译期静态引用，NativeAOT 下根进应用链接闭包。
+       WWUI_CEF 符号（WebWindowUI.Platform.props）在 UseCEF=true 时已为所有工程定义，可作消费者条件编译。
+       挂 BeforeTargets="_GenerateCompileInputs"（同 _WWUI_InjectFrontendHost/_WWUI_EmbedWwwroot：
+       SDK 在该处组装 Csc 的 Compile 参数），Compile 项在目标体注入（角色信号求值期就绪，这里保守复检）。 -->
+  <Target Name="_WWUI_GeneratePlatformDispatch" BeforeTargets="_GenerateCompileInputs"
+          Condition="'@(_WWUI_EntryRef)' != '' And '$(OutputType)' != 'Library'">
+    <PropertyGroup>
+      <_WWUI_DispatchLine Condition="'$(UseCEF)' == 'true'">WebWindowUI.Platforms.Cef.CefPlatform</_WWUI_DispatchLine>
+      <_WWUI_DispatchLine Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'Windows'">WebWindowUI.Platforms.Windows.WindowsPlatform</_WWUI_DispatchLine>
+      <_WWUI_DispatchLine Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'Linux'">WebWindowUI.Platforms.Linux.LinuxPlatform</_WWUI_DispatchLine>
+      <_WWUI_DispatchLine Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'MacOS'">WebWindowUI.Platforms.MacOS.MacOSPlatform</_WWUI_DispatchLine>
+      <_WWUI_DispatchLine Condition="'$(_WWUI_DispatchLine)' == ''">WebWindowUI.NullPlatform</_WWUI_DispatchLine>
+      <_WWUI_BootstrapContent>namespace WebWindowUI%3B%0A%0Ainternal static class __WebWindowUIPlatformBootstrap%0A{%0A    [global%3A%3ASystem.Runtime.CompilerServices.ModuleInitializer]%0A    internal static void Register()%0A    {%0A        global%3A%3AWebWindowUI.WebWindowUIPlatform.RegisterPlatformLoader(new $(_WWUI_DispatchLine)())%3B%0A    }%0A}%0A</_WWUI_BootstrapContent>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(IntermediateOutputPath)PlatformBootstrap.g.cs" Overwrite="true"
+                      Lines="$(_WWUI_BootstrapContent)" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)PlatformBootstrap.g.cs" />
     </ItemGroup>
   </Target>
 

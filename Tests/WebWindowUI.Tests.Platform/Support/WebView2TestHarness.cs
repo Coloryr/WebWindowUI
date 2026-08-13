@@ -35,9 +35,7 @@ internal static class WebView2TestHarness
         TimeSpan t = timeout ?? TimeSpan.FromSeconds(60);
         return StaThreadPump.Instance.RunAsync(async () =>
         {
-            Trace.Log($"harness: window ctor begin ({windowPath})");
             var win = new TestWindow(windowPath, title);
-            Trace.Log("harness: window ctor done");
             try
             {
                 win.Model = model; // 必须在 Show() 前设置，快照才含初始值
@@ -45,11 +43,8 @@ internal static class WebView2TestHarness
                 var nav = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 win.NavigationCompleted += () => nav.TrySetResult(true);
 
-                Trace.Log("harness: Show begin");
                 win.Show(); // 无头：只初始化 WebView，窗口永不显示
-                Trace.Log("harness: Show done, wait nav");
                 await nav.Task.WaitAsync(t);
-                Trace.Log("harness: nav done");
 
                 await WaitBridgeReadyAsync(win, t);
                 await body(win);

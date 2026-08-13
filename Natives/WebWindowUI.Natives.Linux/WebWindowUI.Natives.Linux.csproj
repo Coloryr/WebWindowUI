@@ -6,9 +6,9 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-    <PackageId>WebWindowUI.Natives.Windows</PackageId>
-    <Description>WebWindowUI Win32 P/Invoke 共享层（Windows/CEF 平台共用）。</Description>
-    <PackageTags>webwindowui;win32;native;windows</PackageTags>
+    <PackageId>WebWindowUI.Natives.Linux</PackageId>
+    <Description>WebWindowUI GTK3 原生 P/Invoke 共享层（GTK 窗口 + GObject 信号桥 + 窗口宿主），Linux WebKit 与 CEF 平台共用；webkit 绑定留在 WebWindowUI.Platforms.Linux。</Description>
+    <PackageTags>webwindowui;webkit2gtk;gtk3;linux;native</PackageTags>
     <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
   </PropertyGroup>
 
@@ -17,6 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="WebWindowUI.Platforms.Linux" />
     <InternalsVisibleTo Include="WebWindowUI.Tests.Platform" />
   </ItemGroup>
 

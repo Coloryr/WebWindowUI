@@ -82,6 +82,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
             {
                 var pName = FieldToPropertyName(f.Name);
                 var kind = GetCollectionKind(f.Type);
+                var isModelElems = IsModelElementCollection(f.Type) && kind == CollectionKind.List;
                 props[pName] = new PropInfo(
                     pName,
                     f.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
@@ -89,7 +90,10 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
                     IsCollection(f.Type, incc),
                     fieldNumbers.TryGetValue(pName, out int n) ? n : 0,
                     kind,
-                    IsModelElementCollection(f.Type) && kind == CollectionKind.List);
+                    isModelElems,
+                    isModelElems && f.Type is INamedTypeSymbol nts && nts.TypeArguments.Length > 0
+                        ? nts.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                        : null);
             }
         }
         foreach (var member in sym.GetMembers())
@@ -105,6 +109,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
                 var writable = pr.SetMethod is { IsStatic: false } setter
                     && setter.DeclaredAccessibility == Accessibility.Public;
                 var kind = GetCollectionKind(pr.Type);
+                var isModelElems = IsModelElementCollection(pr.Type) && kind == CollectionKind.List;
                 props[pr.Name] = new PropInfo(
                     pr.Name,
                     pr.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
@@ -112,7 +117,10 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
                     IsCollection(pr.Type, incc),
                     fieldNumbers.TryGetValue(pr.Name, out int n) ? n : 0,
                     kind,
-                    IsModelElementCollection(pr.Type) && kind == CollectionKind.List);
+                    isModelElems,
+                    isModelElems && pr.Type is INamedTypeSymbol nts && nts.TypeArguments.Length > 0
+                        ? nts.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                        : null);
             }
         }
 
@@ -255,25 +263,14 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
             // 集合属性（ObservableCollection / ObservableDictionary，implements INotifyCollectionChanged）：
             // 前端整列/整字典回写不替换实例而是原地清空重建——保留实例与订阅，get-only 只读集合也能写回。
             // Clear + 逐项 Add：列表 Add 元素、字典 Add KeyValuePair（IDictionary<K,V> 的 ICollection<KVP>.Add）。
+            // 模型元素集合（IsModelElements）整列回写额外按 ModelInstanceId 复用既有实例（保 ID/引用），
+            // 避免前端结构写回（push/splice）重建后元素 ID 漂移、后续元素级编辑失配。
             if (p.IsCollection && p.Kind != CollectionKind.None)
             {
-                w.Line($"case \"{p.Name}\":");
-                w.Open("{");
-                w.Line("if (value is not null");
-                w.Line($"    && global::WebWindowUI.Core.Protocol.ModelProtocol.TryFromModelValue(value, typeof({p.Type}), out object? c{i}))");
-                w.Open("{");
-                w.Line("ApplyRemoteWrite(() =>");
-                w.Open("{");
-                w.Line($"var incoming{i} = ({p.Type})c{i}!;");
-                w.Line($"{p.Name}.Clear();");
-                w.Line($"foreach (var item in incoming{i})");
-                w.Line($"    {p.Name}.Add(item);");
-                w.Close("}");
-                w.Line(");");
-                w.Line("return true;");
-                w.Close("}");
-                w.Line("return false;");
-                w.Close("}");
+                if (p.IsModelElements)
+                    EmitModelElementCollectionSet(w, p);
+                else
+                    EmitClearAddCollectionSet(w, p, i);
                 i++;
                 continue;
             }
@@ -296,6 +293,78 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         w.Close("}");
         w.Close("}");
         w.Line();
+    }
+
+    /// <summary>
+    /// 普通集合（非模型元素）整列/整字典回写：Clear + 逐项 Add（原地清空重建，保订阅）。
+    /// </summary>
+    private static void EmitClearAddCollectionSet(CodeWriter w, PropInfo p, int i)
+    {
+        w.Line($"case \"{p.Name}\":");
+        w.Open("{");
+        w.Line("if (value is not null");
+        w.Line($"    && global::WebWindowUI.Core.Protocol.ModelProtocol.TryFromModelValue(value, typeof({p.Type}), out object? c{i}))");
+        w.Open("{");
+        w.Line("ApplyRemoteWrite(() =>");
+        w.Open("{");
+        w.Line($"var incoming{i} = ({p.Type})c{i}!;");
+        w.Line($"{p.Name}.Clear();");
+        w.Line($"foreach (var item in incoming{i})");
+        w.Line($"    {p.Name}.Add(item);");
+        w.Close("}");
+        w.Line(");");
+        w.Line("return true;");
+        w.Close("}");
+        w.Line("return false;");
+        w.Close("}");
+    }
+
+    /// <summary>
+    /// 模型元素集合（IsModelElements）整列回写：按入站元素的 _modelInstanceId 复用既有实例，
+    /// 无 ID / 未命中才新建——前端结构写回（push/splice）重建后元素实例与 ID 不漂移，
+    /// 后续元素级编辑仍按 ModelInstanceId 命中（保实例语义与整列回写共存）。
+    /// </summary>
+    private static void EmitModelElementCollectionSet(CodeWriter w, PropInfo p)
+    {
+        var elem = p.ElementType!;
+        w.Line($"case \"{p.Name}\":");
+        w.Open("{");
+        w.Line("if (value is not null && value.List is not null)");
+        w.Open("{");
+        w.Line("ApplyRemoteWrite(() =>");
+        w.Open("{");
+        w.Line($"var result = new global::System.Collections.Generic.List<{elem}>();");
+        w.Line("foreach (var iv in value.List.Items)");
+        w.Open("{");
+        w.Line("if (iv is null) continue;");
+        w.Line("long? id = null;");
+        w.Line("if (iv.ObjectValue?.Fields is not null");
+        w.Line("    && iv.ObjectValue.Fields.TryGetValue(\"_modelInstanceId\", out var idv)");
+        w.Line("    && idv.Number is double num && num != 0)");
+        w.Line("    id = (long)num;");
+        w.Line($"{elem}? reuse = null;");
+        w.Line("if (id is long lid)");
+        w.Open("{");
+        w.Line($"foreach (var e in {p.Name})");
+        w.Line("    if (e.ModelInstanceId == lid) { reuse = e; break; }");
+        w.Close("}");
+        w.Line("if (reuse is not null)");
+        w.Open("{");
+        w.Line("result.Add(reuse); // 复用既有实例：保 ModelInstanceId/引用，后续元素级编辑仍按 ID 命中");
+        w.Close("}");
+        w.Line($"else if (global::WebWindowUI.Core.Protocol.ModelProtocol.TryFromModelValue(iv, typeof({elem}), out object? c))");
+        w.Open("{");
+        w.Line($"result.Add(({elem})c!);");
+        w.Close("}");
+        w.Close("}");
+        w.Line($"{p.Name}.Clear();");
+        w.Line($"foreach (var r in result) {p.Name}.Add(r);");
+        w.Close("}");
+        w.Line(");");
+        w.Line("return true;");
+        w.Close("}");
+        w.Line("return false;");
+        w.Close("}");
     }
 
     private static void EmitTryInvokeCommand(CodeWriter w, ModelInfo m)
@@ -448,9 +517,10 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
 
     /// <summary>属性元数据；Number = proto 字段号（声明顺序 1..N，来自 ModelProtoGenerator.CollectFieldNumbers；
     /// 0 = 未解析到序号，POCO 序数 case 跳过）。Kind = 集合类型分类（TrySet 原地清空重建用）。
-    /// IsModelElements = 集合元素是 WebWindowModel 子类（元素级寻址/逐元素推送，产 EnsureItemsSubscribed）。</summary>
+    /// IsModelElements = 集合元素是 WebWindowModel 子类（元素级寻址/逐元素推送，产 EnsureItemsSubscribed）。
+    /// ElementType = IsModelElements 时的元素类型全名（整列写回按 ModelInstanceId 复用既有实例用）。</summary>
     internal sealed record PropInfo(string Name, string Type, bool IsReadOnly, bool IsCollection, int Number, CollectionKind Kind,
-        bool IsModelElements = false);
+        bool IsModelElements = false, string? ElementType = null);
 
     internal sealed record CmdInfo(string Name, string? ParamType);
 

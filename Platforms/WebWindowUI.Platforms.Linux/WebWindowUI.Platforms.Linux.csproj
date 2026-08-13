@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Core\WebWindowUI.Core\WebWindowUI.Core.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\Natives\WebWindowUI.Natives.Linux\WebWindowUI.Natives.Linux.csproj" />
   </ItemGroup>
 
   <ItemGroup>

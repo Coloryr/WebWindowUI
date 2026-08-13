@@ -4,6 +4,9 @@ using WebWindowUI.Core;
 using WebWindowUI.Core.Protocol;
 using WebWindowUI.Natives.Windows;
 using Xilium.CefGlue;
+using Xilium.CefGlue.BrowserProcess;
+using Xilium.CefGlue.Common;
+using Xilium.CefGlue.Common.Shared;
 
 namespace WebWindowUI.Platforms.Cef;
 
@@ -24,42 +27,32 @@ public sealed class CefPlatform : IWebWindowPlatform
         | CefSchemeOptions.CorsEnabled
         | CefSchemeOptions.FetchEnabled;
 
-    private static WwuiCefApp _app;
-    private static IMessageLoop _message;
+    private static readonly IMessageLoop _message = new Win32MessageLoop();
 
     private static readonly ConcurrentDictionary<int, CefWindow> _browsers = new();
 
-    private static CefSchemeHandlerFactory? _factoryApp;
-    private static CefSchemeHandlerFactory? _factoryData;
-
     public CefPlatform()
     {
-        CefRuntime.Load();
+#if !MACOS
+        CefSubProcess.Run(Environment.GetCommandLineArgs(), true);
+#endif
 
-        var mainArgs = new CefMainArgs(Environment.GetCommandLineArgs());
-        _app = new WwuiCefApp();
+        var cachePath = Path.Combine(Path.GetTempPath(), "CefGlue", Environment.ProcessId.ToString());
+        var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "logs");
+        Directory.CreateDirectory(logPath);
 
-        var exitCode = CefRuntime.ExecuteProcess(mainArgs, _app, IntPtr.Zero);
-        if (exitCode >= 0)
-            Environment.Exit(exitCode);
-
-        var settings = new CefSettings
+        CefRuntimeLoader.Initialize(new CefSettings
         {
-            NoSandbox = true,               // 不链 cef_sandbox，Chromium 沙箱须关掉
-            MultiThreadedMessageLoop = true, // 单线程环：CefRuntime.RunMessageLoop 泵消息 + CEF 任务
-            ExternalMessagePump = false,
+            RootCachePath = cachePath,
+            NoSandbox = true,
             LogSeverity = CefLogSeverity.Verbose,
-        };
+            LogFile = Path.Combine(logPath, "cef_debug.log"),
+        }, customSchemes: 
+        [
+            new CustomScheme() { SchemeName = WebWindowResource.Scheme, SchemeHandlerFactory = new ResourceSchemeHandlerFactory() },
+            new CustomScheme() { SchemeName = WebWindowResource.SchemeData, SchemeHandlerFactory = new MessageSchemeHandlerFactory() }
+        ]);
 
-        CefRuntime.Initialize(mainArgs, settings, _app, IntPtr.Zero);
-
-        _factoryApp = new ResourceSchemeHandlerFactory();
-        _factoryData = new MessageSchemeHandlerFactory();
-
-        CefRuntime.RegisterSchemeHandlerFactory(WebWindowResource.Scheme, null, _factoryApp);
-        CefRuntime.RegisterSchemeHandlerFactory(WebWindowResource.SchemeData, null, _factoryData);
-
-        _message = new Win32MessageLoop();
         _message.InitMessageLoop();
     }
 
@@ -116,7 +109,7 @@ public sealed class CefPlatform : IWebWindowPlatform
                 var payload = ReadPostDataPayload(request);
                 if (TryGetWindow(browser, out var window))
                 {
-                    MessageLoopSynchronizationContext.Instance.Post(_ => window!.OnMessageFromWeb(payload), null);
+                    _message.RunOnUiThread(() => window!.OnMessageFromWeb(payload));
                 }
             }
             catch
@@ -248,16 +241,23 @@ public sealed class CefPlatform : IWebWindowPlatform
 
     /// <summary>
     /// 把动作 marshal 到 UI 线程同步执行：UI 线程直接运行；非 UI 线程经
-    /// <see cref="MessageLoopSynchronizationContext.Send"/>（回 UI 线程并阻塞等待）。
+    /// Win32MessageLoop（回 UI 线程并阻塞等待）。
     /// Win32 窗口 API（DestroyWindow/SetForegroundWindow/SetWindowTextW/SendMessage）都要求 UI 线程。
     /// </summary>
-    public static void RunOnUiThread(Action action)
-    {
-        if (Environment.CurrentManagedThreadId == MessageLoopSynchronizationContext.UiThreadId)
-        {
-            action();
-            return;
-        }
-        MessageLoopSynchronizationContext.Instance.Send(_ => action(), null);
-    }
+    public void RunOnUiThread(Action action)
+        => _message.RunOnUiThread(action);
+
+    /// <summary>
+    /// 当前线程是否是 UI 线程（CEF UI 线程 == 主线程）。
+    /// </summary>
+    public bool IsUiThread() => _message.IsUiThread();
+
+    public void ShowMessageBox(string title, string message, bool error)
+        => Win32Native.ShowMessage(title, message, error);
+
+    public string[]? OpenFileDialog(string title, string filter, string? initialDirectory = null, bool fileMustExist = true, bool allowMultiSelect = true)
+        => Win32Native.OpenFileDialog(title, filter, initialDirectory, fileMustExist, allowMultiSelect)?.ToArray();
+
+    public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
+        => Win32Native.SaveFileDialog(title, filter, defaultFileName, defaultExt);
 }

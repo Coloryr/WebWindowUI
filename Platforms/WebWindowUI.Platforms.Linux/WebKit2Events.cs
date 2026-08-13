@@ -1,4 +1,5 @@
 using WebWindowUI.Core;
+using WebWindowUI.Natives.Linux;
 
 namespace WebWindowUI.Platforms.Linux;
 
@@ -49,8 +50,8 @@ internal sealed class WebKit2SignalBridge
     /// </summary>
     public void Connect()
     {
-        _loadChangedId = WebKit2Native.ConnectSignal(_webView, "load-changed", _loadChangedTrampoline, _handle);
-        _scriptMessageId = WebKit2Native.ConnectSignal(_userContentManager, ScriptMessageSignal, _scriptMessageTrampoline, _handle);
+        _loadChangedId = GtkNative.ConnectSignal(_webView, "load-changed", _loadChangedTrampoline, _handle);
+        _scriptMessageId = GtkNative.ConnectSignal(_userContentManager, ScriptMessageSignal, _scriptMessageTrampoline, _handle);
         WebWindowLog.Debug($"connect signals: load-changed={_loadChangedId} script-message={_scriptMessageId}");
     }
 
@@ -59,8 +60,8 @@ internal sealed class WebKit2SignalBridge
     /// </summary>
     public void Dispose()
     {
-        WebKit2Native.DisconnectSignal(_webView, _loadChangedId);
-        WebKit2Native.DisconnectSignal(_userContentManager, _scriptMessageId);
+        GtkNative.DisconnectSignal(_webView, _loadChangedId);
+        GtkNative.DisconnectSignal(_userContentManager, _scriptMessageId);
         _loadChangedId = 0;
         _scriptMessageId = 0;
         if (_handle.IsAllocated)

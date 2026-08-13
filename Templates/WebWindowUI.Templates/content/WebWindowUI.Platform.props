@@ -1,13 +1,5 @@
 <Project>
 
-  <!-- 平台选择集中定义：WebWindowUI 三工程骨架共享。
-       所有条件键控 $(WWUIPlatform) 而非裸 $([MSBuild]::IsOSPlatform(...))——
-       否则 -p:WWUIPlatform=Linux 在 Windows 上会同时定义 WINDOWS 和 LINUX 两个符号。
-       WWUIPlatform 可被命令行 -p:WWUIPlatform=<值> 覆盖（在 Windows 上做 Linux/macOS 编译检查）。
-       随模板生成在工程根，由 content 的 Directory.Build.props 导入（生成后即本地的 Directory.Build.props），
-       三个 csproj 无需手写 Import；包 buildTransitive\WebWindowUI.props 也提供同款平台选择，
-       _WWUI_PlatformPropsLoaded 守卫幂等。 -->
-
   <PropertyGroup Condition="'$(_WWUI_PlatformPropsLoaded)' == ''">
     <_WWUI_PlatformPropsLoaded>true</_WWUI_PlatformPropsLoaded>
 
@@ -16,9 +8,7 @@
     <WWUIPlatform Condition="'$(WWUIPlatform)' == '' And $([MSBuild]::IsOSPlatform('OSX'))">MacOS</WWUIPlatform>
     <WWUIPlatform Condition="'$(WWUIPlatform)' == ''">Windows</WWUIPlatform>
 
-    <!-- macOS 的 net10.0-macos 无法在 Windows 上编译（需 Mac + macos workload）；
-         Windows 上 -p:WWUIPlatform=MacOS 会因缺 Apple SDK 而编译失败，属预期。 -->
-    <TargetFramework Condition="'$(WWUIPlatform)' == 'Windows'">net10.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(WWUIPlatform)' == 'Windows'">net10.0</TargetFramework>
     <TargetFramework Condition="'$(WWUIPlatform)' == 'MacOS'">net10.0-macos</TargetFramework>
     <TargetFramework Condition="'$(WWUIPlatform)' == 'Linux'">net10.0</TargetFramework>
 

@@ -1,12 +1,13 @@
 using WebWindowUI.Core;
 using WebWindowUI.Core.Protocol;
+using WebWindowUI.Natives.Linux;
 
 namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
 /// Linux 平台：GTK3 窗口 + libwebkit2gtk-4.1（WebKit2-4.1 GIR 命名空间，GTK3 端口）的 WebView，可创建多个实例。
-/// WebKit 绑定是手写 P/Invoke（见 Native/WebKit2Native.cs），因 GirCore 只发布 WebKitGTK 6.0（GTK4）的绑定；
-/// GTK3 窗口壳也是手写（见 Native/GtkNative.cs + Native/GtkWindowHost.cs），因 GirCore 无 GTK3 绑定。
+/// WebKit 绑定是手写 P/Invoke（见 WebWindowUI.Natives.Linux/WebKit2Native.cs），因 GirCore 只发布 WebKitGTK 6.0（GTK4）的绑定；
+/// GTK3 窗口壳也是手写（见 WebWindowUI.Natives.Linux/GtkNative.cs + LinuxNativeWindow.cs），因 GirCore 无 GTK3 绑定。
 /// 所有 WebView 共享默认 WebContext（webkit_web_context_get_default）——自定义 scheme 每进程注册一次，
 /// 窗口表在 <see cref="LinuxPlatform"/>（镜像 WindowsPlatform._windows），请求回调按发起 WebView 指针
 /// 经平台窗口表分派回对应窗口。
@@ -22,7 +23,7 @@ public sealed class LinuxWindow : IWindowBackend
 {
     internal const string BridgeHandlerName = "wwui"; // 与前端桥 webwindowui-bridge 的 HANDLER_NAME 一致
 
-    private readonly GtkWindowHost _window;
+    private readonly LinuxNativeWindow _window;
     private readonly IntPtr _webView;
     private readonly WebWindowOptions _options;
     private WebKit2SignalBridge? _signals;
@@ -38,7 +39,7 @@ public sealed class LinuxWindow : IWindowBackend
     /// </summary>
     public event Action? Closed;
 
-    private LinuxWindow(GtkWindowHost window, IntPtr webView, WebWindowOptions options)
+    private LinuxWindow(LinuxNativeWindow window, IntPtr webView, WebWindowOptions options)
     {
         _window = window;
         _webView = webView;
@@ -51,7 +52,7 @@ public sealed class LinuxWindow : IWindowBackend
     /// </summary>
     public static LinuxWindow Create(WebWindowOptions options)
     {
-        var w = new GtkWindowHost(options.Title, options.Width, options.Height);
+        var w = new LinuxNativeWindow(options);
 
         var v = WebKit2Native.CreateWebView(); // webkit_web_view_new + 持有引用
         w.SetChild(v);                            // gtk_container_add，窗口接管一个引用
@@ -66,7 +67,7 @@ public sealed class LinuxWindow : IWindowBackend
         WebKit2Native.RegisterScriptMessageHandler(v, BridgeHandlerName);
 
         // 窗口销毁（用户关标题栏或 Close() 的 gtk_window_close → 默认处理器 destroy）→ 通知框架关闭
-        w.Destroyed += window.OnDestroyed;
+        w.Destory += window.OnDestroyed;
 
         WebWindowLog.Debug($"create window '{options.Title}' (view={v})");
         return window;
@@ -206,7 +207,7 @@ public sealed class LinuxWindow : IWindowBackend
             NavigationCompleted?.Invoke();
     }
 
-    private void OnDestroyed(object? sender, EventArgs e)
+    private void OnDestroyed()
     {
         if (_closed)
             return;

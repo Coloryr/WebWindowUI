@@ -111,17 +111,14 @@ internal sealed class StaThreadPump
             //    绝不能先让别的线程加载平台程序集——module init 会在该线程建 marshal 窗口，
             //    WM_RUN 落进那个线程（无泵）的队列，async 延续永不派发（历史死锁根因）。
             EnsurePlatformRegistered();
-            Trace.Log("pump: platform registered");
         }
         catch (Exception ex)
         {
             _initError = ex;
-            Trace.Log($"pump: init error {ex}");
             _ready.Set();
             return;
         }
         _ready.Set();
-        Trace.Log("pump: ready, entering loop");
 
         while (true)
         {
@@ -131,7 +128,6 @@ internal sealed class StaThreadPump
                 try { job(); } catch { /* job 内部已捕获异常并设置 tcs */ }
             }
 
-            Trace.Log("pump: cycle");
             PumpPendingMessages();
 
             // 3. 挂起等待：工作信号 / 新消息 / 200ms 兜底

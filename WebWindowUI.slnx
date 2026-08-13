@@ -7,6 +7,7 @@
   </Folder>
   <Folder Name="/Natives/">
     <Project Path="Natives/WebWindowUI.Natives.Windows/WebWindowUI.Natives.Windows.csproj" />
+    <Project Path="Natives/WebWindowUI.Natives.Linux/WebWindowUI.Natives.Linux.csproj" />
   </Folder>
   <Folder Name="/Platforms/">
     <Project Path="Platforms/WebWindowUI.Platforms.Cef/WebWindowUI.Platforms.Cef.csproj" />

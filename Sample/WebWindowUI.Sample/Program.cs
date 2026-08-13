@@ -9,8 +9,6 @@ internal static class Program
     {
         Console.WriteLine("示例工程启动");
 
-        WebWindowUIPlatform.Init();
-
         WebWindowResource.RegisterCustomRoute("bin", new DataProvider());
 
         // app:// 自定义协议，静态资源由类库内置的 WebResourceResolver 提供（Vue+Vite 构建产物）。

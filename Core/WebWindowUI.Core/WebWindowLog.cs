@@ -9,4 +9,11 @@ internal static class WebWindowLog
     {
         Console.WriteLine($"[WebWindowUI] {message}");
     }
+
+    public static void Error(string message)
+    {
+        Console.WriteLine($"[WebWindowUI] {message}");
+
+        WebWindowPlatform.Current.ShowMessageBox("", message, true);
+    }
 }

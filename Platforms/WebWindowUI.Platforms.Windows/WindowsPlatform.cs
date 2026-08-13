@@ -11,20 +11,13 @@ namespace WebWindowUI.Platforms.Windows;
 /// </summary>
 public sealed class WindowsPlatform : IWebWindowPlatform
 {
-    private static readonly Dictionary<IntPtr, WindowsWindow> _windows = [];
     private static CoreWebView2Environment _coreWebView2Environment;
     private static readonly Win32MessageLoop _message = new();
-
-    private static readonly Lock _envLock = new();
-    private static Task<CoreWebView2Environment>? _envTask;
 
     public WindowsPlatform()
     {
         _message.InitMessageLoop();
-        // 注意：不在构造里创建 WebView2 环境。CreateAsync 需要在有消息循环的线程上等待完成
-        //（后台/线程池无泵线程会挂起），且旧 async void InitWebView 在 STA 构造线程上会
-        // RPC_E_CHANGED_MODE 崩溃。环境懒创建于首个 CreateCoreWebView2ControllerAsync，
-        // 在 UI 线程（有泵）上直接 await——与拆分前 WindowsWindow.GetSharedEnvironmentAsync 一致。
+        CreateEnvironment();
     }
 
     /// <summary>
@@ -32,22 +25,23 @@ public sealed class WindowsPlatform : IWebWindowPlatform
     /// <see cref="MessageLoopSynchronizationContext.Send"/>（回 UI 线程并阻塞等待）。
     /// Win32 窗口 API（DestroyWindow/SetForegroundWindow/SetWindowTextW/SendMessage）都要求 UI 线程。
     /// </summary>
-    public static void RunOnUiThread(Action action)
+    public void RunOnUiThread(Action action)
     {
         _message.RunOnUiThread(action);
     }
 
-    public static bool IsUiThread()
+    public bool IsUiThread()
     {
         return _message.IsUiThread();
     }
 
-    public static async Task<CoreWebView2Controller> CreateCoreWebView2ControllerAsync(IntPtr hwnd)
+    internal static async Task<CoreWebView2Controller> CreateCoreWebView2ControllerAsync(IntPtr hwnd)
     {
-        // 环境懒创建（首个窗口触发，UI 线程有消息泵、CreateAsync 可完成）；await 就绪，
-        // 杜绝 _coreWebView2Environment 空引用
-        var environment = await GetEnvironmentAsync();
-        var controller = await environment.CreateCoreWebView2ControllerAsync(hwnd);
+        while (_coreWebView2Environment == null)
+        {
+            await Task.Delay(100);
+        }
+        var controller = await _coreWebView2Environment.CreateCoreWebView2ControllerAsync(hwnd);
         var core = controller.CoreWebView2;
         core.WebResourceRequested += OnWebResourceRequested;
         core.Settings.IsStatusBarEnabled = false;
@@ -58,22 +52,10 @@ public sealed class WindowsPlatform : IWebWindowPlatform
     }
 
     /// <summary>
-    /// WebView2 环境单例（幂等）。跨窗口共享同一环境（自定义 scheme 只注册一次）。
-    /// 必须在有消息循环的 UI 线程 await（CreateAsync 在无泵线程上会挂起）。
-    /// </summary>
-    private static Task<CoreWebView2Environment> GetEnvironmentAsync()
-    {
-        lock (_envLock)
-        {
-            return _envTask ??= CreateEnvironmentAsync();
-        }
-    }
-
-    /// <summary>
     /// WebView2 环境工厂。CreateAsync 在调用线程（UI 线程，有泵）上执行、await 等待完成；
     /// 完成后回填 <c>_coreWebView2Environment</c>（OnWebResourceRequested 同步回调要用）。
     /// </summary>
-    private static async Task<CoreWebView2Environment> CreateEnvironmentAsync()
+    private static async void CreateEnvironment()
     {
         var registrations = new List<CoreWebView2CustomSchemeRegistration>
         {
@@ -92,13 +74,15 @@ public sealed class WindowsPlatform : IWebWindowPlatform
         };
 
         var options = new CoreWebView2EnvironmentOptions(customSchemeRegistrations: registrations);
-        File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} plat: CreateAsync begin\r\n");
         var environment = await CoreWebView2Environment.CreateAsync(null, null, options);
-        File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} plat: CreateAsync done\r\n");
         _coreWebView2Environment = environment;
-        return environment;
     }
 
+    /// <summary>
+    /// 网页内容请求
+    /// </summary>
+    /// <param name="sender"></param>
+    /// <param name="args"></param>
     private static void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs args)
     {
         try
@@ -136,6 +120,11 @@ public sealed class WindowsPlatform : IWebWindowPlatform
             $"\r\n");
     }
 
+    /// <summary>
+    /// 创建窗口
+    /// </summary>
+    /// <param name="options">创建参数</param>
+    /// <returns>WebView窗口</returns>
     public IWindowBackend CreateWindow(WebWindowOptions options)
     {
         return new WindowsWindow(options);
@@ -146,14 +135,12 @@ public sealed class WindowsPlatform : IWebWindowPlatform
         _message.MessageLoop();
     }
 
-    public static void WindowOpen(WindowsWindow window)
-    {
-        _windows[window.Hwnd] = window;
-    }
+    public void ShowMessageBox(string title, string message, bool error)
+        => Win32Native.ShowMessage(title, message, error);
 
-    public static void WindowClose(WindowsWindow window)
-    {
-        _windows.Remove(window.Hwnd);
+    public string[]? OpenFileDialog(string title, string filter, string? initialDirectory = null, bool fileMustExist = true, bool allowMultiSelect = true)
+        => Win32Native.OpenFileDialog(title, filter, initialDirectory, fileMustExist, allowMultiSelect)?.ToArray();
 
-    }
+    public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
+        => Win32Native.SaveFileDialog(title, filter, defaultFileName, defaultExt);
 }

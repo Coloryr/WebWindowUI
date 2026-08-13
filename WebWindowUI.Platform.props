@@ -8,7 +8,7 @@
     <WWUIPlatform Condition="'$(WWUIPlatform)' == '' And $([MSBuild]::IsOSPlatform('OSX'))">MacOS</WWUIPlatform>
     <WWUIPlatform Condition="'$(WWUIPlatform)' == ''">Windows</WWUIPlatform>
 
-    <TargetFramework Condition="'$(WWUIPlatform)' == 'Windows'">net10.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(WWUIPlatform)' == 'Windows'">net10.0</TargetFramework>
     <TargetFramework Condition="'$(WWUIPlatform)' == 'MacOS'">net10.0-macos</TargetFramework>
     <TargetFramework Condition="'$(WWUIPlatform)' == 'Linux'">net10.0</TargetFramework>
 
@@ -16,7 +16,7 @@
     <DefineConstants Condition="'$(WWUIPlatform)' == 'Linux'">$(DefineConstants);LINUX</DefineConstants>
     <DefineConstants Condition="'$(WWUIPlatform)' == 'MacOS'">$(DefineConstants);MACOS</DefineConstants>
 
-    <DefineConstants Condition="'$(WWUIPlatform)' == 'Windows' And '$(UseCEF)' == 'true'">$(DefineConstants);WWUI_CEF</DefineConstants>
+    <DefineConstants Condition="'$(UseCEF)' == 'true'">$(DefineConstants);WWUI_CEF</DefineConstants>
   </PropertyGroup>
 
 </Project>

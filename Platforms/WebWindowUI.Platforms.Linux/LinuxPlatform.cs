@@ -1,4 +1,5 @@
 using WebWindowUI.Core;
+using WebWindowUI.Natives.Linux;
 
 namespace WebWindowUI.Platforms.Linux;
 
@@ -127,4 +128,23 @@ public sealed class LinuxPlatform : IWebWindowPlatform
     /// 最后一个窗口销毁时调用，退出主循环。
     /// </summary>
     internal static void QuitMainLoop() => _mainLoop?.Quit();
+
+    /// <summary>
+    /// 把动作 marshal 到 UI（GTK 主循环）线程同步执行：UI 线程直接运行；非 UI 线程经
+    /// LinuxMessageLoopSynchronizationContext.Send 回 UI 线程并阻塞等待。
+    /// </summary>
+    public void RunOnUiThread(Action action)
+        => LinuxMessageLoopSynchronizationContext.Instance.Send(_ => action(), null);
+
+    public bool IsUiThread()
+        => Environment.CurrentManagedThreadId == LinuxMessageLoopSynchronizationContext.UiThreadId;
+
+    public void ShowMessageBox(string title, string message, bool error)
+        => GtkNative.ShowMessageBox(title, message);
+
+    public string[]? OpenFileDialog(string title, string filter, string? initialDirectory = null, bool fileMustExist = true, bool allowMultiSelect = true)
+        => GtkNative.OpenFileDialog(title, initialDirectory, allowMultiSelect);
+
+    public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
+        => GtkNative.SaveFileDialog(title, defaultFileName);
 }

@@ -281,20 +281,8 @@ public abstract partial class WebWindowModel : ObservableObject
                 continue;
             if (!item.TryGetGeneratedProperty(e.PropertyName, out object? value))
                 continue;
-            TraceElem($"OnItemPropertyChanged push {kv.Key} id={item.ModelInstanceId} {e.PropertyName}={value}");
             PushEnvelope(BuildElementUpdateEnvelope(kv.Key, item.ModelInstanceId, e.PropertyName, value));
         }
-    }
-
-    private static void TraceElem(string message)
-    {
-        try
-        {
-            System.IO.File.AppendAllText(
-                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"),
-                $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} elem: {message}\r\n");
-        }
-        catch { }
     }
 
     /// <summary>

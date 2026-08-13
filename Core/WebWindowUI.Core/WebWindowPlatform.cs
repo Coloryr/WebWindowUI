@@ -13,11 +13,11 @@ public static class WebWindowPlatform
     /// 当前平台的 WebView 实现
     /// </summary>
     public static IWebWindowPlatform Current => _implementation
-        ?? throw new PlatformNotSupportedException("未注册平台实现：请在程序入口 Main 首行调用 WebWindowUI.Platform.EnsureRegistered()。");
+        ?? throw new PlatformNotSupportedException("未注册平台实现：请在程序入口 Main 首行调用 WebWindowUIPlatform.Init()。");
 
     /// <summary>
     /// 注册窗口平台
     /// </summary>
     /// <param name="impl">平台实现</param>
-    internal static void Register(IWebWindowPlatform impl) => _implementation ??= impl;
+    public static void Register(IWebWindowPlatform impl) => _implementation ??= impl;
 }

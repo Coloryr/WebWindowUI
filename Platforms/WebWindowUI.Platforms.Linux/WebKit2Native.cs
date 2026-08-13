@@ -6,7 +6,7 @@ namespace WebWindowUI.Platforms.Linux;
 /// 手写 P/Invoke 绑定：libwebkit2gtk-4.1（GIR 命名空间 WebKit2-4.1，GTK3 端口）+ libjavascriptcoregtk-4.1。
 /// GirCore 只发布 WebKitGTK 6.0（GTK4）的绑定，4.1（GTK3）无托管绑定可换，故按后端实际用到的
 /// API 子集手写。本类保持 GTK 无关（只含 WebKit/JavaScriptCore/GObject/GLib/Gio）；GTK 窗口层见
-/// GtkNative / GtkWindowHost。原生符号经 soname（lib*.so.0）引用，运行时不依赖 dev 符号链接。
+/// GtkNative / LinuxNativeWindow。原生符号经 soname（lib*.so.0）引用，运行时不依赖 dev 符号链接。
 ///
 /// 所有权约定（来自 GIR / WebKitGTK 文档）：
 ///  - <see cref="webkit_uri_scheme_request_get_uri"/> 返回借用字符串，不要释放；
@@ -49,18 +49,6 @@ internal static partial class WebKit2Native
 
     [LibraryImport(GObjectLib, EntryPoint = "g_object_unref")]
     public static partial void g_object_unref(IntPtr obj);
-
-    [LibraryImport(GObjectLib, EntryPoint = "g_signal_connect_data")]
-    private static partial ulong g_signal_connect_data(
-        IntPtr instance,
-        [MarshalAs(UnmanagedType.LPUTF8Str)] string detailedSignal,
-        IntPtr handler,
-        IntPtr data,
-        IntPtr destroyData,
-        uint connectFlags);
-
-    [LibraryImport(GObjectLib, EntryPoint = "g_signal_handler_disconnect")]
-    private static partial void g_signal_handler_disconnect(IntPtr instance, ulong handlerId);
 
     [LibraryImport(GLibLib, EntryPoint = "g_error_free")]
     private static partial void g_error_free(IntPtr error);
@@ -296,24 +284,6 @@ internal static partial class WebKit2Native
         var securityManager = webkit_web_context_get_security_manager(context);
         webkit_security_manager_register_uri_scheme_as_cors_enabled(securityManager, scheme);
         webkit_security_manager_register_uri_scheme_as_secure(securityManager, scheme);
-    }
-
-    /// <summary>连接 WebKit 信号到托管回调。data 是调用方预先分配的 GCHandle（由调用方释放）；
-    /// handler 委托必须被强引用保活。detail 支持 "signal::detail"。</summary>
-    public static ulong ConnectSignal(IntPtr instance, string detailedSignal, Delegate handler, GCHandle data)
-        => g_signal_connect_data(instance, detailedSignal,
-            Marshal.GetFunctionPointerForDelegate(handler), GCHandle.ToIntPtr(data), IntPtr.Zero, 0);
-
-    /// <summary>
-    /// 断开信号。实例已销毁时忽略错误。
-    /// </summary>
-    public static void DisconnectSignal(IntPtr instance, ulong handlerId)
-    {
-        if (handlerId != 0 && instance != IntPtr.Zero)
-        {
-            try { g_signal_handler_disconnect(instance, handlerId); }
-            catch { /* 实例已销毁 */ }
-        }
     }
 
     /// <summary>在页面里执行 JS，返回 JSC 值的 JSON 表示（与 WebView2 ExecuteScriptAsync 对齐；非 JSON 值退回字符串）。

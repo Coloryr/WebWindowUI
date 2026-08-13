@@ -32,8 +32,6 @@ public sealed class WindowsWindow : IWindowBackend
 
         _nativeWindow.Destory += NativeWindow_Destory;
         _nativeWindow.Resize += NativeWindow_Resize;
-
-        WindowsPlatform.WindowOpen(this);
     }
 
     private void NativeWindow_Resize()
@@ -50,7 +48,6 @@ public sealed class WindowsWindow : IWindowBackend
         _controller = null;
         _closed = true;
         Closed?.Invoke();
-        WindowsPlatform.WindowClose(this);
     }
 
     public void Show()
@@ -79,7 +76,7 @@ public sealed class WindowsWindow : IWindowBackend
     public void Close()
     {
         // DestroyWindow 必须在创建窗口的线程调用；宿主可能从任意线程关窗，marshal 回 UI 线程同步执行。
-        WindowsPlatform.RunOnUiThread(() =>
+        WebWindowPlatform.Current.RunOnUiThread(() =>
         {
             if (_closed)
                 return;
@@ -93,7 +90,7 @@ public sealed class WindowsWindow : IWindowBackend
     /// </summary>
     public void Activate()
     {
-        WindowsPlatform.RunOnUiThread(_nativeWindow.Activate);
+        WebWindowPlatform.Current.RunOnUiThread(_nativeWindow.Activate);
     }
 
     /// <summary>
@@ -101,7 +98,7 @@ public sealed class WindowsWindow : IWindowBackend
     /// </summary>
     public void SetTitle(string title)
     {
-        WindowsPlatform.RunOnUiThread(() => _nativeWindow.SetTitle(title));
+        WebWindowPlatform.Current.RunOnUiThread(() => _nativeWindow.SetTitle(title));
     }
 
     /// <summary>
@@ -109,7 +106,7 @@ public sealed class WindowsWindow : IWindowBackend
     /// </summary>
     public void SetIcon(WindowIcon icon)
     {
-        WindowsPlatform.RunOnUiThread(() =>
+        WebWindowPlatform.Current.RunOnUiThread(() =>
         {
             _nativeWindow.SetIcon(icon);
         });
@@ -126,13 +123,13 @@ public sealed class WindowsWindow : IWindowBackend
     {
         try
         {
-            if (WindowsPlatform.IsUiThread())
+            if (WebWindowPlatform.Current.IsUiThread())
             {
                 _controller?.CoreWebView2.PostWebMessageAsString(WebView2StringCodec.Encode(message));
             }
             else
             {
-                WindowsPlatform.RunOnUiThread(() => PostMessage(message));
+                WebWindowPlatform.Current.RunOnUiThread(() => PostMessage(message));
             }
         }
         catch
@@ -148,10 +145,10 @@ public sealed class WindowsWindow : IWindowBackend
     /// </summary>
     public async Task<string> ExecuteScriptAsync(string script)
     {
-        if (!WindowsPlatform.IsUiThread())
+        if (!WebWindowPlatform.Current.IsUiThread())
         {
             var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-            WindowsPlatform.RunOnUiThread(async () =>
+            WebWindowPlatform.Current.RunOnUiThread(async () =>
             {
                 try { tcs.TrySetResult(await ExecuteScriptAsync(script)); }
                 catch (Exception ex) { tcs.TrySetException(ex); }
@@ -178,9 +175,7 @@ public sealed class WindowsWindow : IWindowBackend
     {
         try
         {
-            System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} win: create controller begin\r\n");
             _controller = await WindowsPlatform.CreateCoreWebView2ControllerAsync(_nativeWindow.WindowHandle);
-            System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} win: create controller done\r\n");
             if (_closed)
             {
                 _controller.Close();
@@ -193,12 +188,10 @@ public sealed class WindowsWindow : IWindowBackend
             var core = _controller.CoreWebView2;
 
             core.Navigate(WebWindowResource.GetWindowIndexUrl(_options.WindowPath));
-            System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} win: navigate issued\r\n");
 
             // Model 双向绑定通道：页面就绪通知 + JS 回传消息
             core.NavigationCompleted += (_, _) =>
             {
-                System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} win: nav completed\r\n");
                 NavigationCompleted?.Invoke();
             };
             core.WebMessageReceived += (_, args) =>
@@ -213,9 +206,7 @@ public sealed class WindowsWindow : IWindowBackend
         }
         catch (Exception ex)
         {
-            ShowError($"WebView2 初始化失败：{ex.Message}\n请确认已安装 WebView2 运行时。");
+            WebWindowLog.Error($"WebView2 初始化失败：{ex.Message}\n请确认已安装 WebView2 运行时。");
         }
     }
-
-    private static void ShowError(string message) => WebWindowLog.Debug(message);
 }

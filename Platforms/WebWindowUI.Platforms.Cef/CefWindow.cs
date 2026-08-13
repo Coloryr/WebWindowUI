@@ -19,7 +19,7 @@ namespace WebWindowUI.Platforms.Cef;
 ///
 /// 线程模型：CEF 单线程消息循环（multi_threaded_message_loop=false，CefRuntime.RunMessageLoop）→
 /// CEF UI 线程 == 主线程；全部 CEF 回调在 UI 线程到达，Win32 窗口 API 与 CEF 调用都要求 UI 线程
-/// （跨线程经 <see cref="MessageLoopSynchronizationContext"/> marshal，与 Windows 平台同构）。
+/// （跨线程经 <see cref="CefPlatform.RunOnUiThread"/> marshal，与 Windows 平台同构）。
 /// </summary>
 public sealed class CefWindow : IWindowBackend
 {
@@ -116,18 +116,11 @@ public sealed class CefWindow : IWindowBackend
 
     /// <summary>
     /// 把动作 marshal 到 UI 线程同步执行：UI 线程直接运行；非 UI 线程经
-    /// <see cref="MessageLoopSynchronizationContext.Send"/>（回 UI 线程并阻塞等待）。
+    /// <see cref="CefPlatform.RunOnUiThread"/>（回 UI 线程并阻塞等待）。
     /// Win32 窗口 API（DestroyWindow/SetForegroundWindow/SetWindowTextW/SendMessage）与 CEF 调用都要求 UI 线程。
     /// </summary>
     private void RunOnUiThread(Action action)
-    {
-        if (Environment.CurrentManagedThreadId == MessageLoopSynchronizationContext.UiThreadId)
-        {
-            action();
-            return;
-        }
-        MessageLoopSynchronizationContext.Instance.Send(_ => action(), null);
-    }
+        => WebWindowPlatform.Current.RunOnUiThread(action);
 
     /// <summary>
     /// 向页面 JS 发送一条消息。protobuf 字节经 <see cref="WebView2StringCodec"/> 转成不含 NUL 的
@@ -143,9 +136,9 @@ public sealed class CefWindow : IWindowBackend
             // （如示例的 System.Threading.Timer 回调），非 UI 线程调用时先投递回 UI 线程。
             // 用线程 id 判断而非 SynchronizationContext.Current：Timer 会随 ExecutionContext
             // 把 UI 线程的上下文流到线程池线程，SynchronizationContext.Current 会误判。
-            if (Environment.CurrentManagedThreadId != MessageLoopSynchronizationContext.UiThreadId)
+            if (!WebWindowPlatform.Current.IsUiThread())
             {
-                MessageLoopSynchronizationContext.Instance.Post(_ => PostMessage(message), null);
+                WebWindowPlatform.Current.RunOnUiThread(() => PostMessage(message));
                 return;
             }
             if (_closed || _browser is null)
@@ -166,14 +159,14 @@ public sealed class CefWindow : IWindowBackend
     /// </summary>
     public async Task<string> ExecuteScriptAsync(string script)
     {
-        if (Environment.CurrentManagedThreadId != MessageLoopSynchronizationContext.UiThreadId)
+        if (!WebWindowPlatform.Current.IsUiThread())
         {
             var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-            MessageLoopSynchronizationContext.Instance.Post(async _ =>
+            WebWindowPlatform.Current.RunOnUiThread(async () =>
             {
                 try { tcs.TrySetResult(await ExecuteScriptAsync(script)); }
                 catch (Exception ex) { tcs.TrySetException(ex); }
-            }, null);
+            });
             return await tcs.Task;
         }
 
@@ -225,7 +218,7 @@ public sealed class CefWindow : IWindowBackend
             _browser = null;
         }
         if (!_closed)
-            Win32.DestroyWindow(_hwnd); // CEF 子窗口已销毁，顶层窗口随浏览器一起消失
+            _nativeWindow.Close(); // CEF 子窗口已销毁，顶层窗口随浏览器一起消失
     }
 
     /// <summary>
@@ -236,12 +229,12 @@ public sealed class CefWindow : IWindowBackend
         if (_browser is not null)
             return;
 
-        Win32.GetClientRect(_hwnd, out Win32.RECT rc);
+        var rc = _nativeWindow.GetSize(); // Rectangle(0,0,客户区宽,客户区高)
         var windowInfo = CefWindowInfo.Create();
-        windowInfo.ParentHandle = _hwnd;
+        windowInfo.ParentHandle = _nativeWindow.WindowHandle;
         windowInfo.Style = WindowStyle.WS_CHILD | WindowStyle.WS_CLIPCHILDREN
             | WindowStyle.WS_CLIPSIBLINGS | WindowStyle.WS_TABSTOP | WindowStyle.WS_VISIBLE;
-        windowInfo.Bounds = new CefRectangle(0, 0, rc.Right, rc.Bottom);
+        windowInfo.Bounds = new CefRectangle(rc.Left, rc.Top, rc.Width, rc.Height);
         // **durable：RuntimeStyle 必须显式 ALLOY（2）！CEF 151 起 DEFAULT(0) 即 Chrome style**
         // （browser_host_create.cc IsChromeStyle：`DEFAULT || CHROME` 都走 ChromeBrowserHostImpl）——
         // Chrome style 走 Chrome UI 的 tab 创建路径，首屏导航的 RFH 匹配不到 CefBrowserHost，

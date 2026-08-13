@@ -117,7 +117,7 @@ dotnet pack -c Release -o artifacts/
 # 单文件发布（示例：ImageGallery，FolderProfile 已配好单 exe）
 dotnet publish Demos/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery \
   -p:PublishProfile=FolderProfile
-# → bin/Release/net10.0-windows/publish/win-x64/WebWindowUI.Demo.ImageGallery.exe（单个 exe）
+# → bin/Release/net10.0/publish/win-x64/WebWindowUI.Demo.ImageGallery.exe（单个 exe）
 ```
 
 单文件发布要点（见 `FolderProfile.pubxml` + 仓库根 `Directory.Build.props`）：
