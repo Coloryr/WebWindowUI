@@ -1,5 +1,3 @@
-using System.ComponentModel;
-using System.Runtime.InteropServices;
 using WebWindowUI.Core;
 using WebWindowUI.Core.Protocol;
 using WebWindowUI.Natives.Windows;
@@ -29,7 +27,6 @@ public sealed class CefWindow : IWindowBackend
     private readonly WwuiCefLoadHandler _loadHandler;
 
     private CefBrowser? _browser; // on_after_created 记录；on_before_close 置空
-    private IntPtr _hIcon;
     private bool _closed;
 
     /// <summary>
@@ -82,7 +79,7 @@ public sealed class CefWindow : IWindowBackend
                 return;
             if (_browser is not null)
                 CloseBrowserGraceful();
-            
+
             _nativeWindow.Close();
         });
     }
@@ -199,24 +196,33 @@ public sealed class CefWindow : IWindowBackend
     internal void OnNavigationCompleted() => NavigationCompleted?.Invoke();
 
     /// <summary>
-    /// CEF on_after_created：记录浏览器包装并注册 scheme 映射。回调在 UI 线程。
+    /// CEF on_after_created：记录主浏览器包装并注册 scheme 映射，随后自动打开 DevTools 调试工具。
+    /// 回调在 UI 线程。DevTools 自身（ShowDevTools 弹出的新浏览器）也走本回调——用
+    /// <c>_browser is not null</c> 守卫跳过，避免覆盖主浏览器引用、也避免对 DevTools 再开 DevTools 递归。
     /// </summary>
     internal void OnBrowserCreated(CefBrowser browser)
     {
+        if (_browser is not null)
+            return; // 附加浏览器（如 DevTools 弹窗）不覆盖主浏览器引用
+
         _browser = browser;
         CefPlatform.RegisterBrowser(browser, this); // scheme 处理器按浏览器 id 分派回本窗口
+
+        OpenDevTools(browser); // 自动打开调试工具（调试期便利，勿合入生产）
     }
 
     /// <summary>
-    /// CEF on_before_close：摘除浏览器映射、置空浏览器引用，销毁宿主顶层窗口完成收尾（→ WM_DESTROY → 末窗 PostQuitMessage）。
+    /// CEF on_before_close：主浏览器关闭才摘除映射、销毁宿主顶层窗口（→ WM_DESTROY → 末窗 PostQuitMessage）。
+    /// DevTools 等附加浏览器关闭只走 DoClose、不进来（DoClose 返回 false，CEF 正常关），
+    /// 即便进来也按浏览器引用比对守卫，不误关主窗口。
     /// </summary>
-    internal void OnBrowserClosing()
+    internal void OnBrowserClosing(CefBrowser browser)
     {
-        if (_browser is not null)
-        {
-            CefPlatform.UnregisterBrowser(_browser);
-            _browser = null;
-        }
+        if (!ReferenceEquals(_browser, browser))
+            return; // 不是主浏览器（DevTools 等附加浏览器），不摘主映射、不关主窗口
+
+        CefPlatform.UnregisterBrowser(browser);
+        _browser = null;
         if (!_closed)
             _nativeWindow.Close(); // CEF 子窗口已销毁，顶层窗口随浏览器一起消失
     }
@@ -235,16 +241,25 @@ public sealed class CefWindow : IWindowBackend
         windowInfo.Style = WindowStyle.WS_CHILD | WindowStyle.WS_CLIPCHILDREN
             | WindowStyle.WS_CLIPSIBLINGS | WindowStyle.WS_TABSTOP | WindowStyle.WS_VISIBLE;
         windowInfo.Bounds = new CefRectangle(rc.Left, rc.Top, rc.Width, rc.Height);
-        // **durable：RuntimeStyle 必须显式 ALLOY（2）！CEF 151 起 DEFAULT(0) 即 Chrome style**
-        // （browser_host_create.cc IsChromeStyle：`DEFAULT || CHROME` 都走 ChromeBrowserHostImpl）——
-        // Chrome style 走 Chrome UI 的 tab 创建路径，首屏导航的 RFH 匹配不到 CefBrowserHost，
-        // 渲染进程 GetNewBrowserInfo 同步超时 2s → 视图被判 EXCLUDED → 子资源永不加载（页面挂白）。
-        // 本平台全部按 Alloy 语义实现（SetAsChild/回调/自定义 scheme），必须显式锁定 ALLOY。
+
         windowInfo.RuntimeStyle = CefRuntimeStyle.Alloy;
 
-        // url 与 client 由 CEF 复制/引用，调用返回即可释放本侧 windowInfo（finalizer 兜底）。
         CefBrowserHost.CreateBrowser(
             windowInfo, _client, new CefBrowserSettings(), WebWindowResource.GetWindowIndexUrl(_options.WindowPath), null, null);
+    }
+
+    /// <summary>
+    /// 打开 DevTools 调试工具（独立弹窗，SetAsPopup 挂到主窗口）。Windows 用原生弹窗；
+    /// 其它平台退回 CEF 默认窗口信息（后续按需补）。必须在 UI 线程。
+    /// </summary>
+    private void OpenDevTools(CefBrowser browser)
+    {
+        using CefBrowserHost host = browser.GetHost();
+        var windowInfo = CefWindowInfo.Create();
+        windowInfo.RuntimeStyle = CefRuntimeStyle.Alloy; // 与主浏览器一致，Alloy 样式
+        if (CefRuntime.Platform == CefRuntimePlatform.Windows)
+            windowInfo.SetAsPopup(host.GetWindowHandle(), "DevTools");
+        host.ShowDevTools(windowInfo, _client, new CefBrowserSettings(), new CefPoint(0, 0));
     }
 
     /// <summary>
@@ -302,7 +317,7 @@ internal sealed class WwuiCefLifeSpanHandler(CefWindow window) : CefLifeSpanHand
     /// </summary>
     protected override bool DoClose(CefBrowser browser) => false;
 
-    protected override void OnBeforeClose(CefBrowser browser) => window.OnBrowserClosing();
+    protected override void OnBeforeClose(CefBrowser browser) => window.OnBrowserClosing(browser);
 }
 
 /// <summary>
