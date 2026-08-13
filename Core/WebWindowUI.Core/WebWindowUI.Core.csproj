@@ -17,6 +17,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="WebWindowUI.Tests.Protocol" />
     <InternalsVisibleTo Include="WebWindowUI.Tests.Platform" />
+    <InternalsVisibleTo Include="WebWindowUI.Tests.Macos" />
     <InternalsVisibleTo Include="WebWindowUI.Platforms.Windows" />
     <InternalsVisibleTo Include="WebWindowUI.Platforms.Cef" />
     <InternalsVisibleTo Include="WebWindowUI.Platforms.Linux" />

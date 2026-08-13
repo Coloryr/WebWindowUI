@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/Tests/">
+    <Project Path="WebWindowUI.Tests.Macos.csproj" />
+  </Folder>
+</Solution>

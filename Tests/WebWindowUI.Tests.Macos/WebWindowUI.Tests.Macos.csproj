@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- macOS 端到端测试：独立可执行程序（自带 Main 跑主线程，不走 dotnet test/testhost）。
+       主队列（DispatchQueue.MainQueue）与 WKWebView 回调都绑定进程主线程，testhost 占着主线程
+       跑 VSTest 循环无法让出——所以本工程是 Exe，Main 用裸 CFRunLoopRunInMode 泵排干主队列并
+       派发 WKWebView 事件。只在 macOS 上构建（TFM/RID/MACOS 符号继承自根 Platform.props）。 -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <ApplicationId Condition="'$(WWUIPlatform)' == 'MacOS'">com.webwindowui.tests.macos</ApplicationId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Core\WebWindowUI.Core\WebWindowUI.Core.csproj" />
+    <ProjectReference Include="..\..\Platforms\WebWindowUI.Platforms.MacOS\WebWindowUI.Platforms.MacOS.csproj" />
+    <ProjectReference Include="..\..\Sample\WebWindowUI.Sample.Backend\WebWindowUI.Sample.Backend.csproj" />
+    <ProjectReference Include="..\..\Sample\WebWindowUI.Sample\WebWindowUI.Sample.csproj" />
+  </ItemGroup>
+
+</Project>
