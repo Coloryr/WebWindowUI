@@ -1,31 +1,30 @@
-#if WINDOWS
 using System.Diagnostics;
 using WebWindowUI.Core;
 using WebWindowUI.Sample;
 
-namespace WebWindowUI.Tests.Platform.Support;
+namespace WebWindowUI.Tests.Linux.Support;
 
 /// <summary>
-/// 测试用窗口宿主：真实 CoreWebView2 + 真实构建产物 wwwroot（经 ProjectReference 传递复制到测试 bin）。
-/// 无头模式（<see cref="WebWindowOptions.Headless"/>）：窗口永不显示，但导航/DOM/JS/消息通道照常，
+/// 测试用窗口宿主：真实 libwebkit2gtk-4.1 + 真实构建产物 wwwroot（经 ProjectReference 传递复制到测试 bin）。
+/// 无头模式（<see cref="WebWindowOptions.Headless"/>）：GTK 窗口永不 show，但导航/DOM/JS/消息通道照常，
 /// 测试全程不出现在屏幕与任务栏。
 /// </summary>
 internal sealed class TestWindow : WebWindow
 {
     public TestWindow(string windowPath, string title)
-        : base(new WebWindowOptions(windowPath) { Title = title, Headless = true, Width = 720, Height = 480 })
+        : base(windowPath, title, new WebWindowOptions { Headless = true }, width: 720, height: 480)
     {
     }
 }
 
 /// <summary>
-/// 真 WebView2 端到端测试宿主。
+/// 真 WebKitGTK 端到端测试宿主（Linux 版，对应 Windows 的 WebView2TestHarness）。
 ///
-/// 流程：模型先挂到窗口 → Show()（唯一入口，触发 InitWebViewAsync；无头模式不显示窗口）
-/// → 等 NavigationCompleted 镜像事件（控制器已建、页面已导航）→ 等页面桥接（window.__model）就绪 →
-/// 执行测试体。全部在 STA 泵线程内跑，经 StaThreadPump.RunAsync 承载。
+/// 流程：模型先挂到窗口 → Show()（唯一入口，触发加载；无头模式不显示窗口）
+/// → 等 NavigationCompleted 镜像事件（页面已导航完成）→ 等页面桥接（window.__model）就绪 →
+/// 执行测试体。全部在 GtkPump 泵线程（GLib 主循环线程）内跑。
 /// </summary>
-internal static class WebView2TestHarness
+internal static class WebKitTestHarness
 {
     public static Task RunMainWindowAsync(MainWindowModel model, Func<TestWindow, Task> body, TimeSpan? timeout = null)
         => RunWindowAsync("main", "测试", model, body, timeout);
@@ -33,7 +32,7 @@ internal static class WebView2TestHarness
     public static Task RunWindowAsync(string windowPath, string title, WebWindowModel model, Func<TestWindow, Task> body, TimeSpan? timeout = null)
     {
         TimeSpan t = timeout ?? TimeSpan.FromSeconds(60);
-        return StaThreadPump.Instance.RunAsync(async () =>
+        return GtkPump.Instance.RunAsync(async () =>
         {
             var win = new TestWindow(windowPath, title);
             try
@@ -43,7 +42,7 @@ internal static class WebView2TestHarness
                 var nav = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 win.NavigationCompleted += () => nav.TrySetResult(true);
 
-                win.Show(); // 无头：只初始化 WebView，窗口永不显示
+                win.Show(); // 无头：只加载页面，窗口永不显示
                 await nav.Task.WaitAsync(t);
 
                 await WaitBridgeReadyAsync(win, t);
@@ -57,12 +56,11 @@ internal static class WebView2TestHarness
     }
 
     /// <summary>
-    /// 双窗口共享模型宿主：两个 TestWindow 绑同一个 model 实例，验证跨窗口广播。
-    /// 两窗口都走"multi"页面（演示「一个 model 给多个窗口用」）；窗口 A 先 Show 等导航，
+    /// 两窗口共享同一模型实例（演示「一个 model 给多个窗口用」）；窗口 A 先 Show 等导航，
     /// 再 Show B，各自收初始快照。
     /// </summary>
     public static Task RunTwoWindowsSharedModelAsync(MultiWindowModel model, Func<TestWindow, TestWindow, Task> body, TimeSpan? timeout = null)
-        => RunTwoWindowsSharedModelCoreAsync("multi", "共享A", "共享B", model, body, timeout);
+        => RunTwoWindowsSharedModelAsync("multi", "共享A", "共享B", model, body, timeout);
 
     /// <summary>
     /// 双窗口共享模型宿主（泛型）：任意模型任意页面路径，验证跨窗口广播（含元素级 ElementSet 广播）。
@@ -75,7 +73,7 @@ internal static class WebView2TestHarness
         where T : WebWindowModel
     {
         TimeSpan t = timeout ?? TimeSpan.FromSeconds(60);
-        await StaThreadPump.Instance.RunAsync(async () =>
+        await GtkPump.Instance.RunAsync(async () =>
         {
             var winA = new TestWindow(windowPath, titleA);
             var winB = new TestWindow(windowPath, titleB);
@@ -89,7 +87,7 @@ internal static class WebView2TestHarness
                 winA.NavigationCompleted += () => navA.TrySetResult(true);
                 winB.NavigationCompleted += () => navB.TrySetResult(true);
 
-                winA.Show(); // 无头：只初始化 WebView，窗口永不显示
+                winA.Show(); // 无头：只加载页面，窗口永不显示
                 await navA.Task.WaitAsync(t);
                 winB.Show();
                 await navB.Task.WaitAsync(t);
@@ -124,7 +122,7 @@ internal static class WebView2TestHarness
             }
             catch
             {
-                // 控制器可能尚未就绪，忽略并重试
+                // 页面可能尚未导航完成，忽略并重试
             }
             await Task.Delay(50);
         }
@@ -169,5 +167,3 @@ internal static class WebView2TestHarness
         throw new TimeoutException($"{description} 超时");
     }
 }
-#endif
-

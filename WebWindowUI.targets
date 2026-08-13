@@ -119,7 +119,8 @@
                经引用图进消费方产物；应用 = 直接引入口 + 可执行 OutputType（Exe/WinExe）——
                标记库工程（WebWindowUI.Backend/Frontend 自身）虽也直接引入口，但 OutputType=Library 排除
                （否则 Windows 平台会经标记库泄进消费方图，实测 CEF 构建 bin 混入 WebView2）。
-               测试工程另有自己的直接条件引用（见 WebWindowUI.Tests.Platform.csproj），且 OutputType=Library
+               测试工程另有自己的直接平台引用（Tests/WebWindowUI.Tests.Windows.csproj 与 .Linux.csproj，
+               各自无条件引用对应平台工程，IsTestProject 按 WWUIPlatform 门控），且 OutputType=Library
                不被注入分派（泵线程注册语义不受干扰）。
        分派：_WWUI_GeneratePlatformDispatch 给应用工程注入 PlatformBootstrap.g.cs（[ModuleInitializer]
        惰性登记加载委托），消费方 Main 首行调用 WebWindowUIPlatform.Init() 触发加载注册

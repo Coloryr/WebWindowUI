@@ -1,9 +1,8 @@
-#if WINDOWS
 using System.Collections.Concurrent;
 using WebWindowUI.Core;
 using WebWindowUI.Natives.Windows;
 
-namespace WebWindowUI.Tests.Platform.Support;
+namespace WebWindowUI.Tests.Windows.Support;
 
 /// <summary>
 /// STA 泵：一根独占的 STA 线程承载所有触碰平台的测试工作。
@@ -181,5 +180,4 @@ internal sealed class StaThreadPump
         }
     }
 }
-#endif
 

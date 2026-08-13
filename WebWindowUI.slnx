@@ -29,7 +29,8 @@
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="Tests/WebWindowUI.Tests.Protocol/WebWindowUI.Tests.Protocol.csproj" />
-    <Project Path="Tests/WebWindowUI.Tests.Platform/WebWindowUI.Tests.Platform.csproj" />
+    <Project Path="Tests/WebWindowUI.Tests.Windows/WebWindowUI.Tests.Windows.csproj" />
+    <Project Path="Tests/WebWindowUI.Tests.Linux/WebWindowUI.Tests.Linux.csproj" />
   </Folder>
   <Folder Name="/Files/">
     <File Path=".editorconfig" />

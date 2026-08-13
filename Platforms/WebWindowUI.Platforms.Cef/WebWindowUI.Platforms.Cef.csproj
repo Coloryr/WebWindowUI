@@ -31,8 +31,4 @@
 	  <ProjectReference Include="..\..\Natives\WebWindowUI.Natives.Windows\WebWindowUI.Natives.Windows.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <InternalsVisibleTo Include="WebWindowUI.Tests.Platform" />
-  </ItemGroup>
-
 </Project>

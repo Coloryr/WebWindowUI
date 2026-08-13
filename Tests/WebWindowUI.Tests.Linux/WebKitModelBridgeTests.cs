@@ -1,11 +1,10 @@
-#if LINUX
 using System.Collections;
 using WebWindowUI.Sample;
 using WebWindowUI.Sample.Items;
-using WebWindowUI.Tests.Platform.Support;
+using WebWindowUI.Tests.Linux.Support;
 using Xunit;
 
-namespace WebWindowUI.Tests.Platform;
+namespace WebWindowUI.Tests.Linux;
 
 /// <summary>
 /// 真 WebKitGTK（libwebkit2gtk-4.1）端到端测试：真实 WebView + 真实构建产物 wwwroot。
@@ -56,6 +55,25 @@ public class WebKitModelBridgeTests
 
             await WebKitTestHarness.WaitJsAsync(win, "window.__model.count === 42", "增量 count");
             await WebKitTestHarness.WaitJsAsync(win, "window.__model.message === \"updated\"", "增量 message");
+        }, Timeout);
+    }
+
+    [Fact]
+    public async Task ModelInstanceId_PositiveAndStable()
+    {
+        var model = new MainWindowModel { Name = "小明", Count = 1 };
+
+        await WebKitTestHarness.RunMainWindowAsync(model, async win =>
+        {
+            // 桥从首个快照捕获实例 ID 并暴露为非枚举 _modelInstanceId（不进 Object.keys watch 循环）
+            await WebKitTestHarness.WaitJsAsync(win, "window.__model._modelInstanceId > 0", "实例 ID 为正数");
+            string first = await win.ExecuteScriptAsync("window.__model._modelInstanceId");
+
+            // 属性增量后实例 ID 不变：同实例消息不被防串守卫误杀
+            model.Count = 2;
+            await WebKitTestHarness.WaitJsAsync(win, "window.__model.count === 2", "增量到达");
+            string second = await win.ExecuteScriptAsync("window.__model._modelInstanceId");
+            Assert.Equal(first, second);
         }, Timeout);
     }
 
@@ -268,6 +286,41 @@ public class WebKitModelBridgeTests
     }
 
     [Fact]
+    public async Task TodoList_SharedModel_ElementEdit_BroadcastsToOtherWindow()
+    {
+        var model = new TodoListModel
+        {
+            Todos =
+            {
+                new TodoItemModel { Title = "t1", Done = true },
+                new TodoItemModel { Title = "t2", Done = false },
+            },
+        };
+
+        // 双窗口绑同一模型实例（"todos" 页面），验证元素级写回后跨窗口只推被改元素、源窗口不回声。
+        await WebKitTestHarness.RunTwoWindowsSharedModelAsync("todos", "编辑A", "只读B", model, async (winA, winB) =>
+        {
+            await WebKitTestHarness.WaitJsAsync(winA, "window.__model.todos.length === 2", "A 快照就绪");
+            await WebKitTestHarness.WaitJsAsync(winB, "window.__model.todos.length === 2", "B 快照就绪");
+
+            var item = model.Todos[0];
+            var itemId = item.ModelInstanceId;
+
+            // A 窗改元素 title → 元素级 set → B 窗该项跟随（跨窗口 ElementSet 广播）
+            await winA.ExecuteScriptAsync("window.__model.todos[0].title = 'renamed'; 0");
+            await WebKitTestHarness.WaitJsAsync(
+                winB,
+                $"window.__model.todos[0].title === \"renamed\" && window.__model.todos[0]._modelInstanceId === {itemId}",
+                "B 窗该项跟随元素级广播");
+            Assert.True(ReferenceEquals(model.Todos[0], item)); // 写回保持实例
+
+            // B 窗未做任何操作：改 title 后 A 窗不回声重建（元素实例与 done 未动）
+            await WebKitTestHarness.WaitJsAsync(winA, "window.__model.todos[0].done === true", "A 窗元素未被回声重建");
+            Assert.True(model.Todos[0].Done);
+        }, Timeout);
+    }
+
+    [Fact]
     public async Task Nested_SingleModelProperty_ReachesDom_And_Repush()
     {
         var detail = new NestedDetailModel { Name = "初始", Level = 2 };
@@ -430,4 +483,3 @@ public class WebKitModelBridgeTests
         }, Timeout);
     }
 }
-#endif

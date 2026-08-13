@@ -160,7 +160,8 @@ WebWindowUI.Generator/        # console 生成器（落盘 descriptor/TS）
 WebWindowUI.Generator.SourceGen/  # Roslyn 源生成器（写回/proto）
 WebWindowUI.Templates/        # dotnet new 模板包
 WebWindowUI.Tests.Protocol/   # 协议/单元测试（模型、生成器、协议，纯逻辑跨平台）
-WebWindowUI.Tests.Platform/   # 平台 E2E（WebView2/WebKit 桥测试 + 消息泵）
+WebWindowUI.Tests.Windows/    # Windows WebView2 平台 E2E（19 场景 + STA 消息泵）
+WebWindowUI.Tests.Linux/      # Linux WebKit 平台 E2E（19 场景 + GTK 消息泵）
 Sample/                       # 样例（每窗口一功能）
 Demos/                        # 功能 Demo：Todo / SharedNotes / Monitor / ImageGallery
 ```

@@ -1,7 +1,6 @@
-#if WINDOWS
 using System.Runtime.CompilerServices;
 
-namespace WebWindowUI.Tests.Platform.Support;
+namespace WebWindowUI.Tests.Windows.Support;
 
 /// <summary>
 /// 程序集加载即启动 STA 泵线程（不阻塞：loader lock 期间线程要等装配完成才能执行，
@@ -17,4 +16,3 @@ internal static class TestBootstrap
         _ = StaThreadPump.Instance;
     }
 }
-#endif

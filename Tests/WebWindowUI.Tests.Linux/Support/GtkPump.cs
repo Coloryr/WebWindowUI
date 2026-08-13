@@ -1,13 +1,12 @@
-#if LINUX
 using GLib;
 using Thread = System.Threading.Thread; // GLib 也有 Thread 类型，避免歧义
 using WebWindowUI.Linux;
 
-namespace WebWindowUI.Tests.Platform.Support;
+namespace WebWindowUI.Tests.Linux.Support;
 
 /// <summary>
 /// GTK 主循环泵：一根独占线程跑 GLib MainLoop，承载所有触碰 WebKit/GTK 的测试工作。
-/// 与 Windows 的 <see cref="StaThreadPump"/> 对应——WebKit/GTK 对象只能主线程访问，且
+/// 与 Windows 的 StaThreadPump 对应——WebKit/GTK 对象只能主线程访问，且
 /// LinuxMessageLoopSynchronizationContext 是进程单例（UiThreadId 记录首次构造平台的线程），
 /// 必须在同一根线程上构造平台、跑循环、执行测试体。
 ///
@@ -108,4 +107,3 @@ internal sealed class GtkPump
         _loop.RunWithSynchronizationContext(); // 阻塞跑主循环直到进程退出（后台线程）
     }
 }
-#endif

@@ -1,11 +1,10 @@
-#if WINDOWS
 using System.Collections;
 using WebWindowUI.Sample;
 using WebWindowUI.Sample.Items;
-using WebWindowUI.Tests.Platform.Support;
+using WebWindowUI.Tests.Windows.Support;
 using Xunit;
 
-namespace WebWindowUI.Tests.Platform;
+namespace WebWindowUI.Tests.Windows;
 
 /// <summary>
 /// 真 WebView2 端到端测试：真实 CoreWebView2 + 真实构建产物 wwwroot。
@@ -507,5 +506,4 @@ public class WebView2ModelBridgeTests
         }, Timeout);
     }
 }
-#endif
 

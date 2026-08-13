@@ -25,6 +25,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="WebWindowUI.Tests.Platform" />
+    <InternalsVisibleTo Include="WebWindowUI.Tests.Windows" />
   </ItemGroup>
 </Project>
