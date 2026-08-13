@@ -4,17 +4,13 @@ namespace WebWindowUI.Platforms.MacOS;
 
 /// <summary>
 /// 把 async 延续派发回 Cocoa 主事件循环的 SynchronizationContext（macOS 版）。
-/// 与 Windows/Linux 版同契约：Post 入队 + 唤醒主循环；Send 在 UI 线程直跑、否则 Post + 阻塞等待。
-///
-/// 唤醒用主 dispatch 队列的一次性 block：回调 RunQueued()。主循环（NSApplication.Run）尚未运行时，
-/// block 排队等待直到 Run 开始；已在运行则立即执行。DispatchAsync 线程安全，可从任意线程调用。
-///
-/// UI 线程判断用 <see cref="Environment.CurrentManagedThreadId"/> 与 UiThreadId 比较，
-/// 不用 SynchronizationContext.Current——理由同 Windows：System.Threading.Timer 会随回调把创建时
-/// 捕获的 ExecutionContext（含本上下文）流到线程池线程，SynchronizationContext.Current 会误判。
+/// Post 入队 + 唤醒主循环；Send 在 UI 线程直跑、否则 Post + 阻塞等待。
 /// </summary>
 public sealed class MacOSMessageLoopSynchronizationContext : SynchronizationContext
 {
+    /// <summary>
+    /// 进程内单例。
+    /// </summary>
     public static readonly MacOSMessageLoopSynchronizationContext Instance = new();
 
     private readonly object _lock = new();
@@ -38,6 +34,11 @@ public sealed class MacOSMessageLoopSynchronizationContext : SynchronizationCont
             UiThreadId = Environment.CurrentManagedThreadId;
     }
 
+    /// <summary>
+    /// 异步投递：入队 + 经主 dispatch 队列一次性 block 唤醒主循环（主循环未运行则排队等它启动）。
+    /// </summary>
+    /// <param name="d">回调。</param>
+    /// <param name="state">回调状态。</param>
     public override void Post(SendOrPostCallback d, object? state)
     {
         lock (_lock)
@@ -45,10 +46,13 @@ public sealed class MacOSMessageLoopSynchronizationContext : SynchronizationCont
         DispatchQueue.MainQueue.DispatchAsync(RunQueued);
     }
 
+    /// <summary>
+    /// 同步投递：UI 线程直跑；非 UI 线程 marshal 回主队列并阻塞等待（Post → block → RunQueued）。
+    /// </summary>
+    /// <param name="d">回调。</param>
+    /// <param name="state">回调状态。</param>
     public override void Send(SendOrPostCallback d, object? state)
     {
-        // Send 契约：投递到目标线程并阻塞直到执行完成，回调必须在上下文线程上运行。
-        // UI 线程直接执行；非 UI 线程 marshal 回主队列（Post → block → RunQueued）并等待。
         if (Environment.CurrentManagedThreadId == UiThreadId)
         {
             d(state);
@@ -67,6 +71,9 @@ public sealed class MacOSMessageLoopSynchronizationContext : SynchronizationCont
             throw error;
     }
 
+    /// <summary>
+    /// 排干队列：逐个执行直到队列空（在主线程被 block 调用）。
+    /// </summary>
     public void RunQueued()
     {
         while (true)

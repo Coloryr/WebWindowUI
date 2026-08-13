@@ -9,10 +9,8 @@ namespace WebWindowUI.Sample;
 public enum SyncMode { Auto, Manual }
 
 /// <summary>
-/// 设置窗口的数据模型。覆盖生成器支持的多类类型：
-/// string / bool / int / double / long(int64) / Guid(→string) / DateTime(→string) /
-/// TimeSpan(→string) / 枚举(→ModelValue 兜底) / List&lt;string&gt;(→repeated string) /
-/// object(Dictionary)→ModelValue。属性用 [ObservableProperty] 生成，任何变化自动推送给前端 Vue。
+/// 设置窗口的数据模型，覆盖生成器支持的多类类型（string/bool/int/double/long/Guid/DateTime/TimeSpan/
+/// 枚举/List&lt;string&gt;/object）。属性用 [ObservableProperty] 生成，任何变化自动推送给前端 Vue。
 /// </summary>
 public partial class SettingsModel : WebWindowModel
 {

@@ -4,17 +4,8 @@ using WebWindowUI.Core;
 namespace WebWindowUI.Natives.Linux;
 
 /// <summary>
-/// Linux 原生窗口（GTK3 顶层窗口），镜像 Windows 的 <c>Win32NativeWindow</c>：封装 GTK 窗口句柄
-/// 生命周期与 destroy/configure 信号桥，平台经 <see cref="INativeWindow"/> 消费。
-///
-/// 信号桥用 g_signal_connect_data 把 "destroy" 与 "configure-event" 接到 Cdecl 静态 trampoline（保活），
-/// 经单个 GCHandle 路由回本实例的事件。信号在主循环线程触发，trampoline 内不做重入。
-///
-/// 与 Win32 的差异：
-///  - GTK 无 WndProc，用信号代替（destroy → <see cref="Destory"/>、configure-event → <see cref="Resize"/>）；
-///  - <see cref="SetChild"/> 挂 WebView（gtk_container_add 收浮点引用，窗口接管一个引用）——WebView2 是
-///    子 HWND 由 WebView2 自己建，GTK 的 webview 是 GtkWidget，须由窗口层挂上去；
-///  - <see cref="SetIcon"/> 无操作：GTK3 的 gtk_window_set_icon 在 CSD/Wayland 下不显示 per-window 图标。
+/// Linux 原生窗口（GTK3 顶层窗口），镜像 Win32NativeWindow：封装 GTK 窗口句柄生命周期与
+/// destroy/configure 信号桥（GTK 无 WndProc，用信号代替），平台经 <see cref="INativeWindow"/> 消费。
 /// </summary>
 public sealed class LinuxNativeWindow : INativeWindow
 {
@@ -27,11 +18,25 @@ public sealed class LinuxNativeWindow : INativeWindow
     private ulong _destroyHandlerId;
     private ulong _configureHandlerId;
 
+    /// <summary>
+    /// 窗口句柄。
+    /// </summary>
     public IntPtr WindowHandle => _window;
 
+    /// <summary>
+    /// 窗口销毁时触发。
+    /// </summary>
     public event Action? Destory;
+
+    /// <summary>
+    /// 窗口尺寸变化时触发。
+    /// </summary>
     public event Action? Resize;
 
+    /// <summary>
+    /// 创建 GTK 窗口并连接 destroy/configure 信号。
+    /// </summary>
+    /// <param name="options">窗口选项（标题/尺寸）。</param>
     public LinuxNativeWindow(WebWindowOptions options)
     {
         _window = GtkNative.CreateWindow(options.Title, options.Width, options.Height);
@@ -45,8 +50,14 @@ public sealed class LinuxNativeWindow : INativeWindow
     /// </summary>
     public void SetChild(IntPtr child) => GtkNative.SetChild(_window, child);
 
+    /// <summary>
+    /// 显示窗口。
+    /// </summary>
     public void Show() => GtkNative.Show(_window);
 
+    /// <summary>
+    /// 隐藏窗口（不销毁）。
+    /// </summary>
     public void Hide() => GtkNative.Hide(_window);
 
     /// <summary>
@@ -54,8 +65,15 @@ public sealed class LinuxNativeWindow : INativeWindow
     /// </summary>
     public void Close() => GtkNative.Close(_window);
 
+    /// <summary>
+    /// 激活窗口。
+    /// </summary>
     public void Activate() => GtkNative.Activate(_window);
 
+    /// <summary>
+    /// 修改标题。
+    /// </summary>
+    /// <param name="title">新标题。</param>
     public void SetTitle(string title) => GtkNative.SetTitle(_window, title);
 
     public void SetIcon(WindowIcon icon)
@@ -85,6 +103,9 @@ public sealed class LinuxNativeWindow : INativeWindow
             _handle.Free();
     }
 
+    /// <summary>
+    /// destroy 信号 trampoline：经 GCHandle 路由回 Destory。
+    /// </summary>
     private static void OnDestroyed(IntPtr window, IntPtr userData)
     {
         try

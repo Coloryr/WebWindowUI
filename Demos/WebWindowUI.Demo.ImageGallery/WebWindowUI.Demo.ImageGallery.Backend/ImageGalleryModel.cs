@@ -7,9 +7,7 @@ using WebWindowUI.Core;
 namespace WebWindowUI.Demo.ImageGallery;
 
 /// <summary>
-/// 图片画廊模型：后端扫描磁盘图片目录并「把图片字节发给前端」；前端双模式上传 →
-/// 命令保存到磁盘（文件上传存储）→ 列表即时刷新；删除/刷新命令操作磁盘后同步列表。
-/// 上传两模式：字节上传（前端读成 byte[] 回传）/ 路径上传（系统原生文件选择器，后端自读源文件）。
+/// 图片画廊模型：扫描磁盘图片目录把字节下发前端，双模式上传（字节 / 路径）经命令保存磁盘后同步列表。
 /// 演示 typed repeated List&lt;ImageItemModel&gt; 元素携带 byte[]（blob 传输）。
 /// </summary>
 public partial class ImageGalleryModel : WebWindowModel

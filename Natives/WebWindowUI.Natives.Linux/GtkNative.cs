@@ -1,13 +1,9 @@
 namespace WebWindowUI.Natives.Linux;
 
 /// <summary>
-/// GTK3 手写 P/Invoke 层（libgtk-3.so.0）。libwebkit2gtk-4.1 是 GTK3 端口（本机 2.52.3 链接
-/// libgtk-3.so.0），而 GirCore 只发布 GTK4 绑定（无 Gtk-3.0/Gdk-3.0），故窗口壳全手写。
-/// 仅覆盖框架用到的窗口 API 子集，所有函数按 soname 引用、运行时不依赖 dev 符号链接。
-///
-/// 所有权约定：
-///  - <see cref="SetChild"/> 用 gtk_container_add：收 WebView 的浮点引用（GTK3），窗口接管一个引用；
-///  - 窗口句柄生命周期由 <see cref="LinuxNativeWindow"/> 管理（含 destroy 信号路由与释放）。
+/// GTK3 手写 P/Invoke 层（libgtk-3.so.0，GirCore 无 GTK3 绑定故窗口壳全手写）。
+/// <see cref="SetChild"/> 用 gtk_container_add 收浮点引用（窗口接管一个引用）；窗口句柄生命周期由
+/// <see cref="LinuxNativeWindow"/> 管理。
 /// </summary>
 internal static partial class GtkNative
 {
@@ -77,13 +73,23 @@ internal static partial class GtkNative
     /// </summary>
     public static void Activate(IntPtr window) => gtk_window_present(window);
 
+    /// <summary>
+    /// 隐藏窗口（不销毁）。
+    /// </summary>
+    /// <param name="window">窗口指针。</param>
     public static void Hide(IntPtr window) => gtk_widget_hide(window);
 
     /// <summary>
     /// 关闭窗口（close-request → 默认处理器 destroy → destroy 信号）。
     /// </summary>
+    /// <param name="window">窗口指针。</param>
     public static void Close(IntPtr window) => gtk_window_close(window);
 
+    /// <summary>
+    /// 修改标题。
+    /// </summary>
+    /// <param name="window">窗口指针。</param>
+    /// <param name="title">新标题。</param>
     public static void SetTitle(IntPtr window, string title) => gtk_window_set_title(window, title);
 
     /// <summary>
@@ -285,8 +291,15 @@ internal static partial class GtkNative
     [LibraryImport(GObjectLib, EntryPoint = "g_signal_handler_disconnect")]
     private static partial void g_signal_handler_disconnect(IntPtr instance, ulong handlerId);
 
-    /// <summary>连接 GObject 信号到托管回调。data 是调用方预先分配的 GCHandle（由调用方释放）；
-    /// handler 委托必须被强引用保活。detail 支持 "signal::detail"。</summary>
+    /// <summary>
+    /// 连接 GObject 信号到托管回调。data 是调用方预先分配的 GCHandle（由调用方释放）；
+    /// handler 委托必须被强引用保活。detail 支持 "signal::detail"。
+    /// </summary>
+    /// <param name="instance">信号源实例。</param>
+    /// <param name="detailedSignal">信号名（可带 detail）。</param>
+    /// <param name="handler">托管回调。</param>
+    /// <param name="data">路由 GCHandle。</param>
+    /// <returns>信号处理器 id。</returns>
     public static ulong ConnectSignal(IntPtr instance, string detailedSignal, Delegate handler, GCHandle data)
         => g_signal_connect_data(instance, detailedSignal,
             Marshal.GetFunctionPointerForDelegate(handler), GCHandle.ToIntPtr(data), IntPtr.Zero, 0);

@@ -18,11 +18,8 @@ internal sealed class TestWindow : WebWindow
 }
 
 /// <summary>
-/// 真 WebView2 端到端测试宿主。
-///
-/// 流程：模型先挂到窗口 → Show()（唯一入口，触发 InitWebViewAsync；无头模式不显示窗口）
-/// → 等 NavigationCompleted 镜像事件（控制器已建、页面已导航）→ 等页面桥接（window.__model）就绪 →
-/// 执行测试体。全部在 STA 泵线程内跑，经 StaThreadPump.RunAsync 承载。
+/// 真 WebView2 端到端测试宿主。流程：模型挂到窗口 → Show() → 等 NavigationCompleted → 等页面桥接
+/// （window.__model）就绪 → 执行测试体；全部在 STA 泵线程内经 StaThreadPump.RunAsync 承载。
 /// </summary>
 internal static class WebView2TestHarness
 {

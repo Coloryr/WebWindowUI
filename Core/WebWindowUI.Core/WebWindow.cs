@@ -3,10 +3,7 @@ using WebWindowUI.Core.Protocol;
 namespace WebWindowUI.Core;
 
 /// <summary>
-/// 跨平台的 WebView 窗口基类。平台实现由 <c>WebWindowUI.Platform.EnsureRegistered()</c>
-/// 注册进 <see cref="WebWindowPlatform"/>（Windows=WebView2 / Linux=WebKit2GTK / macOS=WKWebView）。
-/// 子类构造时传「窗口路径」，对应前端 src/window/&lt;窗口路径&gt;/ 页面，
-/// 首页地址自动推导为 scheme://localhost/window/&lt;窗口路径&gt;/index.html。
+/// 跨平台的 WebView 窗口基类：构造传「窗口路径」，对应前端 src/window/&lt;窗口路径&gt;/ 页面，首页地址自动推导。
 /// </summary>
 public abstract class WebWindow
 {
@@ -15,8 +12,9 @@ public abstract class WebWindow
     private bool _pageLoaded;
 
     /// <summary>
-    /// 按指定选项创建窗口
+    /// 按指定选项创建窗口。
     /// </summary>
+    /// <param name="options">窗口选项。</param>
     protected WebWindow(WebWindowOptions options)
     {
         _backend = WebWindowPlatform.Current.CreateWindow(options);
@@ -63,6 +61,8 @@ public abstract class WebWindow
     /// <summary>
     /// 测试用：在页面里执行 JS 并返回 JSON 结果。
     /// </summary>
+    /// <param name="script">要执行的 JS。</param>
+    /// <returns>JS 执行结果（JSON 字符串）。</returns>
     internal Task<string> ExecuteScriptAsync(string script) => _backend.ExecuteScriptAsync(script);
 
     /// <summary>
@@ -78,11 +78,11 @@ public abstract class WebWindow
     /// <summary>
     /// 设置窗口图标（标题栏与任务栏）。
     /// </summary>
+    /// <param name="icon">窗口图标。</param>
     public void SetIcon(WindowIcon icon) => _backend.SetIcon(icon);
 
     /// <summary>
-    /// 窗口数据模型，与前端 Vue 双向绑定：属性变化推送增量、页面加载推完整快照、
-    /// 前端回传 ModelSet 写回属性。同一实例可绑多窗口（共享广播），替换/置空模型时解绑。
+    /// 窗口数据模型，与前端 Vue 双向绑定；同一实例可绑多窗口（共享广播），替换/置空模型时解绑。
     /// </summary>
     public WebWindowModel? Model
     {
@@ -104,12 +104,19 @@ public abstract class WebWindow
         }
     }
 
+    /// <summary>
+    /// 底层导航完成回调：标记页面已就绪（初始快照由前端 Ready 信号统一补发）。
+    /// </summary>
     private void OnBackendNavigationCompleted()
     {
         _pageLoaded = true;
         // 初始快照不在导航完成时推（页面脚本可能尚未就绪），由前端 Ready 信号统一补发。
     }
 
+    /// <summary>
+    /// 处理前端 postMessage 回传的 protobuf 消息（Ready/Set/Invoke 分派）。
+    /// </summary>
+    /// <param name="bytes">前端回传的 protobuf 字节。</param>
     private void OnBackendMessageReceived(byte[] bytes)
     {
         try
@@ -129,8 +136,7 @@ public abstract class WebWindow
                 return;
             }
 
-            // 前端双向绑定回写：ModelSet。ElementProperty 非空 = 集合元素级写回（按 ModelInstanceId 定位元素、
-            // 只改该元素属性，保实例），否则旧整属性行为。应用成功后广播给其它绑定窗口（跨窗口同步）。
+            // 前端双向绑定回写：ModelSet。ElementProperty 非空 = 元素级写回（按 ModelInstanceId 定位元素，保实例）。
             if (msg.Set is not null && _model is not null)
             {
                 if (string.IsNullOrEmpty(msg.Set.ElementProperty))

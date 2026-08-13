@@ -2,18 +2,13 @@ namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
 /// 把 async 延续派发回 GTK 主循环的 SynchronizationContext（Linux 版）。
-/// 与 Windows 版同契约：Post 入队 + 唤醒主循环；Send 在 UI 线程直跑、否则 Post + 阻塞等待。
-///
-/// 唤醒用 GLib 默认 MainContext 的一次性 idle source：回调 RunQueued() 后返回 false（只跑一次）。
-/// 主循环可能尚未运行（首次 Post 早于 RunMessageLoop）：source 挂到默认 MainContext，
-/// 循环一开始即执行；已在运行则立即唤醒。g_main_context_invoke_full 线程安全，可从任意线程调用。
-///
-/// UI 线程判断用 <see cref="Environment.CurrentManagedThreadId"/> 与 UiThreadId 比较，
-/// 不用 SynchronizationContext.Current——理由同 Windows：System.Threading.Timer 会随回调把创建时
-/// 捕获的 ExecutionContext（含本上下文）流到线程池线程，SynchronizationContext.Current 会误判。
+/// Post 入队 + 唤醒主循环；Send 在 UI 线程直跑、否则 Post + 阻塞等待。
 /// </summary>
 public sealed class LinuxMessageLoopSynchronizationContext : SynchronizationContext
 {
+    /// <summary>
+    /// 进程内单例。
+    /// </summary>
     public static readonly LinuxMessageLoopSynchronizationContext Instance = new();
 
     private readonly Lock _lock = new();
@@ -37,6 +32,11 @@ public sealed class LinuxMessageLoopSynchronizationContext : SynchronizationCont
             UiThreadId = Environment.CurrentManagedThreadId;
     }
 
+    /// <summary>
+    /// 异步投递：入队 + 经默认 MainContext 一次性 idle source 唤醒主循环（主循环未运行则排队等它启动）。
+    /// </summary>
+    /// <param name="d">回调。</param>
+    /// <param name="state">回调状态。</param>
     public override void Post(SendOrPostCallback d, object? state)
     {
         lock (_lock)
@@ -48,10 +48,13 @@ public sealed class LinuxMessageLoopSynchronizationContext : SynchronizationCont
         });
     }
 
+    /// <summary>
+    /// 同步投递：UI 线程直跑；非 UI 线程 marshal 回 UI 线程并阻塞等待（Post → idle source → RunQueued）。
+    /// </summary>
+    /// <param name="d">回调。</param>
+    /// <param name="state">回调状态。</param>
     public override void Send(SendOrPostCallback d, object? state)
     {
-        // Send 契约：投递到目标线程并阻塞直到执行完成，回调必须在上下文线程上运行。
-        // UI 线程直接执行；非 UI 线程 marshal 回 UI 线程（Post → idle source → RunQueued）并等待。
         if (Environment.CurrentManagedThreadId == UiThreadId)
         {
             d(state);
@@ -70,6 +73,9 @@ public sealed class LinuxMessageLoopSynchronizationContext : SynchronizationCont
             throw error;
     }
 
+    /// <summary>
+    /// 排干队列：逐个执行直到队列空（在 UI 线程被 idle source 调用）。
+    /// </summary>
     public void RunQueued()
     {
         while (true)

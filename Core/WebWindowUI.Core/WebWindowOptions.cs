@@ -26,6 +26,10 @@ public record WebWindowOptions
     /// </summary>
     public int Height = 800;
 
+    /// <summary>
+    /// 创建窗口选项。
+    /// </summary>
+    /// <param name="path">窗口路径（对应前端 src/window/&lt;窗口路径&gt;/）。</param>
     public WebWindowOptions(string path)
     {
         WindowPath = path;

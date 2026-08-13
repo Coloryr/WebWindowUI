@@ -5,19 +5,39 @@ using WebWindowUI.Core;
 
 namespace WebWindowUI.Natives.Windows;
 
+/// <summary>
+/// Win32 裸窗口：封装 HWND 生命周期（创建/显示/销毁），经窗口过程路由回框架事件。
+/// </summary>
 public class Win32NativeWindow : INativeWindow
 {
+    /// <summary>
+    /// 注册的窗口类名。
+    /// </summary>
     public const string WindowClass = "WebView2Window";
 
     private IntPtr _hIcon;
 
     private readonly IntPtr _hwnd;
 
+    /// <summary>
+    /// 窗口句柄。
+    /// </summary>
     public IntPtr WindowHandle => _hwnd;
 
+    /// <summary>
+    /// 窗口销毁时触发。
+    /// </summary>
     public event Action? Destory;
+
+    /// <summary>
+    /// 窗口尺寸变化时触发。
+    /// </summary>
     public event Action? Resize;
 
+    /// <summary>
+    /// 创建窗口并登记进消息循环窗口表。
+    /// </summary>
+    /// <param name="options">窗口选项（标题/尺寸）。</param>
     public Win32NativeWindow(WebWindowOptions options)
     {
         _hwnd = Win32.CreateWindowExW(
@@ -30,21 +50,33 @@ public class Win32NativeWindow : INativeWindow
         Win32MessageLoop.WindowOpened(this);
     }
 
+    /// <summary>
+    /// 显示窗口。
+    /// </summary>
     public void Show()
     {
         Win32.ShowWindow(_hwnd, Win32.SW_SHOW);
     }
 
+    /// <summary>
+    /// 隐藏窗口（不销毁）。
+    /// </summary>
     public void Hide()
     {
         Win32.ShowWindow(_hwnd, Win32.SW_HIDE);
     }
 
+    /// <summary>
+    /// 销毁窗口。
+    /// </summary>
     public void Close()
     {
         Win32.DestroyWindow(_hwnd);
     }
 
+    /// <summary>
+    /// 激活窗口：先恢复最小化，再置前并聚焦。
+    /// </summary>
     public void Activate()
     {
         if (Win32.IsIconic(_hwnd))
@@ -53,11 +85,19 @@ public class Win32NativeWindow : INativeWindow
         Win32.SetFocus(_hwnd);
     }
 
+    /// <summary>
+    /// 修改标题。
+    /// </summary>
+    /// <param name="title">新标题。</param>
     public void SetTitle(string title)
     {
         Win32.SetWindowTextW(_hwnd, title);
     }
 
+    /// <summary>
+    /// 设置窗口图标，替换时释放旧图标句柄。
+    /// </summary>
+    /// <param name="icon">窗口图标。</param>
     public void SetIcon(WindowIcon icon)
     {
         var hIcon = LoadIconHandle(icon);
@@ -91,12 +131,23 @@ public class Win32NativeWindow : INativeWindow
         }
     }
 
+    /// <summary>
+    /// 获取客户区尺寸。
+    /// </summary>
+    /// <returns>客户区矩形。</returns>
     public Rectangle GetSize()
     {
         Win32.GetClientRect(_hwnd, out Win32.RECT rc);
         return new Rectangle(0, 0, rc.Right, rc.Bottom);
     }
 
+    /// <summary>
+    /// 窗口过程：分发 WM_CLOSE/WM_DESTROY/WM_SIZE，其余走默认处理。
+    /// </summary>
+    /// <param name="msg">消息 id。</param>
+    /// <param name="wParam">消息参数。</param>
+    /// <param name="lParam">消息参数。</param>
+    /// <returns>消息处理结果。</returns>
     public IntPtr OnWndProc(uint msg, IntPtr wParam, IntPtr lParam)
     {
         switch (msg)

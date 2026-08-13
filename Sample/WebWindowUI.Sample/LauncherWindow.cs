@@ -4,11 +4,8 @@ using WebWindowUI.Core;
 namespace WebWindowUI.Sample;
 
 /// <summary>
-/// 入口（启动器）窗口：演示「前端按钮 → .NET 命令（MVVM Command）」。对应前端 src/window/launcher/。
-/// 前端按钮调用生成的 model.openWindow()/model.commandWithArg(path) → 桥发 ModelInvoke →
-/// .NET 执行 [RelayCommand] 方法 → OpenRequested 事件到这里开窗；已打开的窗口去重激活，
-/// 关闭后移除记录可再次打开。同时保留 LauncherModel.Request 回写通道（ModelSet 直接写属性，
-/// 双向绑定回写演示）。两种通道最终都调 Open(path)。
+/// 入口（启动器）窗口（前端 src/window/launcher/）：演示「前端按钮 → .NET 命令（MVVM Command）」。
+/// 命令/回写两种通道最终都调 Open(path) 开窗，已打开的窗口去重激活、关闭后移除记录。
 /// </summary>
 internal sealed class LauncherWindow : WebWindow
 {

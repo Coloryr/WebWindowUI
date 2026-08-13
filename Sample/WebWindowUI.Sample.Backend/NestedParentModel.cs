@@ -6,10 +6,8 @@ using WebWindowUI.Core;
 namespace WebWindowUI.Sample;
 
 /// <summary>
-/// 模型嵌套窗口的数据模型：演示「模型里嵌套模型」——Detail 是另一个 WebWindowModel 实例
-/// （单 POCO 属性 → descriptor 里是 ModelValue 兜底，序数键下发）。Detail 实例同时可绑到
-/// 嵌套详情子窗口（master-detail），子窗口编辑的是同一个实例；子窗口改了 Detail 内部字段时，
-/// 这里重推整个 Detail，父窗口展示实时跟随。
+/// 模型嵌套窗口数据模型：Detail 是另一个 WebWindowModel 实例（单 POCO → ModelValue 兜底/序数键），
+/// 同时可绑到嵌套详情子窗口（master-detail）。子窗口改 Detail 内部字段时这里重推整个 Detail。
 /// </summary>
 public partial class NestedParentModel : WebWindowModel
 {

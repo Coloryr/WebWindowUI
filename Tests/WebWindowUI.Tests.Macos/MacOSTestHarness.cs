@@ -18,12 +18,9 @@ internal sealed class TestWindow : WebWindow
 }
 
 /// <summary>
-/// 真 WKWebView 端到端测试宿主（镜像 Windows 的 WebView2TestHarness，但没有泵包装——本工程的主泵
-/// 在 <see cref="MacOSTestProgram.Main"/>，场景经 MacOSMessageLoopSynchronizationContext 投递回主线程
-/// 执行，这里直接 await 即可）。
-///
-/// 流程：模型先挂到窗口 → Show()（触发 LoadRequest；无头模式不显示窗口）→ 等 NavigationCompleted
-/// 镜像事件 → 等页面桥接（window.__model）就绪 → 执行测试体。全部在主线程内跑。
+/// 真 WKWebView 端到端测试宿主（镜像 WebView2TestHarness，但无泵包装：主泵在 MacOSTestProgram.Main，
+/// 场景经 MacOSMessageLoopSynchronizationContext 投递回主线程直接 await）。流程：模型挂到窗口 → Show()
+/// → 等 NavigationCompleted → 等页面桥接就绪 → 执行测试体。
 /// </summary>
 internal static class MacOSTestHarness
 {

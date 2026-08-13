@@ -3,16 +3,15 @@ using System.Text;
 namespace WebWindowUI.Core.Protocol;
 
 /// <summary>
-/// WebView2 字符串消息通道的字节编解码。该通道在第一个 NUL（char code 0）处截断字符串，
-/// 而 protobuf 字节普遍含 0x00，无法无损通过。本编解码把字节转成不含 NUL 的 Latin-1 字符串：
-/// 0x00 → "\0"，0x5C（转义符本身）→ "\\"，其余字节 1:1。无 NUL 零膨胀，每个 NUL 只多 1 字符。
-/// 前端桥（bytesToEscaped/escapedToBytes）实现同一算法，双向互通。
+/// WebView2 字符串通道字节编解码：0x00 → "\0"、0x5C → "\\"、其余 1:1（该通道在首个 NUL 截断）；前端桥同算法。
 /// </summary>
 internal static class WebView2StringCodec
 {
     /// <summary>
     /// 字节 → 不含 NUL 的 Latin-1 字符串。
     /// </summary>
+    /// <param name="bytes">protobuf 字节。</param>
+    /// <returns>编码字符串。</returns>
     public static string Encode(byte[] bytes)
     {
         var sb = new StringBuilder(bytes.Length);
@@ -37,8 +36,10 @@ internal static class WebView2StringCodec
     }
 
     /// <summary>
-    /// Encode 的逆操作：还原回字节。畸形输入（结尾孤立转义符）静默丢弃该字符。
+    /// Encode 的逆操作：还原回字节；结尾孤立转义符静默丢弃。
     /// </summary>
+    /// <param name="s">编码字符串。</param>
+    /// <returns>还原的字节。</returns>
     public static byte[] Decode(string s)
     {
         var bytes = new List<byte>(s.Length);

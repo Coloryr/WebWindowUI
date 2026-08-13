@@ -5,26 +5,11 @@ using WebWindowUI.Linux;
 namespace WebWindowUI.Tests.Linux.Support;
 
 /// <summary>
-/// GTK 主循环泵：一根独占线程跑 GLib MainLoop，承载所有触碰 WebKit/GTK 的测试工作。
-/// 与 Windows 的 StaThreadPump 对应——WebKit/GTK 对象只能主线程访问，且
-/// LinuxMessageLoopSynchronizationContext 是进程单例（UiThreadId 记录首次构造平台的线程），
-/// 必须在同一根线程上构造平台、跑循环、执行测试体。
-///
-/// 泵线程初始化顺序（与本库 LinuxPlatform 构造逻辑一致）：
-///   typeof(LinuxPlatform) 强制加载平台程序集（泵线程）→ [ModuleInitializer] new LinuxPlatform()
-///   执行 gtk_init、WebKit 初始化、LinuxMessageLoopSynchronizationContext.Initialize()（UiThreadId=泵线程）、
-///   SetSynchronizationContext，注册进 WebWindowPlatform.Current。然后 MainLoop 跑 GLib 默认
-///   MainContext（与 SyncContext.Post 的 idle source 同一上下文）。
-///
-/// 测试体经 LinuxMessageLoopSynchronizationContext.Post 投递到泵线程（idle source → 循环迭代执行），
-/// async 延续捕获泵线程的 SynchronizationContext 自动回到泵线程，全程串行在泵线程。
-///
-/// 泵线程是后台线程：testhost 退出即终止（与 StaThreadPump 一致），无需显式 Shutdown。
-/// 不调用 LinuxPlatform.RunMessageLoop()（那是宿主 App 的入口）；测试期间窗口全关时框架的
-/// QuitMainLoop() 因 _mainLoop 为空而 no-op，泵的主循环持续运行。
-///
-/// 运行要求：进程需要显示会话（gtk_init 需要 DISPLAY/WAYLAND）且 WebKit 沙箱已按宿主环境处理
-/// （与本库 sample 相同，运行时用户自行决定 WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1）。
+/// GTK 主循环泵：一根独占线程跑 GLib MainLoop，承载所有触碰 WebKit/GTK 的测试工作（对应 StaThreadPump）。
+/// WebKit/GTK 对象只能主线程访问，且 LinuxMessageLoopSynchronizationContext 是进程单例——泵线程
+/// typeof(LinuxPlatform) 触发 [ModuleInitializer] new LinuxPlatform()（gtk_init + SC.Initialize，
+/// UiThreadId=泵线程），测试体经 SC.Post 投递、async 延续自动回到泵线程。不调 RunMessageLoop()
+/// （宿主入口），窗口全关时 QuitMainLoop 因 _mainLoop 为空 no-op。运行需显示会话 + WebKit 沙箱按宿主处理。
 /// </summary>
 internal sealed class GtkPump
 {

@@ -5,29 +5,9 @@ using WebWindowUI.Natives.Windows;
 namespace WebWindowUI.Tests.Windows.Support;
 
 /// <summary>
-/// STA 泵：一根独占的 STA 线程承载所有触碰平台的测试工作。
-///
-/// 为什么必须这样：
-///   WebWindowPlatform.Current 是静态单例，平台 [ModuleInitializer] 在「加载平台程序集的线程」上
-///   构造 WindowsPlatform 并绑定单例 MessageLoopSynchronizationContext（隐藏消息窗口 + UiThreadId）。
-///   隐藏消息窗口归创建线程所有，SC.Post（async 延续）经 PostMessageW(WM_RUN) 只投给它的创建线程——
-///   若创建线程不是本泵线程，消息落进那个线程（无泵）的队列，延续永不派发 → 测试挂在 await。
-///   故平台注册必须发生在本泵线程，且泵线程必须先于一切创建自己的隐藏消息窗口。
-///
-/// 泵线程初始化顺序：
-///   创建隐藏消息窗口（GetOrCreateMarshalWindow 进程单例，泵线程首次创建即归泵）
-///   → 绑定 SC → 本线程加载平台程序集（[ModuleInitializer] 在本线程 Register，
-///   WindowsPlatform ctor 复用上面的 hwnd、把 UiThreadId 重绑为泵线程）→ 进入泵循环。
-///
-/// 泵循环 = 排干工作队列 → 派发所有就绪消息（吞掉 WM_QUIT，关最后一个窗口会
-/// PostQuitMessage）→ MsgWaitForMultipleObjectsEx 挂起等「工作信号 / 新消息 / 200ms 兜底」。
-/// async 延续经 SynchronizationContext.Post → WM_RUN → 下一轮派发，天然回到泵线程。
-///
-/// 为什么构造不等待泵就绪：
-///   模块初始化（TestBootstrap）期间启动的线程要等 CLR loader lock 释放才能执行首段托管代码，
-///   而 loader lock 又持有到模块初始化返回——构造里若 _ready.Wait() 等线程就绪即死锁。
-///   因此构造只负责「启动线程」，就绪等待放在首次使用（RunAsync）时：此时装配已完成、
-///   锁已释放，泵线程早已进入循环，等待必然立即返回。
+/// STA 泵：一根独占的 STA 线程承载所有触碰平台的测试工作。泵线程必须先建隐藏消息窗口并绑定 SC、
+/// 再在本线程加载平台程序集——WM_RUN 只投给窗口创建线程，平台注册落在别的线程则 async 延续永不派发。
+/// 构造不等泵就绪（loader lock 死锁），就绪等待放首次 RunAsync。
 /// </summary>
 internal sealed class StaThreadPump
 {
@@ -151,10 +131,8 @@ internal sealed class StaThreadPump
     }
 
     /// <summary>
-    /// 在本线程（泵线程）加载平台程序集并注册：平台 [ModuleInitializer] 在加载线程上
-    /// Register(new WindowsPlatform())。GetOrCreateMarshalWindow 是进程单例——泵线程已在
-    /// 前面创建过，WindowsPlatform ctor 的 InitMessageLoop 只会复用泵线程的窗口。
-    /// 若 module init 因故未生效（Register ??= 已注册则跳过），显式 Register 兜底。
+    /// 在本线程（泵线程）加载平台程序集：[ModuleInitializer] 在加载线程 Register(new WindowsPlatform())，
+    /// InitMessageLoop 复用泵线程已建的隐藏窗口；module init 未生效时显式 Register 兜底。
     /// </summary>
     private static void EnsurePlatformRegistered()
     {

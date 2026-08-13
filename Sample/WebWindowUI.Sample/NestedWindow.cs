@@ -3,11 +3,9 @@
 namespace WebWindowUI.Sample;
 
 /// <summary>
-/// 模型嵌套窗口：对应前端 src/window/nested/。演示「模型里嵌套模型 + 嵌套详情子窗口」。
-/// 父窗口绑定 NestedParentModel，其 Detail 是另一个 WebWindowModel 实例（单 POCO 属性 →
-/// ModelValue 兜底/序数键，父窗口只读展示）；「打开嵌套详情」命令触发 OpenDetailRequested 事件，
-/// 这里打开绑定同一个 Detail 实例的 NestedDetailWindow（master-detail）。子窗口编辑 Detail 内部字段
-/// 时，NestedParentModel 重推整个 Detail，父窗口展示实时跟随（见 NestedParentModel.OnDetailChangedInner）。
+/// 模型嵌套窗口（前端 src/window/nested/）：演示「模型里嵌套模型 + 嵌套详情子窗口」。
+/// 「打开嵌套详情」命令 → 打开绑定同一个 Detail 实例的 NestedDetailWindow（master-detail），
+/// 子窗口编辑后父窗口展示实时跟随。
 /// </summary>
 internal sealed class NestedWindow : WebWindow
 {

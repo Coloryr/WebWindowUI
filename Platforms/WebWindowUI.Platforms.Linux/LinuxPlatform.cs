@@ -4,10 +4,8 @@ using WebWindowUI.Natives.Linux;
 namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
-/// Linux 平台实现：GTK3 宿主 + libwebkit2gtk-4.1（webkit2gtk-4.1 是 GTK3 端口；WebKit/GTK 均为手写
-/// P/Invoke，见 Native/WebKit2Native.cs + Native/GtkNative.cs）。用 GLib.MainLoop 跑主循环（不用
-/// Gtk.Application），契合本框架「创建窗口 → Show → 再 RunMessageLoop」的模型，也避开 Gtk.Application
-/// 的 D-Bus 唯一实例限制。
+/// Linux 平台实现：GTK3 宿主 + libwebkit2gtk-4.1（GTK3 端口，WebKit/GTK 均手写 P/Invoke）。
+/// 用 GLib.MainLoop 跑主循环（不用 Gtk.Application，避开其 D-Bus 唯一实例限制）。
 /// </summary>
 public sealed class LinuxPlatform : IWebWindowPlatform
 {
@@ -16,6 +14,9 @@ public sealed class LinuxPlatform : IWebWindowPlatform
 
     private static MainLoop? _mainLoop;
 
+    /// <summary>
+    /// 初始化 GTK/WebKit 并注册 app/appdata 自定义 scheme。
+    /// </summary>
     public LinuxPlatform()
     {
         Module.Initialize();
@@ -30,9 +31,17 @@ public sealed class LinuxPlatform : IWebWindowPlatform
         SynchronizationContext.SetSynchronizationContext(LinuxMessageLoopSynchronizationContext.Instance);
     }
 
+    /// <summary>
+    /// 创建窗口后端。
+    /// </summary>
+    /// <param name="options">窗口选项。</param>
+    /// <returns>窗口后端。</returns>
     public IWindowBackend CreateWindow(WebWindowOptions options)
         => LinuxWindow.Create(options);
 
+    /// <summary>
+    /// 运行 GLib 主循环，直到最后一个窗口关闭退出。
+    /// </summary>
     public void RunMessageLoop()
     {
         LinuxMessageLoopSynchronizationContext.Initialize();
@@ -111,6 +120,10 @@ public sealed class LinuxPlatform : IWebWindowPlatform
         FinishNotFound(request);
     }
 
+    /// <summary>
+    /// 以 404 完成 scheme 请求。
+    /// </summary>
+    /// <param name="request">scheme 请求句柄。</param>
     private static void FinishNotFound(IntPtr request)
     {
         try
@@ -136,15 +149,42 @@ public sealed class LinuxPlatform : IWebWindowPlatform
     public void RunOnUiThread(Action action)
         => LinuxMessageLoopSynchronizationContext.Instance.Send(_ => action(), null);
 
+    /// <summary>
+    /// 当前线程是否 UI（GTK 主循环）线程。
+    /// </summary>
+    /// <returns>是否 UI 线程。</returns>
     public bool IsUiThread()
         => Environment.CurrentManagedThreadId == LinuxMessageLoopSynchronizationContext.UiThreadId;
 
+    /// <summary>
+    /// 显示系统消息框。
+    /// </summary>
+    /// <param name="title">标题。</param>
+    /// <param name="message">内容。</param>
+    /// <param name="error">是否错误样式。</param>
     public void ShowMessageBox(string title, string message, bool error)
         => GtkNative.ShowMessageBox(title, message);
 
+    /// <summary>
+    /// 打开文件对话框。
+    /// </summary>
+    /// <param name="title">标题。</param>
+    /// <param name="filter">过滤器。</param>
+    /// <param name="initialDirectory">初始目录。</param>
+    /// <param name="fileMustExist">是否要求文件存在。</param>
+    /// <param name="allowMultiSelect">是否允许多选。</param>
+    /// <returns>选中的文件路径。</returns>
     public string[]? OpenFileDialog(string title, string filter, string? initialDirectory = null, bool fileMustExist = true, bool allowMultiSelect = true)
         => GtkNative.OpenFileDialog(title, initialDirectory, allowMultiSelect);
 
+    /// <summary>
+    /// 保存文件对话框。
+    /// </summary>
+    /// <param name="title">标题。</param>
+    /// <param name="filter">过滤器。</param>
+    /// <param name="defaultFileName">默认文件名。</param>
+    /// <param name="defaultExt">默认扩展名。</param>
+    /// <returns>选中的文件路径。</returns>
     public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
         => GtkNative.SaveFileDialog(title, defaultFileName);
 }

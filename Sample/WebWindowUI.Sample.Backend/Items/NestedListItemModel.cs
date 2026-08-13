@@ -5,11 +5,9 @@ using WebWindowUI.Core;
 namespace WebWindowUI.Sample.Items;
 
 /// <summary>
-/// 列表元素模型（示例「List&lt;&gt;嵌套窗口」）：作为 <see cref="global::WebWindowUI.Sample.NestedListModel.Items"/> 的
-/// typed repeated 元素，元素内部又嵌套 List&lt;NestedItemTagModel&gt;（Tags，typed repeated）
-/// 与单模型 NestedItemMetaModel（Meta，ModelValue 兜底）。元素实例同时可绑到列表项详情子窗口
-/// （src/window/nested-list-item/）：子窗口以该元素为根模型，Tags 在子窗口是根层 typed repeated
-/// → 增删改全部双向；Meta 是单 POCO → 只读展示。
+/// 列表元素模型（示例「List&lt;&gt;嵌套窗口」）：NestedListModel.Items 的 typed repeated 元素，内部又嵌套
+/// List&lt;NestedItemTagModel&gt;（Tags，typed repeated）与单模型 NestedItemMetaModel（Meta，ModelValue 兜底）。
+/// 元素可绑到列表项详情子窗口：Tags 根层 typed repeated 增删改全双向，Meta 单 POCO 只读展示。
 /// </summary>
 public partial class NestedListItemModel : WebWindowModel
 {

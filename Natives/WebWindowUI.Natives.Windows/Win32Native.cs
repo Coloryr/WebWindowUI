@@ -5,6 +5,12 @@ namespace WebWindowUI.Natives.Windows;
 
 public static class Win32Native
 {
+    /// <summary>
+    /// 显示系统消息框。
+    /// </summary>
+    /// <param name="title">标题。</param>
+    /// <param name="message">内容。</param>
+    /// <param name="error">是否错误图标。</param>
     public static void ShowMessage(string title, string message, bool error)
     {
         Win32.MessageBoxW(IntPtr.Zero, message, title, error ? Win32.MB_ICONERROR : Win32.MB_ICONINFORMATION);

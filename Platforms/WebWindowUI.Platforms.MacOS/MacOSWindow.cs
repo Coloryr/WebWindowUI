@@ -6,14 +6,8 @@ using WebWindowUI.Core.Protocol;
 namespace WebWindowUI.Platforms.MacOS;
 
 /// <summary>
-/// macOS 平台：NSWindow + WKWebView 的窗口，可创建多个实例。
-/// 每个 WKWebView 用自己的 WKWebViewConfiguration，自定义 scheme（WKURLSchemeHandler）与
-/// script message handler 都按窗口独立注册——不像 Linux 共享默认 WebContext 那样需要进程级注册。
-///
-/// 平台限制（与 Windows 有差异，README 也注明）：
-///  - SetIcon 无操作：macOS 窗口没有独立的 per-window 图标（图标属于 App Bundle）。
-///  - 盲写实现：net10.0-macos 在 Windows 上无法编译，绑定名与签名严格对齐已验证的 .NET macOS API，
-///    首次在 Mac 上编译时可能仍需微调。
+/// macOS 平台：NSWindow + WKWebView 的窗口，可创建多个实例。自定义 scheme（WKURLSchemeHandler）
+/// 与 script message handler 都按窗口独立注册（不像 Linux 共享默认 WebContext 需要进程级注册）。
 /// </summary>
 public sealed class MacOSWindow : IWindowBackend
 {
@@ -35,6 +29,11 @@ public sealed class MacOSWindow : IWindowBackend
     /// </summary>
     public event Action? Closed;
 
+    /// <summary>
+    /// 构造窗口：挂关闭/导航/消息/scheme 四类委托，建 WKWebView 并设为窗口内容。
+    /// </summary>
+    /// <param name="window">原生窗口。</param>
+    /// <param name="options">窗口选项。</param>
     private MacOSWindow(NSWindow window, WebWindowOptions options)
     {
         _options = options;
@@ -85,8 +84,10 @@ public sealed class MacOSWindow : IWindowBackend
         return new MacOSWindow(window, options);
     }
 
-    /// <summary>显示窗口并加载首页。Cocoa 只允许主线程访问，非主线程调用时 marshal 回主线程。
-    /// 无头模式下跳过 MakeKeyAndOrderFront/MakeFirstResponder（窗口不出现在屏幕/Dock），但照常加载首页。</summary>
+    /// <summary>
+    /// 显示窗口并加载首页。Cocoa 只允许主线程访问，非主线程调用时 marshal 回主线程。
+    /// 无头模式下跳过 MakeKeyAndOrderFront（窗口不出现在屏幕/Dock），但照常加载首页。
+    /// </summary>
     public void Show()
     {
         RunOnMainThread(() =>
@@ -202,6 +203,9 @@ public sealed class MacOSWindow : IWindowBackend
     /// </summary>
     public event Action<byte[]>? MessageReceived;
 
+    /// <summary>
+    /// 窗口关闭回调：注销窗口表；最后一个窗口关闭 → Terminate 退出主事件循环。
+    /// </summary>
     private void OnWindowWillClose()
     {
         if (_closed)

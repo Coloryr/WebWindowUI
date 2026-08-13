@@ -371,8 +371,10 @@ public class ModelProtoTests
         Assert.Empty(model.GetProperty("ModelReady").GetProperty("fields").EnumerateObject()); // 空消息
     }
 
-    /// <summary>descriptor 字段 ↔ .NET DTO 的 [ProtoMember]：字段号必须对上，字段名 = 属性名首字母小写
-    /// （nameExceptions 覆盖刻意改名，如 C# ObjectValue ↔ proto object）。</summary>
+    /// <summary>
+    /// descriptor 字段 ↔ .NET DTO 的 [ProtoMember]：字段号必须对上，字段名 = 属性名首字母小写
+    /// （nameExceptions 覆盖刻意改名，如 C# ObjectValue ↔ proto object）。
+    /// </summary>
     private static void AssertDescriptorMatchesDto(
         JsonElement descriptorFields, Type dto, IReadOnlyDictionary<int, string>? nameExceptions = null)
     {

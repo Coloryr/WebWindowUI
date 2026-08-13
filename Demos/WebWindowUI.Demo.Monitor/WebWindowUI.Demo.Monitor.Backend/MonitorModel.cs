@@ -5,10 +5,9 @@ using WebWindowUI.Core;
 namespace WebWindowUI.Demo.Monitor;
 
 /// <summary>
-/// 系统监控模型：主窗口（main）绑定本实例；设置窗口（settings）绑定 Settings 子实例（master-detail）。
-/// 采样定时器在线程池线程回调 model.SampleOnce()：跨线程设置模型属性/重建进程表（框架 PostMessage
-/// 按线程 id marshal 回 UI 线程再推送前端）。设置窗口改 Settings.PollIntervalMs → 这里重推 Settings
-/// 并重建定时器，间隔立即生效。
+/// 系统监控模型：主窗口绑本实例、设置窗口绑 Settings 子实例（master-detail）。采样定时器在线程池线程
+/// 调 SampleOnce()（框架按线程 id marshal 回 UI 线程推送前端）；改 Settings.PollIntervalMs → 重建定时器，
+/// 间隔立即生效。
 /// </summary>
 public partial class MonitorModel : WebWindowModel
 {

@@ -8,25 +8,34 @@ namespace WebWindowUI.Platforms.Cef;
 
 /// <summary>
 /// CEF 平台：承载 Chromium 的裸 Win32 顶层窗口（CEF 子浏览器窗口为子控件），可创建多个实例。
-/// 逐行镜像 <c>WebWindowUI.Platforms.Windows.WindowsWindow</c>，渲染内核换 CEF（CefGlue 托管包装）。
-///
-/// 生命周期：Show() 建浏览器（CefWindowInfo.Create 设 ParentHandle=本窗口）→ on_after_created
-/// 记 CefBrowser 引用并注册 id → on_load_end(is_main) 触发 NavigationCompleted → WM_SIZE 调 was_resized →
-/// 关闭（WM_CLOSE / Close()）走 CloseBrowser(false) 正常关闭 → DoClose 返回 false 让 CEF 继续 →
-/// on_before_close 摘除浏览器映射并 DestroyWindow → WM_DESTROY 收尾 + 末窗 PostQuitMessage。
-///
-/// 线程模型：CEF 单线程消息循环（multi_threaded_message_loop=false，CefRuntime.RunMessageLoop）→
-/// CEF UI 线程 == 主线程；全部 CEF 回调在 UI 线程到达，Win32 窗口 API 与 CEF 调用都要求 UI 线程
-/// （跨线程经 <see cref="CefPlatform.RunOnUiThread"/> marshal，与 Windows 平台同构）。
+/// 镜像 <c>WindowsWindow</c>，渲染内核换 CEF（CefGlue 托管包装）；单线程消息循环下 CEF UI 线程 == 主线程。
 /// </summary>
 public sealed class CefWindow : IWindowBackend
 {
+    /// <summary>
+    /// 承载浏览器子窗口的 Win32 顶层窗口。
+    /// </summary>
     private readonly INativeWindow _nativeWindow;
+    /// <summary>
+    /// CefClient 及其处理器。
+    /// </summary>
     private readonly WwuiCefClient _client;
+    /// <summary>
+    /// 生命周期处理器（创建/关闭浏览器回调）。
+    /// </summary>
     private readonly WwuiCefLifeSpanHandler _lifeSpanHandler;
+    /// <summary>
+    /// 加载处理器（on_load_end → NavigationCompleted）。
+    /// </summary>
     private readonly WwuiCefLoadHandler _loadHandler;
 
+    /// <summary>
+    /// 主浏览器；on_after_created 记录，on_before_close 置空。
+    /// </summary>
     private CefBrowser? _browser; // on_after_created 记录；on_before_close 置空
+    /// <summary>
+    /// 是否已关闭。
+    /// </summary>
     private bool _closed;
 
     /// <summary>
@@ -39,6 +48,10 @@ public sealed class CefWindow : IWindowBackend
     /// </summary>
     private WebWindowOptions _options;
 
+    /// <summary>
+    /// 构造窗口：建 Win32 顶层窗口与 CEF 处理器（浏览器延后到 Show 时创建）。
+    /// </summary>
+    /// <param name="options">窗口选项。</param>
     public CefWindow(WebWindowOptions options)
     {
         _options = options;
@@ -95,6 +108,7 @@ public sealed class CefWindow : IWindowBackend
     /// <summary>
     /// 修改窗口标题（立即同步到标题栏）。
     /// </summary>
+    /// <param name="title">新标题。</param>
     public void SetTitle(string title)
     {
         RunOnUiThread(() => _nativeWindow.SetTitle(title));
@@ -103,6 +117,7 @@ public sealed class CefWindow : IWindowBackend
     /// <summary>
     /// 设置窗口图标（标题栏 + 任务栏）。替换旧图标时释放旧的句柄。
     /// </summary>
+    /// <param name="icon">图标。</param>
     public void SetIcon(WindowIcon icon)
     {
         RunOnUiThread(() =>
@@ -112,19 +127,17 @@ public sealed class CefWindow : IWindowBackend
     }
 
     /// <summary>
-    /// 把动作 marshal 到 UI 线程同步执行：UI 线程直接运行；非 UI 线程经
-    /// <see cref="CefPlatform.RunOnUiThread"/>（回 UI 线程并阻塞等待）。
-    /// Win32 窗口 API（DestroyWindow/SetForegroundWindow/SetWindowTextW/SendMessage）与 CEF 调用都要求 UI 线程。
+    /// 把动作 marshal 到 UI 线程同步执行（Win32 窗口 API 与 CEF 调用都要求 UI 线程）。
     /// </summary>
+    /// <param name="action">要执行的动作。</param>
     private void RunOnUiThread(Action action)
         => WebWindowPlatform.Current.RunOnUiThread(action);
 
     /// <summary>
-    /// 向页面 JS 发送一条消息。protobuf 字节经 <see cref="WebView2StringCodec"/> 转成不含 NUL 的
-    /// Latin-1 字符串，再用 <see cref="JsStringLiteral.Quote"/> 嵌进 <c>window.wwuiReceive("...")</c>
-    /// 经 ExecuteJavaScript 注入（与 Linux/macOS 同构；JS 端 wwuiReceive 还原后 protobufjs 解码）。
-    /// 页面未加载完成或窗口已关闭时静默忽略。
+    /// 向页面 JS 发送一条消息：protobuf 字节转 NUL 转义串后嵌进 <c>window.wwuiReceive("...")</c> 注入。
+    /// 窗口已关闭时静默忽略。
     /// </summary>
+    /// <param name="message">protobuf 字节。</param>
     public void PostMessage(byte[] message)
     {
         try
@@ -150,10 +163,11 @@ public sealed class CefWindow : IWindowBackend
     }
 
     /// <summary>
-    /// 在页面里执行一段 JavaScript 并返回结果（JSON 编码的字符串，与 WebView2/Linux 对齐；best-effort）。
-    /// CEF 的 ExecuteJavaScript 无结果回调：脚本照常执行但返回值固定为空串。
-    /// 与 <see cref="PostMessage"/> 一样：CEF 只能在 UI 线程访问，非 UI 线程调用时先投递回 UI 线程再执行，并等待结果。
+    /// 在页面里执行一段 JavaScript 并返回结果（与 WebView2/Linux 对齐；best-effort）。
+    /// CEF 的 ExecuteJavaScript 无结果回调，返回值固定为空串；非 UI 线程先投递回 UI 线程再执行。
     /// </summary>
+    /// <param name="script">要执行的 JS 脚本。</param>
+    /// <returns>执行结果（JSON 编码字符串；CEF 下固定空串）。</returns>
     public async Task<string> ExecuteScriptAsync(string script)
     {
         if (!WebWindowPlatform.Current.IsUiThread())
@@ -186,8 +200,9 @@ public sealed class CefWindow : IWindowBackend
     public event Action<byte[]>? MessageReceived;
 
     /// <summary>
-    /// scheme 处理器（CefSchemes）在 IO 线程收到 JS 回传，marshal 回 UI 线程后调用本方法。回调在 UI 线程。
+    /// scheme 处理器在 IO 线程收到 JS 回传、marshal 回 UI 线程后调用本方法。回调在 UI 线程。
     /// </summary>
+    /// <param name="payload">protobuf 字节。</param>
     internal void OnMessageFromWeb(byte[] payload) => MessageReceived?.Invoke(payload);
 
     /// <summary>
@@ -196,10 +211,10 @@ public sealed class CefWindow : IWindowBackend
     internal void OnNavigationCompleted() => NavigationCompleted?.Invoke();
 
     /// <summary>
-    /// CEF on_after_created：记录主浏览器包装并注册 scheme 映射，随后自动打开 DevTools 调试工具。
-    /// 回调在 UI 线程。DevTools 自身（ShowDevTools 弹出的新浏览器）也走本回调——用
-    /// <c>_browser is not null</c> 守卫跳过，避免覆盖主浏览器引用、也避免对 DevTools 再开 DevTools 递归。
+    /// CEF on_after_created：记录主浏览器并注册 scheme 映射，随后自动打开 DevTools。
+    /// DevTools 等附加浏览器也走本回调，用 <c>_browser is not null</c> 守卫跳过。
     /// </summary>
+    /// <param name="browser">已创建的浏览器。</param>
     internal void OnBrowserCreated(CefBrowser browser)
     {
         if (_browser is not null)
@@ -213,9 +228,9 @@ public sealed class CefWindow : IWindowBackend
 
     /// <summary>
     /// CEF on_before_close：主浏览器关闭才摘除映射、销毁宿主顶层窗口（→ WM_DESTROY → 末窗 PostQuitMessage）。
-    /// DevTools 等附加浏览器关闭只走 DoClose、不进来（DoClose 返回 false，CEF 正常关），
-    /// 即便进来也按浏览器引用比对守卫，不误关主窗口。
+    /// DevTools 等附加浏览器按引用比对守卫，不误关主窗口。
     /// </summary>
+    /// <param name="browser">正在关闭的浏览器。</param>
     internal void OnBrowserClosing(CefBrowser browser)
     {
         if (!ReferenceEquals(_browser, browser))
@@ -249,9 +264,9 @@ public sealed class CefWindow : IWindowBackend
     }
 
     /// <summary>
-    /// 打开 DevTools 调试工具（独立弹窗，SetAsPopup 挂到主窗口）。Windows 用原生弹窗；
-    /// 其它平台退回 CEF 默认窗口信息（后续按需补）。必须在 UI 线程。
+    /// 打开 DevTools 调试工具（独立弹窗；Windows 用原生弹窗，其它平台用 CEF 默认窗口）。必须在 UI 线程。
     /// </summary>
+    /// <param name="browser">主浏览器。</param>
     private void OpenDevTools(CefBrowser browser)
     {
         using CefBrowserHost host = browser.GetHost();
@@ -276,6 +291,7 @@ public sealed class CefWindow : IWindowBackend
     /// <summary>
     /// 在浏览器主 frame 里执行一段 JS。必须在 UI 线程且浏览器存活。
     /// </summary>
+    /// <param name="js">要执行的 JS 脚本。</param>
     private void ExecuteJavaScriptOnBrowser(string js)
     {
         if (_browser is null)

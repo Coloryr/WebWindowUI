@@ -4,12 +4,15 @@ using WebWindowUI.Core;
 
 namespace WebWindowUI.Natives.Windows;
 
+/// <summary>
+/// Win32 消息循环：封装隐藏消息窗口的 WM_RUN 调度 + 窗口表 + UI 线程判断。
+/// </summary>
 public class Win32MessageLoop : IMessageLoop
 {
     private static readonly Dictionary<IntPtr, Win32NativeWindow> _windows = [];
 
     /// <summary>
-    /// 窗口过程入口：通过 HWND 找到对应的窗口实例。
+    /// 窗口过程入口：经 HWND 找到对应的窗口实例分派。
     /// </summary>
     private static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
@@ -18,6 +21,9 @@ public class Win32MessageLoop : IMessageLoop
                 : Win32.DefWindowProcW(hwnd, msg, wParam, lParam);
     }
 
+    /// <summary>
+    /// 注册窗口类。
+    /// </summary>
     private static void InitWindowClass()
     {
         var wc = new Win32.WNDCLASSEXW
@@ -46,11 +52,19 @@ public class Win32MessageLoop : IMessageLoop
         return null;
     }
 
+    /// <summary>
+    /// 窗口登记（按 HWND）。
+    /// </summary>
+    /// <param name="window">窗口实例。</param>
     internal static void WindowOpened(Win32NativeWindow window)
     {
         _windows[window.WindowHandle] = window;
     }
 
+    /// <summary>
+    /// 窗口注销；最后一个窗口关闭时投递退出消息。
+    /// </summary>
+    /// <param name="window">窗口实例。</param>
     internal static void WindowClose(Win32NativeWindow window)
     {
         _windows.Remove(window.WindowHandle);
@@ -60,6 +74,9 @@ public class Win32MessageLoop : IMessageLoop
         }
     }
 
+    /// <summary>
+    /// 初始化消息循环：建隐藏消息窗口、绑 SC、注册窗口类。
+    /// </summary>
     public void InitMessageLoop()
     {
         Win32.SetMarshalMessageHandler(HandleMarshalMessage);
@@ -70,11 +87,18 @@ public class Win32MessageLoop : IMessageLoop
         InitWindowClass();
     }
 
+    /// <summary>
+    /// 运行消息循环，直到退出。
+    /// </summary>
     public void MessageLoop()
     {
         Win32.MessageLoop();
     }
 
+    /// <summary>
+    /// 当前线程是否 UI 线程。
+    /// </summary>
+    /// <returns>是否 UI 线程。</returns>
     public bool IsUiThread()
     {
         return Environment.CurrentManagedThreadId == MessageLoopSynchronizationContext.UiThreadId;

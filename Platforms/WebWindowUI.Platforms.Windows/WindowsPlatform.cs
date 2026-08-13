@@ -14,6 +14,9 @@ public sealed class WindowsPlatform : IWebWindowPlatform
     private static CoreWebView2Environment _coreWebView2Environment;
     private static readonly Win32MessageLoop _message = new();
 
+    /// <summary>
+    /// 初始化 Win32 消息循环并异步创建 WebView2 环境。
+    /// </summary>
     public WindowsPlatform()
     {
         _message.InitMessageLoop();
@@ -30,11 +33,20 @@ public sealed class WindowsPlatform : IWebWindowPlatform
         _message.RunOnUiThread(action);
     }
 
+    /// <summary>
+    /// 当前线程是否 UI 线程。
+    /// </summary>
+    /// <returns>是否 UI 线程。</returns>
     public bool IsUiThread()
     {
         return _message.IsUiThread();
     }
 
+    /// <summary>
+    /// 在指定 HWND 上创建 WebView2 控制器，注册自定义 scheme 资源拦截。
+    /// </summary>
+    /// <param name="hwnd">承载 WebView2 的窗口句柄。</param>
+    /// <returns>WebView2 控制器。</returns>
     internal static async Task<CoreWebView2Controller> CreateCoreWebView2ControllerAsync(IntPtr hwnd)
     {
         while (_coreWebView2Environment == null)
@@ -79,10 +91,10 @@ public sealed class WindowsPlatform : IWebWindowPlatform
     }
 
     /// <summary>
-    /// 网页内容请求
+    /// 网页内容请求：解析自定义 scheme 资源并构造响应（未命中回 404）。
     /// </summary>
-    /// <param name="sender"></param>
-    /// <param name="args"></param>
+    /// <param name="sender">事件源。</param>
+    /// <param name="args">资源请求参数。</param>
     private static void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs args)
     {
         try
@@ -121,26 +133,52 @@ public sealed class WindowsPlatform : IWebWindowPlatform
     }
 
     /// <summary>
-    /// 创建窗口
+    /// 创建窗口后端。
     /// </summary>
-    /// <param name="options">创建参数</param>
-    /// <returns>WebView窗口</returns>
+    /// <param name="options">窗口选项。</param>
+    /// <returns>窗口后端。</returns>
     public IWindowBackend CreateWindow(WebWindowOptions options)
     {
         return new WindowsWindow(options);
     }
 
+    /// <summary>
+    /// 运行消息循环，直到退出。
+    /// </summary>
     public void RunMessageLoop()
     {
         _message.MessageLoop();
     }
 
+    /// <summary>
+    /// 显示系统消息框。
+    /// </summary>
+    /// <param name="title">标题。</param>
+    /// <param name="message">内容。</param>
+    /// <param name="error">是否错误样式。</param>
     public void ShowMessageBox(string title, string message, bool error)
         => Win32Native.ShowMessage(title, message, error);
 
+    /// <summary>
+    /// 打开文件对话框。
+    /// </summary>
+    /// <param name="title">标题。</param>
+    /// <param name="filter">过滤器。</param>
+    /// <param name="initialDirectory">初始目录。</param>
+    /// <param name="fileMustExist">是否要求文件存在。</param>
+    /// <param name="allowMultiSelect">是否允许多选。</param>
+    /// <returns>选中的文件路径。</returns>
     public string[]? OpenFileDialog(string title, string filter, string? initialDirectory = null, bool fileMustExist = true, bool allowMultiSelect = true)
         => Win32Native.OpenFileDialog(title, filter, initialDirectory, fileMustExist, allowMultiSelect)?.ToArray();
 
+    /// <summary>
+    /// 保存文件对话框。
+    /// </summary>
+    /// <param name="title">标题。</param>
+    /// <param name="filter">过滤器。</param>
+    /// <param name="defaultFileName">默认文件名。</param>
+    /// <param name="defaultExt">默认扩展名。</param>
+    /// <returns>选中的文件路径。</returns>
     public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
         => Win32Native.SaveFileDialog(title, filter, defaultFileName, defaultExt);
 }

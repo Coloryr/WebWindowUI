@@ -5,19 +5,9 @@ using WebWindowUI.Natives.Linux;
 namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
-/// Linux 平台：GTK3 窗口 + libwebkit2gtk-4.1（WebKit2-4.1 GIR 命名空间，GTK3 端口）的 WebView，可创建多个实例。
-/// WebKit 绑定是手写 P/Invoke（见 WebWindowUI.Natives.Linux/WebKit2Native.cs），因 GirCore 只发布 WebKitGTK 6.0（GTK4）的绑定；
-/// GTK3 窗口壳也是手写（见 WebWindowUI.Natives.Linux/GtkNative.cs + LinuxNativeWindow.cs），因 GirCore 无 GTK3 绑定。
-/// 所有 WebView 共享默认 WebContext（webkit_web_context_get_default）——自定义 scheme 每进程注册一次，
-/// 窗口表在 <see cref="LinuxPlatform"/>（镜像 WindowsPlatform._windows），请求回调按发起 WebView 指针
-/// 经平台窗口表分派回对应窗口。
-///
-/// 平台限制（与 Windows 有差异，README 也注明）：
-///  - SetIcon 无操作：CSD/Wayland 不用 per-window 图标，只有主题图标（GTK3 虽有 gtk_window_set_icon 但不实现）。
-///  - 自定义 scheme 响应补 Access-Control-Allow-Origin:* 与 Cache-Control（镜像 Windows 的
-///    ResourceHeaders：hash 资产长缓存、其余 no-store；404 回 no-store）。请求完成走
-///    WebKitURISchemeResponse（≥2.36，能带 HTTP 头）。
-///  - ExecuteScriptAsync 返回 JSC 值的 JSON 表示，与 WebView2 的 JSON 序列化对齐是 best-effort。
+/// Linux 平台：GTK3 窗口 + libwebkit2gtk-4.1（GTK3 端口）WebView，可创建多个实例。WebKit 与 GTK3
+/// 均为手写 P/Invoke（GirCore 无 GTK3/WebKit2-4.1 绑定）；所有 WebView 共享默认 WebContext，
+/// 自定义 scheme 每进程注册一次，请求回调按发起 WebView 指针经平台窗口表分派回对应窗口。
 /// </summary>
 public sealed class LinuxWindow : IWindowBackend
 {
@@ -39,6 +29,12 @@ public sealed class LinuxWindow : IWindowBackend
     /// </summary>
     public event Action? Closed;
 
+    /// <summary>
+    /// 构造并登记窗口（注册进平台窗口表）。
+    /// </summary>
+    /// <param name="window">GTK 窗口壳。</param>
+    /// <param name="webView">WebKitWebView 指针。</param>
+    /// <param name="options">窗口选项。</param>
     private LinuxWindow(LinuxNativeWindow window, IntPtr webView, WebWindowOptions options)
     {
         _window = window;
@@ -189,9 +185,12 @@ public sealed class LinuxWindow : IWindowBackend
     /// </summary>
     public event Action<byte[]>? MessageReceived;
 
+    /// <summary>
+    /// script message 回调：解码 NUL 转义 Latin-1 字符串为 protobuf 字节并触发 MessageReceived。
+    /// </summary>
+    /// <param name="message">桥回传的 NUL 转义字符串。</param>
     private void OnScriptMessageReceived(string message)
     {
-        // message 是对本桥的 NUL 转义 Latin-1 字符串（trampoline 已用 jsc_value_to_string 还原）。
         if (message.Length == 0)
         {
             WebWindowLog.Debug("空 script message 收到");
@@ -200,6 +199,10 @@ public sealed class LinuxWindow : IWindowBackend
         MessageReceived?.Invoke(WebView2StringCodec.Decode(message));
     }
 
+    /// <summary>
+    /// 加载进度回调：主 frame 加载完成触发 NavigationCompleted。
+    /// </summary>
+    /// <param name="loadEvent">加载事件枚举值。</param>
     private void OnLoadChanged(int loadEvent)
     {
         WebWindowLog.Debug($"load-changed: {loadEvent}");
@@ -207,6 +210,9 @@ public sealed class LinuxWindow : IWindowBackend
             NavigationCompleted?.Invoke();
     }
 
+    /// <summary>
+    /// 窗口销毁：断开信号、释放 WebView 引用并注销窗口表。
+    /// </summary>
     private void OnDestroyed()
     {
         if (_closed)

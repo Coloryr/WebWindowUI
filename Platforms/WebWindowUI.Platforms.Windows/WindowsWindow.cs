@@ -16,6 +16,9 @@ public sealed class WindowsWindow : IWindowBackend
 
     private CoreWebView2Controller? _controller;
 
+    /// <summary>
+    /// 原生窗口句柄。
+    /// </summary>
     public IntPtr Hwnd => _nativeWindow.WindowHandle;
 
     private bool _closed;
@@ -34,6 +37,9 @@ public sealed class WindowsWindow : IWindowBackend
         _nativeWindow.Resize += NativeWindow_Resize;
     }
 
+    /// <summary>
+    /// 原生窗口尺寸变化：同步 WebView2 控件边界。
+    /// </summary>
     private void NativeWindow_Resize()
     {
         if (_controller is null)
@@ -42,6 +48,9 @@ public sealed class WindowsWindow : IWindowBackend
         _controller.Bounds = _nativeWindow.GetSize();
     }
 
+    /// <summary>
+    /// 原生窗口销毁：关闭 WebView2 控制器并触发 Closed。
+    /// </summary>
     private void NativeWindow_Destory()
     {
         _controller?.Close();
@@ -50,6 +59,9 @@ public sealed class WindowsWindow : IWindowBackend
         Closed?.Invoke();
     }
 
+    /// <summary>
+    /// 显示窗口并异步初始化 WebView2（无头模式只初始化不显示）。
+    /// </summary>
     public void Show()
     {
         if (!_options.Headless)
@@ -113,12 +125,10 @@ public sealed class WindowsWindow : IWindowBackend
     }
 
     /// <summary>
-    /// 向页面 JS 发送一条消息。protobuf 字节经 <see cref="WebView2StringCodec"/> 转成
-    /// 不含 NUL 的 Latin-1 字符串再传给 PostWebMessageAsString：WebView2 的消息字符串通道会在
-    /// 第一个 NUL（char code 0）处截断，而 protobuf 字节普遍含 0x00（varint 零值、double 的
-    /// fixed64 等），原样传输必然损坏，故只对 NUL（及转义符自身）做转义。JS 端逆操作还原后
-    /// 再 protobufjs 解码。页面未加载完成或窗口已关闭时静默忽略。
+    /// 向页面 JS 发送一条 protobuf 消息：经 <see cref="WebView2StringCodec"/> 做 NUL 转义后走
+    /// PostWebMessageAsString（WebView2 消息通道在首个 NUL 处截断，protobuf 字节普遍含 0x00）。
     /// </summary>
+    /// <param name="message">protobuf 字节。</param>
     public void PostMessage(byte[] message)
     {
         try
@@ -171,6 +181,9 @@ public sealed class WindowsWindow : IWindowBackend
     /// </summary>
     public event Action<byte[]>? MessageReceived;
 
+    /// <summary>
+    /// 创建 WebView2 控制器、导航到窗口页面并挂导航/消息回调。
+    /// </summary>
     private async Task InitWebViewAsync()
     {
         try

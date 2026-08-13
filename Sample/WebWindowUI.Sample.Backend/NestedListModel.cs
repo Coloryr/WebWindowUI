@@ -8,18 +8,9 @@ using WebWindowUI.Sample.Items;
 namespace WebWindowUI.Sample;
 
 /// <summary>
-/// 列表嵌套窗口的数据模型（示例「List&lt;&gt;嵌套窗口」）：Items 是 List&lt;NestedListItemModel&gt;，
-/// 每个元素又是嵌套模型（内部有 List&lt;NestedItemTagModel&gt; 与单模型 NestedItemMetaModel）。
-/// OpenItem(index) 命令打开绑定 Items[index] 元素的列表项详情子窗口（master-detail）。
-///
-/// 子窗口编辑的是父列表里的同一个元素实例：元素 PropertyChanged（含其内层 Tags 集合变化）时，
-/// 这里重推整个 Items，父窗口列表实时跟随子窗口的修改。
-///
-/// 集合写法演示：
-/// - Items：显式 get-only 属性（不加 [ObservableProperty]）——生成器照常收集（字段号/快照/集合订阅），
-///   前端整列回写经生成器 TrySet 原地清空重建（保留实例与订阅），双向照常。
-/// - Counts：ObservableDictionary（WebWindowUI 核心库提供）——.NET 侧原地改（dict[k]=v / Add / Remove）
-///   抛 CollectionChanged → 框架整属性重推前端；前端原地改经深 watch 整字典 name 键回写 .NET。
+/// 列表嵌套窗口数据模型：Items 为 List&lt;NestedListItemModel&gt;（元素又是嵌套模型），
+/// Counts 演示 ObservableDictionary。元素变更重推整个 Items；Items 是显式 get-only 集合属性
+/// （前端整列回写经生成器原地清空重建），Counts 演示字典原地增删自动推送。
 /// </summary>
 public partial class NestedListModel : WebWindowModel
 {
@@ -29,8 +20,10 @@ public partial class NestedListModel : WebWindowModel
     [ObservableProperty]
     public partial string Title { get; set; } = "List<>嵌套";
 
-    /// <summary>元素列表：typed repeated（List&lt;NestedListItemModel&gt;），前端强类型数组。
-    /// 显式 get-only 属性（不加 [ObservableProperty]）：前端整列回写经生成器原地清空重建。</summary>
+    /// <summary>
+    /// 元素列表：typed repeated（List&lt;NestedListItemModel&gt;）。显式 get-only 属性：前端整列回写
+    /// 经生成器原地清空重建（保留实例与订阅）。
+    /// </summary>
     public ObservableCollection<NestedListItemModel> Items { get; } = [];
 
     /// <summary>
@@ -66,10 +59,10 @@ public partial class NestedListModel : WebWindowModel
         RebindItemListeners();
     }
 
-    /// <summary>订阅每个元素（含其内层 Tags 集合）的变更 → 重推整个 Items，父窗口列表实时同步。
-    /// 先摘后挂保证同一 handler 只挂一次（CollectionChanged 每次都会重跑本方法）；元素可能被整体
-    /// 替换（子窗口整列回写重建集合），这里按当前 Items 重挂订阅；已移除元素残留的订阅指向上一次
-    /// 集合，是无害的孤立引用。</summary>
+    /// <summary>
+    /// 订阅每个元素（含其内层 Tags 集合）变更 → 重推整个 Items。先摘后挂保证同一 handler 只挂一次；
+    /// 元素被整体替换后按当前 Items 重挂，已移除元素残留订阅是无害孤立引用。
+    /// </summary>
     private void RebindItemListeners()
     {
         foreach (NestedListItemModel item in Items)

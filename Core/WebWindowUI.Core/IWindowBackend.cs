@@ -28,21 +28,26 @@ public interface IWindowBackend
     /// <summary>
     /// 修改窗口标题。
     /// </summary>
+    /// <param name="title">新标题。</param>
     void SetTitle(string title);
 
     /// <summary>
     /// 设置窗口图标（标题栏与任务栏）。
     /// </summary>
+    /// <param name="icon">窗口图标。</param>
     void SetIcon(WindowIcon icon);
 
     /// <summary>
-    /// 向页面里的 JS 发送一条消息（protobuf 字节，平台层负责编码为字符串传输）。
+    /// 向页面里的 JS 发送一条消息（protobuf 字节，平台层编码为字符串传输）。
     /// </summary>
+    /// <param name="message">protobuf 消息字节。</param>
     void PostMessage(byte[] message);
 
     /// <summary>
     /// 在页面里执行一段 JavaScript，返回其结果（JSON 字符串）。用于宿主主动读取/驱动页面。
     /// </summary>
+    /// <param name="script">要执行的 JS。</param>
+    /// <returns>执行结果（JSON 字符串）。</returns>
     Task<string> ExecuteScriptAsync(string script);
 
     /// <summary>

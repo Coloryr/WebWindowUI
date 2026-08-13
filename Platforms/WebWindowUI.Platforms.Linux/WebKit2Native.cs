@@ -3,22 +3,9 @@ using WebWindowUI.Core;
 namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
-/// 手写 P/Invoke 绑定：libwebkit2gtk-4.1（GIR 命名空间 WebKit2-4.1，GTK3 端口）+ libjavascriptcoregtk-4.1。
-/// GirCore 只发布 WebKitGTK 6.0（GTK4）的绑定，4.1（GTK3）无托管绑定可换，故按后端实际用到的
-/// API 子集手写。本类保持 GTK 无关（只含 WebKit/JavaScriptCore/GObject/GLib/Gio）；GTK 窗口层见
-/// GtkNative / LinuxNativeWindow。原生符号经 soname（lib*.so.0）引用，运行时不依赖 dev 符号链接。
-///
-/// 所有权约定（来自 GIR / WebKitGTK 文档）：
-///  - <see cref="webkit_uri_scheme_request_get_uri"/> 返回借用字符串，不要释放；
-///  - 完成 scheme 请求走 WebKitURISchemeResponse（≥2.36，能带 HTTP 头）：response_new 以构造属性 ref
-///    stream、set_http_headers 以 (transfer full) 接管 headers 所有权（不 ref，调用方不得再释放）、
-///    finish_with_response 对 response 也是 ref；故调用方各自 unref stream/response，headers 交出后不碰；
-///  - set_http_headers 的 SoupMessageHeaders 必须与 WebKitGTK 自身链接的 libsoup 同版本（soup2/soup3
-///    结构体不兼容、释放函数不同，错配即崩溃），初始化时按 /proc/self/maps 探测，见 libsoup 节；
-///  - GMemoryInputStream 持有其 GBytes 的引用，故 g_bytes_new 后由 stream 接管、我们释放自己的引用；
-///  - jsc_value_to_json / jsc_value_to_string 返回新分配字符串，须 g_free；
-///  - GError 无 g_error_get_message() API，message 按公开结构体字段偏移直接读（见 <see cref="ReadAndFreeGError"/>）；
-///  - EvaluateJavascriptAsync 的 GAsyncReadyCallback 在主循环线程触发（即框架主线程）。
+/// 手写 P/Invoke 绑定：libwebkit2gtk-4.1（GTK3 端口）+ libjavascriptcoregtk-4.1。GirCore 只发布
+/// WebKitGTK 6.0（GTK4）绑定，4.1 无托管绑定，故按后端实际用到的 API 子集手写；本类保持 GTK 无关。
+/// 所有权约定：借用字符串不释放、jsc_* 新分配串须 g_free、scheme 响应头 (transfer full) 交出后不碰。
 /// </summary>
 internal static partial class WebKit2Native
 {
@@ -255,6 +242,11 @@ internal static partial class WebKit2Native
         g_object_unref(view);
     }
 
+    /// <summary>
+    /// 加载 URI。
+    /// </summary>
+    /// <param name="view">WebView 指针。</param>
+    /// <param name="uri">要加载的地址。</param>
     public static void LoadUri(IntPtr view, string uri) => webkit_web_view_load_uri(view, uri);
 
     /// <summary>
@@ -286,9 +278,13 @@ internal static partial class WebKit2Native
         webkit_security_manager_register_uri_scheme_as_secure(securityManager, scheme);
     }
 
-    /// <summary>在页面里执行 JS，返回 JSC 值的 JSON 表示（与 WebView2 ExecuteScriptAsync 对齐；非 JSON 值退回字符串）。
+    /// <summary>
+    /// 在页面里执行 JS，返回 JSC 值的 JSON 表示（与 WebView2 对齐；非 JSON 值退回字符串）。
     /// 每次调用分配独立 GCHandle 路由回各自的 TaskCompletionSource，可并发多次求值。
-    /// 完成回调在主循环线程触发，tcs 以 RunContinuationsAsynchronously 避免回调线程内联执行续体。</summary>
+    /// </summary>
+    /// <param name="view">WebView 指针。</param>
+    /// <param name="script">要执行的 JS 脚本。</param>
+    /// <returns>JSON 字符串。</returns>
     public static Task<string> EvaluateJavascriptAsync(IntPtr view, string script)
     {
         var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);

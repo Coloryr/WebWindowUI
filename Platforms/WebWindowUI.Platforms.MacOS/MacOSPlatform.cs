@@ -41,6 +41,9 @@ public sealed class MacOSPlatform : IWebWindowPlatform
 
     private static bool _nsApplicationInitialized;
 
+    /// <summary>
+    /// 初始化 NSApplication（幂等，静态标志守卫：Init 非幂等，第二次构造抛异常）并设置激活策略。
+    /// </summary>
     public MacOSPlatform()
     {
         // NSApplication 初始化须在创建任何窗口前、且在主线程调用（与 Linux 版 WebKit.Module.Initialize 同角色）。
@@ -58,8 +61,16 @@ public sealed class MacOSPlatform : IWebWindowPlatform
         SynchronizationContext.SetSynchronizationContext(MacOSMessageLoopSynchronizationContext.Instance);
     }
 
+    /// <summary>
+    /// 平台名。
+    /// </summary>
     public string Name => "macOS";
 
+    /// <summary>
+    /// 创建窗口后端并登记。
+    /// </summary>
+    /// <param name="options">窗口选项。</param>
+    /// <returns>窗口后端。</returns>
     public IWindowBackend CreateWindow(WebWindowOptions options)
     {
         var window = MacOSWindow.Create(options.Title, options, options.Width, options.Height);
@@ -67,6 +78,9 @@ public sealed class MacOSPlatform : IWebWindowPlatform
         return window;
     }
 
+    /// <summary>
+    /// 运行主事件循环，直到最后一个窗口关闭（Terminate → Run() 返回）。
+    /// </summary>
     public void RunMessageLoop()
     {
         // 幂等兜底（覆盖未经过平台构造直接调消息循环的宿主）
@@ -83,6 +97,10 @@ public sealed class MacOSPlatform : IWebWindowPlatform
     public void RunOnUiThread(Action action)
         => MacOSMessageLoopSynchronizationContext.Instance.Send(_ => action(), null);
 
+    /// <summary>
+    /// 当前线程是否 UI（主事件循环）线程。
+    /// </summary>
+    /// <returns>是否 UI 线程。</returns>
     public bool IsUiThread()
         => Environment.CurrentManagedThreadId == MacOSMessageLoopSynchronizationContext.UiThreadId;
 

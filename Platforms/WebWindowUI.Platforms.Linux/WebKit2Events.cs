@@ -4,15 +4,9 @@ using WebWindowUI.Natives.Linux;
 namespace WebWindowUI.Platforms.Linux;
 
 /// <summary>
-/// WebKit2 信号 → 托管事件的桥。用 g_signal_connect_data 把两个信号（load-changed、
-/// script-message-received::wwui）接到 Cdecl 静态 trampoline（保活），经单个 GCHandle
-/// 路由回本实例的事件。全部在主循环线程触发，trampoline 内不做重入。
-///
-/// 生命周期约定：
-///  - 连接前先注册 signal（docs 建议先连信号再 register_script_message_handler，避免漏消息），
-///   调用方在 <see cref="Connect"/> 之后才注册 handler；
-///  - <see cref="Dispose"/> 断开两个信号并释放 GCHandle；WebKit 对象销毁后 GObject 会自行清理
-///   闭包，trampoline 对已释放的 GCHandle 只会吞掉异常（理论上销毁后不再有信号）。
+/// WebKit2 信号 → 托管事件的桥：load-changed 与 script-message-received 经静态 trampoline
+/// （静态字段保活）+ 单个 GCHandle 路由回本实例事件。调用方在 <see cref="Connect"/> 之后才
+/// 注册 script message handler；<see cref="Dispose"/> 断开信号并释放 GCHandle。
 /// </summary>
 internal sealed class WebKit2SignalBridge
 {
@@ -38,6 +32,10 @@ internal sealed class WebKit2SignalBridge
     /// </summary>
     public event Action<string>? ScriptMessageReceived;
 
+    /// <summary>
+    /// 取 WebView 的用户内容管理器并分配路由 GCHandle。
+    /// </summary>
+    /// <param name="webView">WebKitWebView 指针。</param>
     public WebKit2SignalBridge(IntPtr webView)
     {
         _webView = webView;
@@ -68,6 +66,9 @@ internal sealed class WebKit2SignalBridge
             _handle.Free();
     }
 
+    /// <summary>
+    /// load-changed 信号 trampoline：经 GCHandle 路由回实例 LoadChanged。
+    /// </summary>
     private static void OnLoadChanged(IntPtr view, int loadEvent, IntPtr userData)
     {
         try
@@ -80,6 +81,9 @@ internal sealed class WebKit2SignalBridge
         }
     }
 
+    /// <summary>
+    /// script-message-received trampoline：把 JS 结果转字符串路由回 ScriptMessageReceived。
+    /// </summary>
     private static void OnScriptMessageReceived(IntPtr manager, IntPtr jsResult, IntPtr userData)
     {
         try

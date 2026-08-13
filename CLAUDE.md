@@ -2,6 +2,12 @@
 
 跨平台桌面应用框架：.NET 模型库（WebWindowModel）用 Roslyn 源生成器产出 proto 消息/写回代码，Vue3+Vite 前端通过 `webwindowui-bridge` 双向绑定，Windows=WebView2 / Linux=WebKit2GTK（GTK3）/ macOS=WKWebView。**内存全部来自本仓库的迭代踩坑，遇到不理解的构建行为先查这里。**
 
+## 编码规范
+
+- **代码注释从简**：一处说明内容最多 1-2 行，不写大段注释文字。**方法必须写 XML 文档注释**——`<param>` 覆盖传入参数、`<returns>`/`<param>`(out/ref) 覆盖传出参数，参数与返回值都要写；签名即契约。
+- **XML 文档注释用标准多行式**：`/// <summary>` / `/// 内容` / `/// </summary>` 各占一行，**不写单行** `/// <summary>…</summary>`；`<param>`/`<returns>` 同理 `/// <param name="x">说明。</param>` 占一行。
+- **功能/设计说明放各工程 README**：需要大段解释的功能、用法、设计写进**对应工程/文件夹下新建的 `README.md`**（每个工程目录各自建 README，不是根目录 README.md）；本 CLAUDE.md 只记架构与构建深坑供开发查询。两者都不堆进源码注释。
+
 **包结构（入口聚合，消费方只引 `WebWindowUI` 一个包）**：`WebWindowUI`（入口，聚合 + 平台引导）+ `WebWindowUI.Core`（运行时代码本体，平台无关）+ `WebWindowUI.Platforms.{Windows,Linux,MacOS,Cef}`（平台实现，按系统自动引入）+ `WebWindowUI.Natives.Windows`（Win32 共享层，Windows/CEF 平台共用）+ `WebWindowUI.Natives.Linux`（GTK3 原生层，Linux WebKit/CEF 平台共用）+ `WebWindowUI.Backend`/`WebWindowUI.Frontend`（角色标记包）+ `WebWindowUI.Templates`。依赖单向无环：平台包→{Core, Natives.{Windows,Linux}}→（Mvvm/protobuf），入口→{Core, 平台包}。详见「NuGet 打包」与「平台拆分」两节。
 
 ## 三工程结构（核心约定）

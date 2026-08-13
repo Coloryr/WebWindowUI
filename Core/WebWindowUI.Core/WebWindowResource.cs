@@ -3,8 +3,7 @@ using System.Reflection;
 namespace WebWindowUI.Core;
 
 /// <summary>
-/// 把自定义 scheme 的请求 URL 定位成相对路径与 MIME 类型。纯逻辑、不依赖平台 API，
-/// 各平台实现复用它接管自己 webview 的资源请求。不接触文件系统。
+/// 把自定义 scheme 的请求 URL 定位成相对路径与 MIME 类型；纯逻辑、不依赖平台 API，不接触文件系统。
 /// </summary>
 public static class WebWindowResource
 {
@@ -20,8 +19,8 @@ public static class WebWindowResource
     /// <summary>
     /// 注册自定义路由，注册在 {SchemeData}://{url}/（url 即 URL 的 host 段）。
     /// </summary>
-    /// <param name="url">路由 host 段，如 "bin" 后 appdata://bin/... 的请求交给 <paramref name="route"/></param>
-    /// <param name="route">请求返回</param>
+    /// <param name="url">路由 host 段，如 "bin"。</param>
+    /// <param name="route">处理该 host 请求的路由。</param>
     public static void RegisterCustomRoute(string url, IDataRoute route)
     {
         _customRoute[url] = route;
@@ -38,8 +37,12 @@ public static class WebWindowResource
     }
 
     /// <summary>
-    /// 从scheme://host/路径中获取资源
+    /// 解析 scheme://host/ 请求：定位资源流、相对路径与 MIME。
     /// </summary>
+    /// <param name="uri">请求 URL。</param>
+    /// <param name="relative">规范化相对路径。</param>
+    /// <param name="mimeType">MIME 类型。</param>
+    /// <returns>资源流；未命中为 null。</returns>
     public static Stream? TryResolvePath(string uri, out string? relative, out string? mimeType)
     {
         relative = null;
@@ -78,6 +81,11 @@ public static class WebWindowResource
         }
     }
 
+    /// <summary>
+    /// 按扩展名返回 MIME 类型（未识别回退 application/octet-stream）。
+    /// </summary>
+    /// <param name="path">资源路径。</param>
+    /// <returns>MIME 类型。</returns>
     public static string GetMimeType(string path)
         => Path.GetExtension(path).ToLowerInvariant() switch
         {
@@ -99,14 +107,17 @@ public static class WebWindowResource
             _ => "application/octet-stream",
         };
 
+    /// <summary>
+    /// 内嵌程序集缓存锁。
+    /// </summary>
     private static readonly Lock Sync = new();
     private static Assembly[]? _embeddedCandidates;
 
     /// <summary>
-    /// 从wwwroot中获取资源
+    /// 从 wwwroot 获取资源（内嵌优先，磁盘回退）。
     /// </summary>
-    /// <param name="relativePath"></param>
-    /// <returns></returns>
+    /// <param name="relativePath">wwwroot 内相对路径。</param>
+    /// <returns>资源流；未命中为 null。</returns>
     public static Stream? Resolve(string relativePath)
     {
         // 内嵌资源（Release）。查找名 = wwwroot\ + 相对路径（/ 转 \）。
@@ -151,6 +162,11 @@ public static class WebWindowResource
         }
     }
 
+    /// <summary>
+    /// 判断程序集是否含 wwwroot\ 前缀嵌入资源。
+    /// </summary>
+    /// <param name="asm">程序集。</param>
+    /// <returns>是否含 wwwroot 资源。</returns>
     private static bool HasWwwrootResources(Assembly asm)
     {
         try

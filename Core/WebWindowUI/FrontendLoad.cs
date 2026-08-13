@@ -9,6 +9,9 @@ namespace WebWindowUI;
 /// </summary>
 internal static class FrontendLoad
 {
+    /// <summary>
+    /// 模块初始化器：typeof 静态引用强制加载前端 dll（Release 内嵌 wwwroot）。
+    /// </summary>
     [ModuleInitializer]
     internal static void EnsureFrontendLoaded() => GC.KeepAlive(typeof(FrontendHost));
 }

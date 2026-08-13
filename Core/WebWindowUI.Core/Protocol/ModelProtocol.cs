@@ -50,7 +50,7 @@ public sealed class ModelReady
 }
 
 /// <summary>
-/// 单字段增量更新。payload 是生成器产出的 update 消息字节，modelId = 模型序号；载荷只含被修改的字段。
+/// 单字段增量更新。payload 是生成器产出的 update 消息字节，modelId = 模型序号。
 /// </summary>
 [ProtoContract]
 public sealed class ModelUpdate
@@ -60,9 +60,7 @@ public sealed class ModelUpdate
 }
 
 /// <summary>
-/// 前端 → .NET：单属性回写。ElementProperty 非空时是「集合元素级」回写：
-/// Property=集合属性、ElementInstanceId=目标元素（WebWindowModel.ModelInstanceId）、
-/// Value=该元素属性的新值；ElementProperty 为空 = 旧整属性行为（Property/Value）。
+/// 前端 → .NET：单属性回写。ElementProperty 非空时是「集合元素级」回写（ElementInstanceId 定位元素），空 = 旧整属性行为。
 /// </summary>
 [ProtoContract]
 public sealed class ModelSet
@@ -74,8 +72,7 @@ public sealed class ModelSet
 }
 
 /// <summary>
-/// 前端 → .NET：执行模型命令（MVVM Command）。commandId = [RelayCommand] 声明序，
-/// 命中「命令名 + Command」的 ICommand；value 为命令参数，按方法参数类型转换。
+/// 前端 → .NET：执行模型命令（MVVM Command）。commandId = [RelayCommand] 声明序，value 为命令参数。
 /// </summary>
 [ProtoContract]
 public sealed class ModelInvoke
@@ -118,8 +115,7 @@ public enum CollectionPatchAction
 }
 
 /// <summary>
-/// .NET → 前端：集合属性的增删差量补丁，前端对响应式数组原地 splice，
-/// 比整列表增量省流量；Reset 无法编码差量时回退整列表（Items 承载全量）。
+/// .NET → 前端：集合属性增删差量补丁，前端对响应式数组原地 splice；Reset 回退整列表（Items 承载全量）。
 /// </summary>
 [ProtoContract]
 public sealed class CollectionPatch
@@ -182,8 +178,7 @@ public sealed class WebMessage
     [ProtoMember(7)] public CollectionPatch? Patch { get; set; }
 
     /// <summary>
-    /// 实例唯一 ID（见 WebWindowModel.ModelInstanceId），统一信封 header，不进 oneof payload。
-    /// .NET→JS 全部携带；JS→.NET 回传同字段，本侧校验来源实例（0 = 未携带，容忍）。
+    /// 实例唯一 ID（统一信封 header，不进 oneof payload）；JS→.NET 回传同字段，本侧校验来源实例（0 = 未携带，容忍）。
     /// </summary>
     [ProtoMember(8)] public long ModelInstanceId { get; set; }
 }
@@ -194,7 +189,7 @@ public sealed class WebMessage
 public static class ModelProtocol
 {
     /// <summary>
-    /// POCO 重建转换器（ModelValueMap → 实例）：成功返回 true 且 result 非 null，失败返回 false。
+    /// POCO 重建转换器（ModelValueMap → 实例）。
     /// </summary>
     public delegate bool PocoConvertFunc(ModelValueMap value, out object? result);
 
@@ -206,25 +201,34 @@ public static class ModelProtocol
     /// <summary>
     /// 注册 POCO 重建转换器（源生成器 [ModuleInitializer] 调用）。
     /// </summary>
+    /// <param name="type">POCO 类型。</param>
+    /// <param name="converter">重建转换器。</param>
     public static void RegisterPocoConverter(Type type, PocoConvertFunc converter)
         => _pocoConverters[type] = converter;
 
     /// <summary>
-    /// POCO 序列化转换器（实例 → 序数键 map），与 PocoConvertFunc 对称，替换反射。
+    /// POCO 序列化转换器（实例 → 序数键 map），与 PocoConvertFunc 对称。
     /// </summary>
     public delegate bool PocoToModelValueFunc(object value, out ModelValueMap? map);
 
     /// <summary>
-    /// 源生成器注册的 POCO 序列化转换器（替代反射；键用 proto 字段号）。
+    /// 源生成器注册的 POCO 序列化转换器（键用 proto 字段号）。
     /// </summary>
     internal static readonly Dictionary<Type, PocoToModelValueFunc> _pocoSerializers = [];
 
     /// <summary>
     /// 注册 POCO 序列化转换器（源生成器 [ModuleInitializer] 调用）。
     /// </summary>
+    /// <param name="type">POCO 类型。</param>
+    /// <param name="serializer">序列化转换器。</param>
     public static void RegisterPocoSerializer(Type type, PocoToModelValueFunc serializer)
         => _pocoSerializers[type] = serializer;
 
+    /// <summary>
+    /// 编码信封为 protobuf 字节。
+    /// </summary>
+    /// <param name="msg">要发送的信封。</param>
+    /// <returns>protobuf 字节。</returns>
     public static byte[] Encode(WebMessage msg)
     {
         using var ms = new MemoryStream();
@@ -232,6 +236,11 @@ public static class ModelProtocol
         return ms.ToArray();
     }
 
+    /// <summary>
+    /// 解码信封字节；空输入返回 null。
+    /// </summary>
+    /// <param name="bytes">收到的 protobuf 字节。</param>
+    /// <returns>解码的信封；空输入为 null。</returns>
     public static WebMessage? Decode(byte[] bytes)
     {
         if (bytes is null || bytes.Length == 0)
@@ -243,13 +252,17 @@ public static class ModelProtocol
     /// <summary>
     /// 把任意属性值转成 ModelValue（复杂值递归展开）。
     /// </summary>
+    /// <param name="value">属性值。</param>
+    /// <returns>ModelValue。</returns>
     public static ModelValue ToModelValue(object? value)
         => ToModelValue(value, new HashSet<object>(ReferenceEqualityComparer.Instance));
 
     /// <summary>
-    /// 把任意属性值转成 ModelValue。object/Dictionary/POCO 等复杂值递归展开；
-    /// 环检测基于引用相等，递归前加入、递归后移除（允许 DAG，拦截真环）。
+    /// 把任意属性值转成 ModelValue；复杂值递归展开，环检测基于引用相等（允许 DAG，拦截真环）。
     /// </summary>
+    /// <param name="value">属性值。</param>
+    /// <param name="seen">已展开对象集合（环检测）。</param>
+    /// <returns>ModelValue。</returns>
     public static ModelValue ToModelValue(object? value, HashSet<object> seen)
     {
         var v = new ModelValue();
@@ -348,20 +361,28 @@ public static class ModelProtocol
     }
 
     /// <summary>
-    /// PascalCase → camelCase（与前端 TS 属性名约定一致，仅首字母小写）。
+    /// PascalCase → camelCase（与前端 TS 属性名约定一致）。
     /// </summary>
+    /// <param name="name">PascalCase 名。</param>
+    /// <returns>camelCase 名。</returns>
     internal static string ToCamelCase(string name)
         => string.IsNullOrEmpty(name) ? name : char.ToLowerInvariant(name[0]) + name[1..];
 
     /// <summary>
-    /// camelCase → PascalCase（元素级写回把桥发的 camelCase 属性名还原成 .NET 属性名）。
+    /// camelCase → PascalCase（还原 .NET 属性名）。
     /// </summary>
+    /// <param name="name">camelCase 名。</param>
+    /// <returns>PascalCase 名。</returns>
     internal static string ToPascalCase(string name)
         => string.IsNullOrEmpty(name) ? name : char.ToUpperInvariant(name[0]) + name[1..];
 
     /// <summary>
-    /// 把 ModelValue 转换回目标类型的值。类型不匹配返回 false（TrySetProperty 语义）。
+    /// 把 ModelValue 转换回目标类型的值；类型不匹配返回 false（TrySetProperty 语义）。
     /// </summary>
+    /// <param name="value">ModelValue。</param>
+    /// <param name="targetType">目标类型。</param>
+    /// <param name="result">转换结果；失败为 null。</param>
+    /// <returns>是否转换成功。</returns>
     public static bool TryFromModelValue(ModelValue? value, Type targetType, out object? result)
     {
         result = null;
@@ -428,6 +449,9 @@ public static class ModelProtocol
     /// <summary>
     /// 泛型包装：成功返回 true 并输出转换值；失败返回 false（result 为 default）。
     /// </summary>
+    /// <param name="value">ModelValue。</param>
+    /// <param name="result">转换结果；失败为 default。</param>
+    /// <returns>是否转换成功。</returns>
     public static bool TryFromModelValue<T>(ModelValue? value, out T? result)
     {
         if (TryFromModelValue(value, typeof(T), out object? converted))
@@ -439,6 +463,12 @@ public static class ModelProtocol
         return false;
     }
 
+    /// <summary>
+    /// 把前端 number 还原为目标数值类型；object 目标保留整数/小数语义。
+    /// </summary>
+    /// <param name="d">前端 number。</param>
+    /// <param name="targetType">目标数值类型。</param>
+    /// <returns>转换结果；不支持的类型为 null。</returns>
     private static object? ConvertNumber(double d, Type targetType)
     {
         var t = Nullable.GetUnderlyingType(targetType) ?? targetType;
@@ -466,6 +496,13 @@ public static class ModelProtocol
         return null;
     }
 
+    /// <summary>
+    /// 把文本按目标类型解析（DateTime/TimeSpan/Guid/char 等）。
+    /// </summary>
+    /// <param name="text">文本。</param>
+    /// <param name="targetType">目标类型。</param>
+    /// <param name="result">解析结果；失败为 null。</param>
+    /// <returns>是否解析成功。</returns>
     private static bool TryParseText(string text, Type targetType, out object? result)
     {
         var t = Nullable.GetUnderlyingType(targetType) ?? targetType;
@@ -498,6 +535,13 @@ public static class ModelProtocol
         return false;
     }
 
+    /// <summary>
+    /// 把 ModelValueList 转换回数组或集合类型。
+    /// </summary>
+    /// <param name="list">ModelValue 列表。</param>
+    /// <param name="targetType">目标类型。</param>
+    /// <param name="result">转换结果；失败为 null。</param>
+    /// <returns>是否转换成功。</returns>
     private static bool TryConvertList(ModelValueList list, Type targetType, out object? result)
     {
         result = null;
@@ -546,6 +590,11 @@ public static class ModelProtocol
         return true;
     }
 
+    /// <summary>
+    /// 判断类型是否为受支持的泛型集合。
+    /// </summary>
+    /// <param name="t">目标类型。</param>
+    /// <returns>是否为泛型集合。</returns>
     private static bool IsGenericCollection(Type t)
     {
         if (!t.IsGenericType)
@@ -561,9 +610,10 @@ public static class ModelProtocol
     }
 
     /// <summary>
-    /// 枚举 ModelValueMap 全部条目：name 键 Fields + 序数键 OrdinalFields（int → 字符串承载），
-    /// object/Dictionary 消费路径经此合并。
+    /// 枚举 ModelValueMap 全部条目：name 键 Fields + 序数键 OrdinalFields（int → 字符串承载）。
     /// </summary>
+    /// <param name="map">ModelValueMap。</param>
+    /// <returns>name 键条目序列。</returns>
     private static IEnumerable<KeyValuePair<string, ModelValue>> EnumerateMapEntries(ModelValueMap map)
     {
         foreach (var kv in map.Fields)
@@ -572,6 +622,13 @@ public static class ModelProtocol
             yield return new KeyValuePair<string, ModelValue>(kv.Key.ToString(CultureInfo.InvariantCulture), kv.Value);
     }
 
+    /// <summary>
+    /// 把 ModelValueMap 转换回目标类型（Dictionary/POCO/ObservableDictionary）。
+    /// </summary>
+    /// <param name="map">ModelValueMap。</param>
+    /// <param name="targetType">目标类型。</param>
+    /// <param name="result">转换结果；失败为 null。</param>
+    /// <returns>是否转换成功。</returns>
     private static bool TryConvertObject(ModelValueMap map, Type targetType, out object? result)
     {
         result = null;
@@ -625,8 +682,7 @@ public static class ModelProtocol
         if (_pocoConverters.TryGetValue(t, out PocoConvertFunc? converter))
             return converter(map, out result);
 
-        // POCO：反射构造目标类型，按属性名（忽略大小写）匹配写入；未知键跳过。
-        // 支撑 List<SomeModel> 回写——TryConvertList 按元素类型调到这里实例化。
+        // POCO：反射构造目标类型，按属性名（忽略大小写）匹配写入；未知键跳过。支撑 List<SomeModel> 回写。
         if (t.IsClass && !t.IsAbstract && t.GetConstructor(Type.EmptyTypes) is not null)
         {
             PropertyInfo[] props = [.. t.GetProperties(BindingFlags.Public | BindingFlags.Instance).Where(p => p.CanWrite && p.SetMethod is not null && !p.SetMethod.IsStatic && p.GetIndexParameters().Length == 0)];

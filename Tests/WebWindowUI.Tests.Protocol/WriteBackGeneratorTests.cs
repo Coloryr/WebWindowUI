@@ -10,11 +10,9 @@ using Xunit;
 namespace WebWindowUI.Tests;
 
 /// <summary>
-/// 写回源生成器（WebWindowUI.Generator.SourceGen.WriteBackGenerator）单测：用 CSharpGeneratorDriver
-/// 对样例真实模型源码跑生成器，断言产出的 partial（TrySetGeneratedProperty / TryInvokeGeneratedCommand /
-/// TryGetGeneratedProperty / SubscribeGeneratedCollections / POCO 转换 + [ModuleInitializer]）。
-/// 编译须带 CommunityToolkit.Mvvm + WebWindowUI 元数据引用，否则 [ObservableProperty]/WebWindowModel
-/// 符号解析不到 → 无输出。
+/// 写回源生成器单测：CSharpGeneratorDriver 对样例模型源码跑生成器，断言产出的五个成员
+/// （TrySet/TryInvoke/TryGet/SubscribeCollections/POCO 转换 + [ModuleInitializer]）。
+/// 编译须带 CommunityToolkit.Mvvm + WebWindowUI 元数据引用，否则符号解析不到 → 无输出。
 /// </summary>
 public class WriteBackGeneratorTests
 {

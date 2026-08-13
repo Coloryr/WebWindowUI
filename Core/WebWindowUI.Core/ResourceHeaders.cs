@@ -1,9 +1,7 @@
 namespace WebWindowUI.Core;
 
 /// <summary>
-/// 静态资源的缓存策略（各平台 webview 复用同一决策）。
-/// vite 的 hash 构建产物（"名字-至少8位hex.扩展名"）内容与文件名绑定，可 immutable 长缓存；
-/// index.html 与未 hash 的文件须 no-store，否则 webview 一直加载旧文件。
+/// 静态资源缓存策略：hash 构建产物 immutable 长缓存，index.html 与未 hash 文件 no-store。
 /// </summary>
 internal static class ResourceHeaders
 {

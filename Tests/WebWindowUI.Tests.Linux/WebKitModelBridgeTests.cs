@@ -7,12 +7,9 @@ using Xunit;
 namespace WebWindowUI.Tests.Linux;
 
 /// <summary>
-/// 真 WebKitGTK（libwebkit2gtk-4.1）端到端测试：真实 WebView + 真实构建产物 wwwroot。
-/// 每个测试经 WebKitTestHarness 在 GtkPump 泵线程（GLib 主循环线程）上打开一个窗口、绑定模型、
-/// 等页面桥接就绪。对应 Windows 的 WebView2ModelBridgeTests——同一套桥接协议，验证 Linux 后端行为一致。
-///
-/// 运行前提（与本库 sample 相同）：进程要有显示会话（gtk_init 需要 DISPLAY/WAYLAND）；
-/// WebKit bwrap 沙箱按宿主环境处理，运行时用户自行决定 WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1。
+/// 真 WebKitGTK（libwebkit2gtk-4.1）端到端测试：真实 WebView + 真实构建产物 wwwroot，经 GtkPump
+/// 泵线程开窗绑模型等桥接就绪。对应 WebView2ModelBridgeTests——同一套桥接协议，验证 Linux 后端一致。
+/// 运行前提：显示会话（gtk_init 要 DISPLAY/WAYLAND）+ WebKit 沙箱按宿主处理。
 /// </summary>
 [Collection("webkit")]
 public class WebKitModelBridgeTests

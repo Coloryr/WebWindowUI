@@ -6,12 +6,9 @@ using WebWindowUI.Sample.Items;
 namespace WebWindowUI.Sample;
 
 /// <summary>
-/// 待办列表窗口的数据模型，演示「List&lt;Model&gt; 在 Vue 层一一对应」这一个功能。
-/// todos 是 ObservableCollection&lt;TodoItemModel&gt;：生成器产出 typed repeated 消息，前端强类型
-/// TodoItemModel[] 逐元素绑定（v-for）。元素字段级修改（改标题/勾选）只回写该项（按
-/// ModelInstanceId 寻址、原地写，保实例）；增删仍整列回写。.NET 侧定时器直接 .Add()/.Remove()——
-/// 框架订阅了 CollectionChanged，原地增删自动差量补丁推送；直接改元素属性（如 todos[0].Done=true）
-/// 由元素订阅逐元素 ElementSet 推送，无需整体替换属性。
+/// 待办列表数据模型：Todos 是 typed repeated（ObservableCollection&lt;TodoItemModel&gt;），前端强类型
+/// TodoItemModel[] 逐元素绑定。元素字段级修改只回写该项（按 ModelInstanceId 寻址、保实例）；
+/// .NET 侧 .Add()/.Remove() 自动差量补丁推送，直接改元素属性逐元素 ElementSet 推送。
 /// </summary>
 public partial class TodoListModel : WebWindowModel
 {

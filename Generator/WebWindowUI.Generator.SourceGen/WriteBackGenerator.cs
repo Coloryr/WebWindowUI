@@ -27,6 +27,9 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
     private const string RelayCommandAttribute = "CommunityToolkit.Mvvm.Input.RelayCommandAttribute";
     private const string InccMetadataName = "System.Collections.Specialized.INotifyCollectionChanged";
 
+    /// <summary>
+    /// 注册增量管线：候选预筛 → 语义 transform → 按模型注册输出 {Model}.WriteBack.g.cs。
+    /// </summary>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var models = context.SyntaxProvider.CreateSyntaxProvider(
@@ -41,12 +44,18 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
 
     // ---- 纯语法预筛：可能含 [ObservableProperty]/[RelayCommand] 的类（成员带属性列表） ----
 
+    /// <summary>
+    /// 纯语法预筛：带基类列表且成员含属性的类（模型候选）。
+    /// </summary>
     private static bool IsCandidate(SyntaxNode node)
         => node is Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax { BaseList: not null } cds
            && cds.Members.Any(m => m.AttributeLists.Count > 0);
 
     // ---- transform：语义解析，只留纯数据（record + EquatableArray，无 ISymbol），保增量缓存 ----
 
+    /// <summary>
+    /// transform：语义解析为纯数据 ModelInfo（属性/命令/POCO 可写集），不保留 ISymbol，保增量缓存。
+    /// </summary>
     private static ModelInfo? Transform(GeneratorSyntaxContext ctx, CancellationToken ct)
     {
         var cds = (Microsoft.CodeAnalysis.CSharp.Syntax.ClassDeclarationSyntax)ctx.Node;
@@ -165,6 +174,9 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         return false;
     }
 
+    /// <summary>
+    /// 按完整显示名精确匹配特性（防用户自定义同名特性误判）。
+    /// </summary>
     private static bool HasAttribute(ISymbol symbol, string attributeDisplayName)
         => symbol.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == attributeDisplayName);
 
@@ -179,6 +191,9 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
             : name;
     }
 
+    /// <summary>
+    /// 类型是否实现 INotifyCollectionChanged（集合订阅生成前提）。
+    /// </summary>
     private static bool IsCollection(ITypeSymbol type, INamedTypeSymbol? incc)
     {
         if (incc is null)
@@ -224,9 +239,15 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
 
     // ---- emit：生成五个成员 ----
 
+    /// <summary>
+    /// 产出 {Model}.WriteBack.g.cs 源文件。
+    /// </summary>
     private static void Emit(SourceProductionContext spc, ModelInfo m)
         => spc.AddSource($"{m.ClassName}.WriteBack.g.cs", SourceText.From(BuildSource(m), Encoding.UTF8));
 
+    /// <summary>
+    /// 生成五个成员的 C# 源码（TrySet/TryGet/TryInvoke/Subscribe/PocoConverter+Serializer）。
+    /// </summary>
     private static string BuildSource(ModelInfo m)
     {
         var w = new CodeWriter();
@@ -251,6 +272,9 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         return w.ToString();
     }
 
+    /// <summary>
+    /// 生成 TrySetGeneratedProperty：switch(name) 分派回写；集合原地清空重建、模型元素按 id 复用实例。
+    /// </summary>
     private static void EmitTrySetProperty(CodeWriter w, ModelInfo m)
     {
         w.Line("protected override bool TrySetGeneratedProperty(string name, global::WebWindowUI.Core.Protocol.ModelValue? value)");
@@ -367,6 +391,9 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         w.Close("}");
     }
 
+    /// <summary>
+    /// 生成 TryInvokeGeneratedCommand：switch(commandId) 门控 CanExecute 并 Execute。
+    /// </summary>
     private static void EmitTryInvokeCommand(CodeWriter w, ModelInfo m)
     {
         // commandId = [RelayCommand] 方法声明序（0 起），与 ModelProtoGenerator.CollectCommands 一致。
@@ -395,6 +422,9 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         w.Line();
     }
 
+    /// <summary>
+    /// 生成 TryGetGeneratedProperty：switch(name) 读出属性值（快照/读值回传用）。
+    /// </summary>
     private static void EmitTryGetProperty(CodeWriter w, ModelInfo m)
     {
         w.Line("protected override bool TryGetGeneratedProperty(string name, out object? value)");
@@ -409,6 +439,9 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         w.Line();
     }
 
+    /// <summary>
+    /// 生成 SubscribeGeneratedCollections：挂集合订阅（模型元素集合另挂元素级订阅）。
+    /// </summary>
     private static void EmitSubscribeCollections(CodeWriter w, ModelInfo m)
     {
         var colls = new List<PropInfo>();
@@ -439,6 +472,9 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         w.Line();
     }
 
+    /// <summary>
+    /// 生成 ConvertFromModelValue：序数对象 map 反序列化（字段号 case 重建实例）。
+    /// </summary>
     private static void EmitPocoConverter(CodeWriter w, ModelInfo m)
     {
         if (!m.HasParameterlessCtor || m.WritableProps.Length == 0)
@@ -490,6 +526,9 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         w.Close("}");
     }
 
+    /// <summary>
+    /// 生成 ConvertToModelValue：实例 → 序数对象 map（字段号键，仅 WritableProps 序列化）。
+    /// </summary>
     private static void EmitPocoSerializer(CodeWriter w, ModelInfo m)
     {
         w.Line("internal static bool ConvertToModelValue(object value, out global::WebWindowUI.Core.Protocol.ModelValueMap? map)");
@@ -511,19 +550,27 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
 
     // ---- 数据模型（record + EquatableArray：值相等，供增量缓存） ----
 
-    /// <summary>集合类型分类（TrySet 原地清空重建用）：List = 列表（ObservableCollection/List/IList），
-    /// Dict = 字典（ObservableDictionary/Dictionary/IDictionary），None = 非可变集合类型。</summary>
+    /// <summary>
+    /// 集合类型分类（TrySet 原地清空重建用）：List = 列表，Dict = 字典，None = 非可变集合类型。
+    /// </summary>
     internal enum CollectionKind { None, List, Dict }
 
-    /// <summary>属性元数据；Number = proto 字段号（声明顺序 1..N，来自 ModelProtoGenerator.CollectFieldNumbers；
-    /// 0 = 未解析到序号，POCO 序数 case 跳过）。Kind = 集合类型分类（TrySet 原地清空重建用）。
-    /// IsModelElements = 集合元素是 WebWindowModel 子类（元素级寻址/逐元素推送，产 EnsureItemsSubscribed）。
-    /// ElementType = IsModelElements 时的元素类型全名（整列写回按 ModelInstanceId 复用既有实例用）。</summary>
+    /// <summary>
+    /// 属性元数据。Number = proto 字段号（声明顺序 1..N，来自 CollectFieldNumbers；0 = 未解析到序号，
+    /// POCO 序数 case 跳过）。IsModelElements = 集合元素是 WebWindowModel 子类（产 EnsureItemsSubscribed）；
+    /// ElementType = 元素类型全名（整列写回按 ModelInstanceId 复用既有实例用）。
+    /// </summary>
     internal sealed record PropInfo(string Name, string Type, bool IsReadOnly, bool IsCollection, int Number, CollectionKind Kind,
         bool IsModelElements = false, string? ElementType = null);
 
+    /// <summary>
+    /// [RelayCommand] 方法元数据（ParamType = 有参命令的泛型参数类型全名，无参为 null）。
+    /// </summary>
     internal sealed record CmdInfo(string Name, string? ParamType);
 
+    /// <summary>
+    /// 模型纯数据（值相等，供增量缓存）：属性/命令/可写属性集合 + 有无无参构造。
+    /// </summary>
     internal sealed record ModelInfo(
         string ClassName,
         string Namespace,
@@ -532,23 +579,35 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         EquatableArray<PropInfo> WritableProps,
         bool HasParameterlessCtor);
 
+    /// <summary>
+    /// 生成源码的缩进写入器。
+    /// </summary>
     private sealed class CodeWriter
     {
         private readonly StringBuilder _sb = new();
         private int _indent;
 
+        /// <summary>
+        /// 写一行并加深缩进（打开块）。
+        /// </summary>
         public void Open(string token)
         {
             Line(token);
             _indent++;
         }
 
+        /// <summary>
+        /// 减浅缩进并写一行（闭合块）。
+        /// </summary>
         public void Close(string token)
         {
             _indent--;
             Line(token);
         }
 
+        /// <summary>
+        /// 按当前缩进写一行文本。
+        /// </summary>
         public void Line(string text = "")
             => _sb.Append(' ', _indent * 4).AppendLine(text);
 

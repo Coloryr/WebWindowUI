@@ -16,21 +16,21 @@ public interface IWebWindowPlatform
     void RunMessageLoop();
 
     /// <summary>
-    /// 在UI线程中运行
+    /// 在 UI 线程中运行委托。
     /// </summary>
-    /// <param name="action"></param>
+    /// <param name="action">要在 UI 线程执行的委托。</param>
     void RunOnUiThread(Action action);
     /// <summary>
-    /// 是否在UI线程中
+    /// 是否在 UI 线程中。
     /// </summary>
-    /// <returns></returns>
+    /// <returns>是否在 UI 线程。</returns>
     bool IsUiThread();
     /// <summary>
-    /// 显示一个系统弹窗
+    /// 显示系统消息框。
     /// </summary>
-    /// <param name="title">标题</param>
-    /// <param name="message">消息</param>
-    /// <param name="error">错误</param>
+    /// <param name="title">标题。</param>
+    /// <param name="message">消息内容。</param>
+    /// <param name="error">是否为错误。</param>
     void ShowMessageBox(string title, string message, bool error);
 
     /// <summary>

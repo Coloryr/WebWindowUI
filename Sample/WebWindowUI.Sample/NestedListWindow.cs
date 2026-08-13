@@ -4,12 +4,9 @@ using WebWindowUI.Sample.Items;
 namespace WebWindowUI.Sample;
 
 /// <summary>
-/// 列表嵌套窗口：对应前端 src/window/nested-list/。演示「List&lt;Model&gt; 嵌套 + 列表项详情子窗口」。
-/// 父窗口绑定 NestedListModel，其 Items 是 List&lt;NestedListItemModel&gt;（typed repeated），每个元素
-/// 内部又嵌套 List&lt;NestedItemTagModel&gt;（Tags）与单模型 NestedItemMetaModel（Meta）。
-/// 前端点元素触发 OpenItem(index) 命令 → OpenItemRequested 事件 → 这里打开绑定同一元素实例的
-/// NestedListItemWindow（master-detail）。子窗口编辑元素字段/内层 Tags 后，NestedListModel 重推整个
-/// Items，父窗口列表实时跟随（见 NestedListModel.OnItemChanged）。
+/// 列表嵌套窗口（前端 src/window/nested-list/）：演示「List&lt;Model&gt; 嵌套 + 列表项详情子窗口」。
+/// 前端 OpenItem(index) 命令 → 打开绑定父列表同一元素实例的 NestedListItemWindow（master-detail）；
+/// 子窗口编辑后父窗口列表实时跟随。
 /// </summary>
 internal sealed class NestedListWindow : WebWindow
 {

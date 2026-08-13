@@ -17,26 +17,26 @@ public sealed record ModelProtoResult(
     string Namespace);
 
 /// <summary>
-/// 模型 → proto 生成器。读取模型类源码（Roslyn 语法解析，无需编译），
-/// 提取 [ObservableProperty] 字段与显式公开属性，按声明顺序生成：
-///   - 完整模型消息（package webwindowui.model.generated，标量强类型，object/Dictionary/POCO 用 ModelValue 兜底）；
-///   - 增量 update 消息 {模型名}Update：字段与完整模型同序同号，标量/字符串/字节保留原生类型，
-///     其余（列表/object/Dictionary/POCO）用 ModelValue 兜底；增量载荷只编码被修改的字段，
-///     .NET 侧用可空 DTO（非空即序列化，含 0/空串），前端按 hasOwnProperty 判断字段是否出现。
-/// 同时生成对应的 [ProtoContract] 快照/增量 DTO、From(model)/EncodePropertyUpdate 映射
-/// 与 {模型名}.EncodeFullSnapshot()/EncodePropertyUpdate() override。
-/// 字段号与 DTO [ProtoMember] 号完全一致，前端 descriptor 与 .NET 契约共用同一份映射。
-/// List&lt;已知模型&gt;（元素在全模型清单 allModelSources 内）生成强类型 repeated 元素消息
-/// （快照 DTO 引用元素快照类型、TS 镜像 Elem[] + import），descriptor 在给出全模型清单时输出
-/// 全量集合（任一模型都包含全部模型消息，typed 引用可解析）。
-/// 另生成前端 TS 模型镜像（src/models，属性 camelCase、类型映射同 descriptor），
-/// 子路径由命名空间去掉「全部模型命名空间的公共前缀」（--all-models 自动推断）经 TsSubPath 推导；
-/// 亦可用 --root-namespace 显式覆盖根命名空间。
+/// 模型 → proto 生成器。读取模型类源码（Roslyn 语法解析，无需编译），按声明顺序生成完整模型消息
+/// 与增量 update 消息（字段同序同号、[ProtoMember] 号一致，前端 descriptor 与 .NET 契约共用一份映射）、
+/// 快照/增量 DTO、EncodeFullSnapshot/EncodePropertyUpdate override，以及前端 TS 模型镜像
+/// （camelCase、子路径 = 命名空间 − 公共前缀，见 <see cref="TsSubPath"/>）。
 /// </summary>
 public static class ModelProtoGenerator
 {
+    /// <summary>
+    /// proto package 名。
+    /// </summary>
     public const string GeneratedPackage = "webwindowui.model.generated";
 
+    /// <summary>
+    /// 由源码生成完整结果（C# DTO + proto + descriptor + TS 镜像）。
+    /// </summary>
+    /// <param name="sourceText">模型源码。</param>
+    /// <param name="modelClassName">模型类名。</param>
+    /// <param name="allModelSources">全模型源码表（类名 → 源码，typed repeated 元素解析用）。</param>
+    /// <param name="rootNs">根命名空间（TS 子路径基准）。</param>
+    /// <returns>生成结果。</returns>
     public static ModelProtoResult Generate(
         string sourceText,
         string modelClassName,
@@ -77,8 +77,14 @@ public static class ModelProtoGenerator
     /// </summary>
     internal sealed record ModelParsed(string ClassName, string Namespace, List<ProtoField> Fields, List<ModelCommand> Commands);
 
-    /// <summary>解析一次模型源码 → 轻量元数据。allNamespaces = 全模型「类名 → 命名空间」表
-    /// （List&lt;已知模型&gt; typed repeated 检测用；null = 单模型用法，typed repeated 退化 ModelValue 兜底）。</summary>
+    /// <summary>
+    /// 解析一次模型源码 → 轻量元数据。allNamespaces = 全模型「类名 → 命名空间」表
+    /// （List&lt;已知模型&gt; typed repeated 检测用；null = 单模型用法，typed repeated 退化 ModelValue 兜底）。
+    /// </summary>
+    /// <param name="sourceText">模型源码。</param>
+    /// <param name="modelClassName">模型类名。</param>
+    /// <param name="allNamespaces">全模型命名空间表。</param>
+    /// <returns>模型元数据。</returns>
     internal static ModelParsed ParseModel(string sourceText, string modelClassName,
         IReadOnlyDictionary<string, string>? allNamespaces)
     {
@@ -86,8 +92,14 @@ public static class ModelProtoGenerator
         return new ModelParsed(modelClassName, ns, fields, CollectCommands(sourceText, modelClassName));
     }
 
-    /// <summary>已解析元数据 + 全模型已解析表 → 生成结果（不重新解析源码）。descriptor 在 all.Count&gt;0 时
-    /// 输出全量集合（任一模型都内联全部模型消息，typed 引用可解析），否则只含本模型（兼容单模型用法）。</summary>
+    /// <summary>
+    /// 已解析元数据 + 全模型已解析表 → 生成结果（不重新解析源码）。descriptor 在 all.Count&gt;0 时
+    /// 输出全量集合（任一模型都内联全部模型消息，typed 引用可解析），否则只含本模型（兼容单模型用法）。
+    /// </summary>
+    /// <param name="model">本模型元数据。</param>
+    /// <param name="all">全模型已解析表。</param>
+    /// <param name="rootNs">根命名空间。</param>
+    /// <returns>生成结果。</returns>
     internal static ModelProtoResult GenerateParsed(ModelParsed model, IReadOnlyDictionary<string, ModelParsed> all, string rootNs)
     {
         var fullMessageName = $"{GeneratedPackage}.{model.ClassName}";
@@ -111,10 +123,12 @@ public static class ModelProtoGenerator
             Namespace: model.Namespace);
     }
 
-    /// <summary>给模型数据字段追加框架保留的 modelInstanceId（int64，字段号 = 数据字段数 + 1）。
-    /// 只供「完整模型消息」消费（descriptor 完整消息 + 快照 DTO + .proto 完整消息）：
-    /// 前端从线缆拿到每个元素的唯一 ID 用于元素级寻址；Update/TS/序数契约一律不含。
-    /// WebWindowModel.ModelInstanceId 是 get-only 非 [ObservableProperty]，永不触发 PropertyChanged。</summary>
+    /// <summary>
+    /// 给模型数据字段追加框架保留的 modelInstanceId（int64，字段号 = 数据字段数 + 1）。只供完整模型消息
+    /// 消费（descriptor 完整消息 + 快照 DTO + .proto）；Update/TS/序数契约一律不含（id 永不变更）。
+    /// </summary>
+    /// <param name="fields">数据字段。</param>
+    /// <returns>含 modelInstanceId 的完整字段表。</returns>
     private static List<ProtoField> WithInstanceId(List<ProtoField> fields)
     {
         var full = new List<ProtoField>(fields)
@@ -125,10 +139,12 @@ public static class ModelProtoGenerator
         return full;
     }
 
-    /// <summary>模型序号：完整消息名（package + 类名）的 FNV-1a 32 位哈希，掩到非负 int32。
-    /// 线缆上代替冗长的消息名——.NET 的 ModelUpdate/GeneratedModel 只发它，前端经生成器烘焙进
-    /// TS 镜像的 __protocol 校验并解码。两侧都由此函数产出（同一生成器），一致性在本模型内即可
-    /// （每窗口单模型，前端按自己烘焙的 modelId 解码），跨模型唯一性不要求。</summary>
+    /// <summary>
+    /// 模型序号：完整消息名（package + 类名）的 FNV-1a 32 位哈希，掩到非负 int32。线缆上代替消息名——
+    /// .NET 只发它，前端经烘焙进 TS 镜像的 __protocol 校验并解码（同一生成器产出，两侧一致）。
+    /// </summary>
+    /// <param name="fullMessageName">完整消息名。</param>
+    /// <returns>模型序号。</returns>
     private static int ModelIdFor(string fullMessageName)
     {
         uint hash = 2166136261;
@@ -154,13 +170,23 @@ public static class ModelProtoGenerator
         return ns;
     }
 
-    /// <summary>属性名 → proto 字段号（声明顺序 1..N）。POCO 对象 map 的序数键用：WriteBack 生成器
-    /// 与前端桥都读同一份编号，避免两生成器各自枚举漂移（与 descriptor 元素消息 field id 同源）。</summary>
+    /// <summary>
+    /// 属性名 → proto 字段号（声明顺序 1..N）。POCO 对象 map 的序数键用：WriteBack 生成器与前端桥
+    /// 都读同一份编号，避免两生成器各自枚举漂移（与 descriptor 元素消息 field id 同源）。
+    /// </summary>
+    /// <param name="sourceText">模型源码。</param>
+    /// <param name="modelClassName">模型类名。</param>
+    /// <returns>属性名 → 字段号。</returns>
     internal static IReadOnlyDictionary<string, int> CollectFieldNumbers(string sourceText, string modelClassName)
         => CollectFields(sourceText, modelClassName, null).Fields.ToDictionary(f => f.CsName, f => f.Number);
 
-    /// <summary>收集一个模型的字段（[ObservableProperty] 只读字段 + 显式公开可读属性，声明序为字段号）。
-    /// allNamespaces = 全模型「类名 → 命名空间」表（List&lt;已知模型&gt; typed repeated 元素解析用）。</summary>
+    /// <summary>
+    /// 收集一个模型的字段（[ObservableProperty] 只读字段 + 显式公开可读属性，声明序为字段号）。
+    /// </summary>
+    /// <param name="sourceText">模型源码。</param>
+    /// <param name="modelClassName">模型类名。</param>
+    /// <param name="allNamespaces">全模型命名空间表（typed repeated 元素解析用）。</param>
+    /// <returns>命名空间 + 字段表。</returns>
     private static (string Namespace, List<ProtoField> Fields) CollectFields(
         string sourceText, string modelClassName, IReadOnlyDictionary<string, string>? allNamespaces)
     {
@@ -220,9 +246,10 @@ public static class ModelProtoGenerator
         return (ns, fields);
     }
 
-    /// <summary>模型上的一个 MVVM 命令：[RelayCommand] 方法 → 前端 TS 方法。Name = .NET 方法名
-    /// （线缆 command id），ParamType = 命令方法参数类型（无参为 null）。internal：被 ModelParsed 暴露给
-    /// ProtoGenerator（GenerateParsed），须与内部可见性一致。</summary>
+    /// <summary>
+    /// 模型上的一个 MVVM 命令：[RelayCommand] 方法 → 前端 TS 方法。Name = .NET 方法名（线缆 command id），
+    /// ParamType = 命令方法参数类型（无参为 null）。
+    /// </summary>
     internal sealed record ModelCommand(string Name, string? ParamType, string Doc);
 
     /// <summary>
@@ -289,6 +316,16 @@ public static class ModelProtoGenerator
         bool IsEnum = false, // C# 类型是枚举 → TS 以 number 呈现（ModelValue 兜底字段）
         string? TsElem = null); // List<已知模型> → 元素 TS 类名（强类型 repeated，TS 侧 Elem[] + import）
 
+    /// <summary>
+    /// C# 属性类型 → ProtoField 映射：标量/字节/时间/字符映射原生 proto 类型，
+    /// List&lt;T&gt; 系列映射 repeated，未知类型回落 ModelValue（已知模型 typed repeated 走强类型）。
+    /// </summary>
+    /// <param name="csName">C# 属性名。</param>
+    /// <param name="csType">C# 类型文本。</param>
+    /// <param name="number">proto 字段号。</param>
+    /// <param name="enumNames">已知枚举名集合。</param>
+    /// <param name="allNamespaces">类名 → 命名空间表（typed repeated 元素解析用，可空）。</param>
+    /// <returns>映射后的字段。</returns>
     private static ProtoField Map(string csName, string csType, int number, IReadOnlyCollection<string> enumNames,
         IReadOnlyDictionary<string, string>? allNamespaces)
     {
@@ -377,10 +414,16 @@ public static class ModelProtoGenerator
             IsEnum: enumNames.Contains(bare.Split('.').Last()));
     }
 
+    /// <summary>
+    /// 标量字段（非重复、非兜底）：完整快照类型即 C# 类型本身，无初始化后缀。
+    /// </summary>
     private static ProtoField Scalar(string csName, string wire, int number, string protoType, string csType,
         string updDto, string updProto, string updSet)
         => new(csName, wire, number, protoType, false, csType, "", $"model.{csName}", updDto, updProto, updSet);
 
+    /// <summary>
+    /// 集合元素类型 → (proto 元素类型, DTO 元素类型, 是否 ModelValue 兜底)；标量元素直映射，其余回落。
+    /// </summary>
     private static (string ProtoType, string DtoElem, bool IsModelValue) ElemMap(string bare) => bare switch
     {
         "string" => ("string", "string", false),
@@ -420,6 +463,13 @@ public static class ModelProtoGenerator
 
     // ---- 产出 ----
 
+    /// <summary>
+    /// 生成 .proto 文本（参考用，不落盘）：完整模型消息 + 增量 update 消息，字段同序同号。
+    /// </summary>
+    /// <param name="modelClassName">模型类名。</param>
+    /// <param name="fullFields">完整模型字段。</param>
+    /// <param name="updateFields">增量 update 字段。</param>
+    /// <returns>.proto 文本。</returns>
     private static string BuildProto(string modelClassName, List<ProtoField> fullFields, List<ProtoField> updateFields)
     {
         var sb = new StringBuilder();
@@ -452,10 +502,12 @@ public static class ModelProtoGenerator
         return sb.ToString();
     }
 
-    /// <summary>构建 protobufjs descriptor：把基础信封消息（WebMessage/ModelValue 等）与传入的每个模型
-    /// （及其 Update 消息，塞进 webwindowui.model.generated 命名空间）一起写进 webwindowui.model 命名空间。
-    /// 全模型清单时传全部模型 → 任一模型的 descriptor 都能解析 typed repeated 字段引用的元素消息。
-    /// 基础信封内联进每个模型 descriptor → 前端解析自包含，不再需要单独的 model.json/model.proto。</summary>
+    /// <summary>
+    /// 构建 protobufjs descriptor：把基础信封消息与每个模型（及 Update 消息）写进 webwindowui.model 命名空间。
+    /// 基础信封内联进每个模型 descriptor → 前端 Root.fromJSON 自包含解析，无需独立的 model.json/model.proto。
+    /// </summary>
+    /// <param name="models">类名 → 字段表。</param>
+    /// <returns>descriptor JSON 字符串。</returns>
     private static string BuildDescriptor(IEnumerable<KeyValuePair<string, List<ProtoField>>> models)
     {
         var nested = new Dictionary<string, object?>();
@@ -489,9 +541,12 @@ public static class ModelProtoGenerator
         return JsonSerializer.Serialize(root, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    /// <summary>基础信封消息（线缆骨架）：WebMessage 信封 + ModelValue 通用值 + 各信封成员。
-    /// 字段号必须与 ModelProtocol.cs 的 [ProtoMember] 严格一致，由 ModelProtoTests 的漂移测试锁住。
-    /// 内联进每个模型 descriptor 后前端用 Root.fromJSON 直接解析，不再需要单独的 model.json。</summary>
+    /// <summary>
+    /// 基础信封消息（线缆骨架）：WebMessage 信封 + ModelValue 通用值 + 各信封成员。字段号必须与
+    /// ModelProtocol.cs 的 [ProtoMember] 严格一致（漂移测试锁住）；内联进每个模型 descriptor 后前端
+    /// 用 Root.fromJSON 直接解析，不再需要单独的 model.json。
+    /// </summary>
+    /// <returns>消息名 → descriptor 消息定义。</returns>
     private static Dictionary<string, object?> BuildBaseEnvelopeMessages()
     {
         // ModelValue：通用值，增量/快照/回写共用。oneof kind 同时只命中一个成员。
@@ -647,6 +702,9 @@ public static class ModelProtoGenerator
         };
     }
 
+    /// <summary>
+    /// descriptor 完整模型消息的字段表：字段号 + type（ModelValue 兜底限命名空间）+ repeated 规则。
+    /// </summary>
     private static Dictionary<string, object?> BuildMessageFields(List<ProtoField> fields)
     {
         var fieldJson = new Dictionary<string, object?>();
@@ -661,6 +719,9 @@ public static class ModelProtoGenerator
         return new Dictionary<string, object?> { ["fields"] = fieldJson };
     }
 
+    /// <summary>
+    /// descriptor 增量 update 消息的字段表：字段号 + 兜底类型限命名空间（可空 presence 由字段出现与否表达）。
+    /// </summary>
     private static Dictionary<string, object?> BuildUpdateFields(List<ProtoField> fields)
     {
         var updFieldJson = new Dictionary<string, object?>();
@@ -675,16 +736,14 @@ public static class ModelProtoGenerator
         return new Dictionary<string, object?> { ["fields"] = updFieldJson };
     }
 
-    /// <summary>生成 TS 模型镜像：与 src/bridge descriptor 同源（camelCase 属性名 + 相同类型映射）。
-    /// 属性默认值为类型空值（快照到达前展示用）。List&lt;已知模型&gt; → 元素类型 Elem[]，并 import 元素模型的
-    /// TS 文件（相对路径按子路径推导）。带 [RelayCommand] 方法的模型再产出命令方法（openWindow()/带参
-    /// commandWithArg(arg)），类继承 webwindowui-bridge 的 ModelCommandHost 基类（命令通道类型契约在上层库，
-    /// 由 bindModel 注入为不可枚举实例属性），命令方法经 this._commandChannel 发 ModelInvoke 调 .NET 命令。
-    /// 末尾生成 bind{模型名}() 助手：把「创建实例 + 传 descriptor 给 webwindowui-bridge 的 bindModel」
-    /// 封成一个函数，页面只需 import 并调用。
-    /// typed-repeated 属性（List&lt;已知模型&gt;）再烘焙静态 ['__repeatedFields'] 序数键契约：元素消息的
-    /// 「proto 字段号 → 字段名」表构建期定死进 TS 镜像，桥直接读取、不做运行时 constructor.name 反射
-    /// （class 名会被 JS 压缩器改名，运行时反射必失真——Release 下 typed-repeated 补丁挂的根因）。</summary>
+    /// <summary>
+    /// 生成 TS 模型镜像：与 src/bridge descriptor 同源（camelCase 属性名 + 相同类型映射），属性默认值为
+    /// 类型空值。List&lt;已知模型&gt; → 元素类型 Elem[] + import；带 [RelayCommand] 的模型产出命令方法
+    /// （继承 ModelCommandHost，经 this._commandChannel 发 ModelInvoke）；末尾生成 bind{模型名}() 助手。
+    /// typed-repeated 属性再烘焙静态 ['__repeatedFields'] 序数键契约（构建期定死、桥直接读取，
+    /// 不做运行时 constructor.name 反射——class 名会被压缩器改名）。
+    /// </summary>
+    /// <returns>TS 镜像源码。</returns>
     private static string BuildTs(string modelClassName, List<ProtoField> fields, List<ModelCommand> commands,
         string ns, string rootNs, IReadOnlyDictionary<string, string>? allNamespaces,
         IReadOnlyDictionary<string, ModelParsed> all, int modelId, string fullMessageName)
@@ -813,6 +872,9 @@ public static class ModelProtoGenerator
         };
     }
 
+    /// <summary>
+    /// proto 标量类型 → TS 类型。
+    /// </summary>
     private static string TsScalar(string protoType) => protoType switch
     {
         "string" => "string",
@@ -822,6 +884,9 @@ public static class ModelProtoGenerator
         _ => "unknown",
     };
 
+    /// <summary>
+    /// 属性默认值（快照到达前展示用）：重复 → []，标量 → 类型空值，兜底 → {}（枚举 → 0）。
+    /// </summary>
     private static string TsInit(ProtoField f)
     {
         if (f.IsRepeated) return "[]";
@@ -893,21 +958,32 @@ public static class ModelProtoGenerator
         return "./" + string.Join("/", parts);
     }
 
-    /// <summary>src/models/&lt;子路径&gt;/ 下模型 TS 文件 → src/bridge/&lt;ProtoBase&gt;.json 的相对 import 路径：
-    /// 根子路径 → ../bridge/…，嵌套子路径每层加一层 ../。descriptor 与 TS 是 src/ 下的兄弟目录。</summary>
+    /// <summary>
+    /// src/models/&lt;子路径&gt;/ 下模型 TS 文件 → src/bridge/&lt;ProtoBase&gt;.json 的相对 import 路径：
+    /// 根子路径 → ../bridge/…，嵌套子路径每层加一层 ../。descriptor 与 TS 是 src/ 下的兄弟目录。
+    /// </summary>
+    /// <param name="subPath">TS 模型子路径。</param>
+    /// <param name="modelClassName">模型类名。</param>
+    /// <returns>相对 import 路径。</returns>
     private static string RelativeBridgeJsonImport(string subPath, string modelClassName)
     {
         int depth = subPath.Length == 0 ? 0 : subPath.Split('/').Length;
         return string.Concat(Enumerable.Repeat("../", depth + 1)) + "bridge/" + ProtoBase(modelClassName) + ".json";
     }
 
-    /// <summary>类名 → proto 文件基名（PascalCase → snake_case，与 targets 的 ProtoBase 推导同规则：
-    /// TodoItemModel → todo_item_model）。</summary>
+    /// <summary>
+    /// 类名 → proto 文件基名（PascalCase → snake_case，与 targets 的 ProtoBase 推导同规则：
+    /// TodoItemModel → todo_item_model）。
+    /// </summary>
     private static string ProtoBase(string className)
         => System.Text.RegularExpressions.Regex.Replace(className, "([a-z0-9])([A-Z])", "$1_$2").ToLowerInvariant();
 
-    /// <summary>提取源码里的命名空间（复用 FindNamespace 的解析），供 --all-models 公共前缀推断用。
-    /// 文件级/块级命名空间都支持；无命名空间返回 null。</summary>
+    /// <summary>
+    /// 提取源码里的命名空间（复用 FindNamespace 的解析），供 --all-models 公共前缀推断用。
+    /// 文件级/块级命名空间都支持；无命名空间返回 null。
+    /// </summary>
+    /// <param name="sourceText">源码文本。</param>
+    /// <returns>命名空间；无则 null。</returns>
     public static string? GetNamespace(string sourceText)
     {
         var root = CSharpSyntaxTree.ParseText(sourceText).GetRoot();
@@ -938,6 +1014,15 @@ public static class ModelProtoGenerator
         return string.Join(".", keep);
     }
 
+    /// <summary>
+    /// 生成 {Model}Proto.g.cs 源码：快照 DTO + 增量 Update DTO + partial 类的 ModelId/编码 override。
+    /// </summary>
+    /// <param name="ns">模型命名空间。</param>
+    /// <param name="modelClassName">模型类名。</param>
+    /// <param name="modelId">模型消息 FNV 哈希 id。</param>
+    /// <param name="fullFields">完整模型字段。</param>
+    /// <param name="updateFields">增量 update 字段。</param>
+    /// <returns>C# 源码。</returns>
     private static string BuildCs(string ns, string modelClassName, int modelId,
         List<ProtoField> fullFields, List<ProtoField> updateFields)
     {
@@ -1026,6 +1111,9 @@ public static class ModelProtoGenerator
         return name is "ObservableProperty" or "ObservablePropertyAttribute";
     }
 
+    /// <summary>
+    /// 从语法树提取命名空间（文件级优先，块级兜底）；无命名空间返回 null。
+    /// </summary>
     private static string? FindNamespace(SyntaxNode root)
     {
         FileScopedNamespaceDeclarationSyntax? fsn = root.DescendantNodes()
@@ -1035,9 +1123,15 @@ public static class ModelProtoGenerator
         return root.DescendantNodes().OfType<NamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString();
     }
 
+    /// <summary>
+    /// 首字母大写（字段 → 属性名）。
+    /// </summary>
     private static string ToPascalCase(string name)
         => string.IsNullOrEmpty(name) ? name : char.ToUpperInvariant(name[0]) + name.Substring(1);
 
+    /// <summary>
+    /// 首字母小写（属性名 → wire/TS 字段名）。
+    /// </summary>
     private static string ToCamelCase(string name)
         => string.IsNullOrEmpty(name) ? name : char.ToLowerInvariant(name[0]) + name.Substring(1);
 }

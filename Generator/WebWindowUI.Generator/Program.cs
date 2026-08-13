@@ -11,6 +11,11 @@ namespace WebWindowUI.Generator;
 /// </summary>
 internal static class Program
 {
+    /// <summary>
+    /// 解析命令行并生成 descriptor/TS（PruneStaleTs 剪残留）；缺模型参数/文件不存在时打印错误返回 1。
+    /// </summary>
+    /// <param name="args">命令行参数（--model/--json-out/--ts-out-dir/--all-models/--root-namespace）。</param>
+    /// <returns>进程退出码。</returns>
     private static int Main(string[] args)
     {
         var modelPath = Get(args, "--model");
@@ -80,12 +85,15 @@ internal static class Program
         return 0;
     }
 
-    /// <summary>残留 TS 清理：删除 tsOutDir 下「当前全模型集合不再产出」的模型镜像。
-    /// 幂等写保持 mtime 的前提不受影响：只删不在期望集合的文件，其余文件由 WriteIfChanged 决定是否重写。
-    /// 与 targets 的 _WWUI_CleanBridgeOutputs 剪枝互补——桥 descriptor 平铺（{ProtoBase}.json）按名剪即可；
-    /// TS 镜像带命名空间子路径（{子路径}\{类名}.ts），改名/删模型/换命名空间都会让旧路径文件变孤儿，
-    /// 而「任意子路径按类名排除」会把换路径后的旧文件漏掉（同名不同路径），故由这里按「类名 → 期望子路径」精确剪。
-    /// 每模型一次调用都扫一遍（N 个模型 O(N²)，模型数十个内无感）；--all-models 缺失时无法推期望集合，跳过。</summary>
+    /// <summary>
+    /// 残留 TS 清理：删除 tsOutDir 下「当前全模型集合不再产出」的模型镜像。按「类名 → 期望子路径」精确剪
+    /// （模型改名/删模型/换命名空间会让旧路径文件变孤儿，按任意子路径排除会漏掉同名不同路径的旧文件）；
+    /// 与 targets 的 _WWUI_CleanBridgeOutputs 剪枝互补（后者只剪平铺 bridge JSON）。幂等写前提不受影响：
+    /// 只删不在期望集合的文件。--all-models 缺失时无法推期望集合，跳过。
+    /// </summary>
+    /// <param name="tsOutDir">TS 输出根目录。</param>
+    /// <param name="rootNs">根命名空间。</param>
+    /// <param name="allModelSources">全模型源码表（类名 → 源码）。</param>
     private static void PruneStaleTs(string tsOutDir, string rootNs, IReadOnlyDictionary<string, string> allModelSources)
     {
         if (allModelSources.Count == 0 || !Directory.Exists(tsOutDir))
@@ -107,9 +115,11 @@ internal static class Program
         }
     }
 
-    /// <summary>幂等写入：内容与已存在文件相同则不写（保持 mtime），供构建目标的增量判断参考。
-    /// 生成器每次构建都被调用（descriptor 缺失时必须重建），但内容不变时文件时间戳不动，
-    /// 前端 vite 的 FrontendInput（含 src/bridge、src/models）就不被无谓地触发重建。</summary>
+    /// <summary>
+    /// 幂等写入：内容与已存在文件相同则不写（保持 mtime），避免无谓触发前端 vite 重建。
+    /// </summary>
+    /// <param name="path">目标路径。</param>
+    /// <param name="content">内容。</param>
     private static void WriteIfChanged(string path, string content)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -118,6 +128,12 @@ internal static class Program
         File.WriteAllText(path, content);
     }
 
+    /// <summary>
+    /// 从命令行参数取键后值。
+    /// </summary>
+    /// <param name="args">参数数组。</param>
+    /// <param name="name">键名。</param>
+    /// <returns>键对应的值；未找到为 null。</returns>
     private static string? Get(string[] args, string name)
     {
         for (int i = 0; i < args.Length - 1; i++)

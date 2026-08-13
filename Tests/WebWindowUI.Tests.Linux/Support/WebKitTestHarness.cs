@@ -18,11 +18,8 @@ internal sealed class TestWindow : WebWindow
 }
 
 /// <summary>
-/// 真 WebKitGTK 端到端测试宿主（Linux 版，对应 Windows 的 WebView2TestHarness）。
-///
-/// 流程：模型先挂到窗口 → Show()（唯一入口，触发加载；无头模式不显示窗口）
-/// → 等 NavigationCompleted 镜像事件（页面已导航完成）→ 等页面桥接（window.__model）就绪 →
-/// 执行测试体。全部在 GtkPump 泵线程（GLib 主循环线程）内跑。
+/// 真 WebKitGTK 端到端测试宿主（对应 WebView2TestHarness）。流程：模型挂到窗口 → Show() → 等
+/// NavigationCompleted → 等页面桥接（window.__model）就绪 → 执行测试体；全部在 GtkPump 泵线程内跑。
 /// </summary>
 internal static class WebKitTestHarness
 {

@@ -22,6 +22,9 @@ namespace WebWindowUI.Generator.SourceGen;
 [Generator]
 public sealed class ProtoGenerator : IIncrementalGenerator
 {
+    /// <summary>
+    /// 注册增量管线：候选预筛 → 命名空间图 → 按模型解析 → 全量产出 {Model}Proto.g.cs。
+    /// </summary>
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var models = context.SyntaxProvider.CreateSyntaxProvider(
@@ -64,8 +67,10 @@ public sealed class ProtoGenerator : IIncrementalGenerator
         return new ModelSourceInfo(sym.Name, ns, ctx.Node.SyntaxTree.ToString());
     }
 
-    /// <summary>全模型已解析表 → 每个模型的 (hintName, CsCode)。GenerateParsed 直接用缓存的
-    /// ModelParsed，不重新解析任何源码——全量重算成本从「N 次 Roslyn 解析」降为「N 次字符串拼接」。</summary>
+    /// <summary>
+    /// 全模型已解析表 → 每个模型的 (hintName, CsCode)。GenerateParsed 直接用缓存的 ModelParsed，
+    /// 不重新解析任何源码——全量重算成本从「N 次 Roslyn 解析」降为「N 次字符串拼接」。
+    /// </summary>
     private static void BuildEmits(SourceProductionContext spc, ImmutableArray<ParsedModel?> parsedModels)
     {
         var all = new Dictionary<string, ParsedModel>(StringComparer.Ordinal);

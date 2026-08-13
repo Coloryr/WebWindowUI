@@ -8,37 +8,37 @@ using WebWindowUI.Core.Protocol;
 namespace WebWindowUI.Core;
 
 /// <summary>
-/// 窗口数据模型的基类。继承后绑定到 <see cref="WebWindow.Model"/>，与前端 Vue 双向绑定：
-/// 属性变化自动推送增量、页面加载完成推完整快照、前端回写（ModelSet）写回属性。
-/// 同一实例可绑多个窗口（共享广播），远程回写后排除源窗口广播，其余窗口同步。
-/// 复杂值经 <see cref="ModelProtocol.ToModelValue"/> 递归展开并做环检测。
+/// 窗口数据模型基类：属性变化自动推增量、页面加载推快照、前端回写写回属性；同一实例可绑多窗口共享广播。
 /// </summary>
 public abstract partial class WebWindowModel : ObservableObject
 {
+    /// <summary>
+    /// 订阅自身属性变化（增量推送入口）。
+    /// </summary>
     protected WebWindowModel()
     {
         PropertyChanged += OnModelPropertyChanged;
     }
 
     /// <summary>
-    /// 实例唯一ID分配计数器
+    /// 实例唯一 ID 分配计数器。
     /// </summary>
     private static long _nextModelInstanceId;
 
     /// <summary>
-    /// 实例唯一ID
+    /// 实例唯一 ID（进程内单调自增，每实例唯一有序）。
     /// </summary>
     public long ModelInstanceId { get; } = Interlocked.Increment(ref _nextModelInstanceId);
 
     /// <summary>
-    /// 已绑定窗口的推送订阅
+    /// 已绑定窗口的推送订阅。
     /// </summary>
     private readonly List<Action<byte[]>> _pushed = [];
 
     /// <summary>
-    /// 绑定窗口的推送回调
+    /// 绑定窗口的推送回调（幂等）。
     /// </summary>
-    /// <param name="handler">订阅器</param>
+    /// <param name="handler">订阅器。</param>
     internal void SubscribePushed(Action<byte[]> handler)
     {
         lock (_pushed)
@@ -49,9 +49,9 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// 解绑窗口的推送回调
+    /// 解绑窗口的推送回调；最后一个订阅者解绑时自动退订全部集合。
     /// </summary>
-    /// <param name="handler">订阅器</param>
+    /// <param name="handler">订阅器。</param>
     internal void UnsubscribePushed(Action<byte[]> handler)
     {
         bool last;
@@ -65,7 +65,7 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// 解除全部绑定
+    /// 解除全部绑定（含集合订阅）。
     /// </summary>
     internal void Unbind()
     {
@@ -94,7 +94,7 @@ public abstract partial class WebWindowModel : ObservableObject
     private bool _isApplyingRemoteWrite;
 
     /// <summary>
-    /// 向全部绑定窗口推送信封。单订阅者快路径（免 ToArray），无订阅者直接返回。
+    /// 向全部绑定窗口推送信封；单订阅者快路径（免 ToArray），无订阅者直接返回。
     /// </summary>
     private void PushEnvelope(byte[] bytes)
     {
@@ -115,7 +115,7 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// 向除源窗口（exclude）外的全部绑定窗口推送信封（远程回写后的跨窗口同步）。
+    /// 向除源窗口外的全部绑定窗口推送（远程回写后的跨窗口同步）。
     /// </summary>
     private void PushEnvelope(byte[] bytes, Action<byte[]> exclude)
     {
@@ -143,30 +143,43 @@ public abstract partial class WebWindowModel : ObservableObject
     protected virtual int ModelId => 0;
 
     /// <summary>
-    /// 把整个模型序列化为生成消息的 protobuf 字节（仅当 <see cref="ModelId"/> 非 0 时调用）。
+    /// 把整个模型编码成生成消息的 protobuf 字节。
     /// </summary>
+    /// <returns>完整快照的 protobuf 字节。</returns>
     protected virtual byte[] EncodeFullSnapshot()
         => throw new NotSupportedException($"模型 {GetType().Name} 未由 WebWindowUI.Generator 生成完整模型编码器。");
 
     /// <summary>
-    /// 把单属性变化编码成增量 update 的 protobuf 字节（仅 <see cref="ModelId"/> 非 0 时调用），只含被修改的字段。
+    /// 把单属性变化编码成增量 update 的 protobuf 字节（只含被修改字段）。
     /// </summary>
+    /// <param name="propertyName">属性名。</param>
+    /// <param name="value">属性现值。</param>
+    /// <returns>增量 update 的 protobuf 字节。</returns>
     protected virtual byte[] EncodePropertyUpdate(string propertyName, object? value)
         => throw new NotSupportedException($"模型 {GetType().Name} 未由 WebWindowUI.Generator 生成增量 update 编码器。");
 
     /// <summary>
     /// 生成代码的「前端回写」钩子：命中写值返回 true，未命中返回 false（不反射兜底）。
     /// </summary>
+    /// <param name="name">属性名。</param>
+    /// <param name="value">前端回传的值。</param>
+    /// <returns>是否命中可写属性。</returns>
     protected virtual bool TrySetGeneratedProperty(string name, ModelValue? value) => false;
 
     /// <summary>
     /// 生成代码的「命令调用」钩子：commandId = [RelayCommand] 声明序；命中返回 true（含被 CanExecute 拒绝）。
     /// </summary>
+    /// <param name="commandId">命令声明序。</param>
+    /// <param name="value">命令参数。</param>
+    /// <returns>是否命中命令。</returns>
     protected virtual bool TryInvokeGeneratedCommand(int commandId, ModelValue? value) => false;
 
     /// <summary>
     /// 生成代码的「按名读值」钩子：命中返回 true 并输出现值，未命中返回 false（不反射兜底）。
     /// </summary>
+    /// <param name="name">属性名。</param>
+    /// <param name="value">属性现值。</param>
+    /// <returns>是否命中可读属性。</returns>
     protected virtual bool TryGetGeneratedProperty(string name, out object? value) { value = null; return false; }
 
     /// <summary>
@@ -177,6 +190,7 @@ public abstract partial class WebWindowModel : ObservableObject
     /// <summary>
     /// 以前端回写语义应用属性 setter（期间抑制 PropertyChanged 回声；供生成代码调用）。
     /// </summary>
+    /// <param name="setter">回写 setter。</param>
     protected void ApplyRemoteWrite(Action setter)
     {
         _isApplyingRemoteWrite = true;
@@ -190,6 +204,11 @@ public abstract partial class WebWindowModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// 属性变化处理：切换集合订阅、抑制回声、推送增量。
+    /// </summary>
+    /// <param name="sender">模型实例。</param>
+    /// <param name="e">属性变化事件。</param>
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is null)
@@ -218,17 +237,15 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// 模型元素订阅：集合属性（ObservableCollection&lt;WebWindowModel&gt;）每个元素挂 PropertyChanged，
-    /// 元素属性变化 → 逐元素 ElementSet 补丁推前端。差量增删：新项挂接、离开集合的退订。
-    /// 生成的 SubscribeGeneratedCollections 对模型元素集合调用；结构变化/整体替换由
-    /// <see cref="OnCollectionChanged"/> / <see cref="OnModelPropertyChanged"/> 重同步。
+    /// 模型元素订阅：集合属性每个元素挂 PropertyChanged，元素属性变化 → 逐元素 ElementSet 补丁。
     /// </summary>
     private readonly Dictionary<string, HashSet<WebWindowModel>> _itemSubs = [];
 
     /// <summary>
     /// 确保集合的每个元素都订阅 PropertyChanged（差量增删；items 为 null/空集合时退订全部）。
-    /// 供生成的 SubscribeGeneratedCollections 调用。
     /// </summary>
+    /// <param name="propertyName">集合属性名。</param>
+    /// <param name="items">当前集合元素。</param>
     protected void EnsureItemsSubscribed(string propertyName, IEnumerable? items)
     {
         var wanted = new HashSet<WebWindowModel>();
@@ -265,8 +282,7 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// 元素属性变化 → 逐元素 ElementSet 补丁推全部绑定窗口（.NET 侧原地改元素属性的推送方向）。
-    /// 远程元素级回写期间不推（回声抑制）。元素可出现在多个集合 → 每个包含它的集合各推一条。
+    /// 元素属性变化 → 逐元素 ElementSet 补丁推全部绑定窗口；远程元素级回写期间不推；元素出现在多集合时各推一条。
     /// </summary>
     private void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -291,8 +307,7 @@ public abstract partial class WebWindowModel : ObservableObject
     private readonly Dictionary<string, INotifyCollectionChanged> _collectionSubs = [];
 
     /// <summary>
-    /// 挂接全部集合属性的 CollectionChanged。字段初始化器在基类构造后才执行，基类 ctor 看不到
-    /// 初始集合，须在首次快照时武装；集合被替换由 <see cref="OnModelPropertyChanged"/> 切换订阅。
+    /// 挂接全部集合属性的 CollectionChanged。字段初始化器晚于基类 ctor，须在首次快照时武装。
     /// </summary>
     internal void ArmCollectionSubscriptions()
         => SubscribeGeneratedCollections();
@@ -300,6 +315,8 @@ public abstract partial class WebWindowModel : ObservableObject
     /// <summary>
     /// 确保集合属性的 CollectionChanged 挂到当前实例；值非集合或换了实例时切换订阅。
     /// </summary>
+    /// <param name="propertyName">属性名。</param>
+    /// <param name="value">属性现值。</param>
     protected void EnsureCollectionSubscribed(string propertyName, object? value)
     {
         if (value is not INotifyCollectionChanged coll)
@@ -316,8 +333,7 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// ObservableCollection 增删 → 差量补丁推送：按事件 Action 编码 CollectionPatch，前端原地
-    /// splice，比整列表更新省流量。Reset 不带新旧元素，回退整列表补丁。远程回写期间不推送。
+    /// ObservableCollection 增删 → 差量补丁推送；Reset 不带元素回退整列表补丁；远程回写期间不推送。
     /// </summary>
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -332,7 +348,7 @@ public abstract partial class WebWindowModel : ObservableObject
                 return;
             if (sender is IDictionary)
             {
-                // 字典（ObservableDictionary 等）：键值语义无索引差量，原地改 → 整属性重推，前端整体替换。
+                // 字典：键值语义无索引差量，原地改 → 整属性重推，前端整体替换。
                 if (ModelId == 0)
                     return;
                 if (TryGetGeneratedProperty(kv.Key, out object? value))
@@ -354,6 +370,9 @@ public abstract partial class WebWindowModel : ObservableObject
     /// <summary>
     /// 把集合变更事件编码成差量补丁信封（Insert/Remove/Replace/Move）。
     /// </summary>
+    /// <param name="propertyName">集合属性名。</param>
+    /// <param name="e">集合变更事件。</param>
+    /// <returns>补丁信封的 protobuf 字节。</returns>
     private byte[] BuildPatchEnvelope(string propertyName, NotifyCollectionChangedEventArgs e)
     {
         var patch = new CollectionPatch { Property = propertyName };
@@ -390,6 +409,10 @@ public abstract partial class WebWindowModel : ObservableObject
     /// <summary>
     /// 把集合整体编码成 Reset 补丁信封（Items 承载全量，前端整体替换）。
     /// </summary>
+    /// <param name="propertyName">集合属性名。</param>
+    /// <param name="action">补丁动作（Reset）。</param>
+    /// <param name="value">集合现值。</param>
+    /// <returns>补丁信封的 protobuf 字节。</returns>
     private byte[] BuildPatchEnvelope(string propertyName, CollectionPatchAction action, object? value)
     {
         var patch = new CollectionPatch { Property = propertyName, Action = action };
@@ -404,6 +427,9 @@ public abstract partial class WebWindowModel : ObservableObject
     /// <summary>
     /// 把单个属性编码成增量 update 信封（本地属性变化 / 远程回写后广播共用）。
     /// </summary>
+    /// <param name="propertyName">属性名。</param>
+    /// <param name="value">属性现值。</param>
+    /// <returns>增量 update 信封的 protobuf 字节。</returns>
     private byte[] BuildUpdateEnvelope(string propertyName, object? value)
     {
         var payload = EncodePropertyUpdate(propertyName, value);
@@ -418,6 +444,8 @@ public abstract partial class WebWindowModel : ObservableObject
     /// <summary>
     /// 把远程回写结果广播给除源窗口外的所有绑定窗口（共享模型实例跨窗口同步）。
     /// </summary>
+    /// <param name="propertyName">属性名。</param>
+    /// <param name="exclude">源窗口订阅器（不广播）。</param>
     internal void BroadcastPropertyUpdate(string propertyName, Action<byte[]> exclude)
     {
         if (ModelId == 0)
@@ -428,10 +456,13 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// 前端元素级写回：ModelSet{ElementProperty 非空}。按 ModelInstanceId 在集合里找元素，
-    /// 在回声抑制下原地写该元素属性（复用 item.TrySetProperty，保实例）。ElementProperty 为空 =
-    /// 旧整属性回写（回退 TrySetProperty）。命中返回 true，未命中（元素不存在/属性不可写）返回 false。
+    /// 前端元素级写回：ModelSet{ElementProperty 非空}，按 ModelInstanceId 在集合里找元素原地写属性（保实例）。
     /// </summary>
+    /// <param name="collection">集合属性名。</param>
+    /// <param name="elementInstanceId">目标元素实例 ID。</param>
+    /// <param name="elementProperty">元素属性名（线缆 camelCase；空 = 旧整属性回写）。</param>
+    /// <param name="value">元素属性新值。</param>
+    /// <returns>是否命中并写入。</returns>
     internal bool TrySetElementProperty(string collection, long elementInstanceId, string? elementProperty, ModelValue? value)
     {
         if (string.IsNullOrEmpty(elementProperty))
@@ -465,9 +496,12 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// 把元素级写回结果广播给除源窗口外的所有绑定窗口（共享模型实例跨窗口逐元素同步）。
-    /// elementProperty 是线缆上的 camelCase；按 ID 重读权威值后推 ElementSet 补丁。
+    /// 把元素级写回结果广播给除源窗口外的所有绑定窗口（按 ID 重读权威值后推 ElementSet 补丁）。
     /// </summary>
+    /// <param name="collection">集合属性名。</param>
+    /// <param name="elementInstanceId">目标元素实例 ID。</param>
+    /// <param name="elementProperty">元素属性名（线缆 camelCase）。</param>
+    /// <param name="exclude">源窗口订阅器（不广播）。</param>
     internal void BroadcastElementUpdate(string collection, long elementInstanceId, string elementProperty, Action<byte[]> exclude)
     {
         if (!TryGetGeneratedProperty(collection, out object? collValue) || collValue is not IEnumerable items)
@@ -486,8 +520,12 @@ public abstract partial class WebWindowModel : ObservableObject
 
     /// <summary>
     /// 把单个元素的属性变更编码成 ElementSet 补丁信封（元素级推送 / 元素级写回后跨窗口广播共用）。
-    /// elementProperty 为 .NET 侧 PascalCase 名，线缆上转 camelCase；元素由 ModelInstanceId 寻址。
     /// </summary>
+    /// <param name="collection">集合属性名。</param>
+    /// <param name="elementInstanceId">元素实例 ID。</param>
+    /// <param name="elementProperty">元素属性名（.NET 侧 PascalCase，线缆上转 camelCase）。</param>
+    /// <param name="value">元素属性现值。</param>
+    /// <returns>ElementSet 补丁信封的 protobuf 字节。</returns>
     private byte[] BuildElementUpdateEnvelope(string collection, long elementInstanceId, string elementProperty, object? value)
     {
         var patch = new CollectionPatch
@@ -504,6 +542,7 @@ public abstract partial class WebWindowModel : ObservableObject
     /// <summary>
     /// 生成完整快照信封（页面加载完成 / 前端就绪时发送）。
     /// </summary>
+    /// <returns>完整快照信封的 protobuf 字节。</returns>
     internal byte[] BuildSnapshotEnvelope()
     {
         // 首次推送前武装集合订阅（字段初始化器晚于基类 ctor）。
@@ -524,6 +563,7 @@ public abstract partial class WebWindowModel : ObservableObject
     /// <summary>
     /// 通用完整快照：property → ModelValue（无生成编码器时的回退）。
     /// </summary>
+    /// <returns>通用快照。</returns>
     private ModelSnapshot BuildGenericSnapshot()
     {
         var snapshot = new ModelSnapshot();
@@ -539,15 +579,20 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// 执行前端命令调用（ModelInvoke { commandId, value }）。commandId = [RelayCommand] 声明序，
-    /// 由生成代码命中对应 ICommand；CanExecute 不满足时拒绝执行；未收集的命令返回 false。
+    /// 执行前端命令调用（ModelInvoke { commandId, value }）：commandId = [RelayCommand] 声明序。
     /// </summary>
+    /// <param name="commandId">命令声明序。</param>
+    /// <param name="value">命令参数。</param>
+    /// <returns>是否命中命令。</returns>
     internal bool TryInvokeCommand(int commandId, ModelValue? value)
         => TryInvokeGeneratedCommand(commandId, value);
 
     /// <summary>
     /// 前端回传的属性写入：按名写回（无反射），失败返回 false（不抛异常）。
     /// </summary>
+    /// <param name="name">属性名。</param>
+    /// <param name="value">前端回传的值。</param>
+    /// <returns>是否命中可写属性。</returns>
     internal bool TrySetProperty(string name, ModelValue? value)
         => TrySetGeneratedProperty(name, value);
 }
