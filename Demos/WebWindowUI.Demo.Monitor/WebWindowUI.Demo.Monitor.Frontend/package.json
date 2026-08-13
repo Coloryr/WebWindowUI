@@ -10,9 +10,9 @@
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "vue": "^3.5.41",
     "protobufjs": "^7.6.0",
-    "webwindowui-bridge": "^0.1.5"
+    "vue": "^3.5.41",
+    "webwindowui-bridge": "^0.1.6"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

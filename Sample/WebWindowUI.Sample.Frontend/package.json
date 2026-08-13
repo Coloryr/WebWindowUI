@@ -12,7 +12,7 @@
   "dependencies": {
     "protobufjs": "^7.6.0",
     "vue": "^3.5.41",
-    "webwindowui-bridge": "^0.1.5"
+    "webwindowui-bridge": "^0.1.6"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
