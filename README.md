@@ -17,7 +17,7 @@ C# 后端 + WebView 渲染 + Vue 前端 的跨平台桌面应用框架。
 - **MVVM 命令**：后端 `[RelayCommand]` 方法 → 生成前端命令方法，`CanExecute` 门控。
 - **强类型 typed repeated**：`List<已知模型>` 双向绑定，前端得到强类型 TS 模型（序数键 / 命名键自动转换）。
 - **多窗口共享模型广播**：同一模型实例绑多个窗口，属性变化全广播、远程回写排除源窗口。
-- **跨平台**：Windows=WebView2 / Linux=WebKit2GTK（GTK3）/ macOS=WKWebView（盲写，待 Mac 验证）。
+- **跨平台**：Windows=WebView2 / Linux=WebKit2GTK（GTK3）/ macOS=WKWebView。
 - **单文件发布**：`dotnet publish` 出单个 exe（原生库内嵌 + PDB 内嵌 + 压缩）。
 
 ## 快速开始
@@ -131,9 +131,24 @@ dotnet publish Demos/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery
 |------|------|------|
 | Windows | WebView2（Microsoft.Web.WebView2） | ✅ 已验证 |
 | Linux | WebKit2GTK 4.1 / GTK3（手写 P/Invoke） | 实现完成，运行时待验证 |
-| macOS | WKWebView | 盲写，需 Mac + macos workload 验证 |
+| macOS | WKWebView | ✅ 已验证（net10.0-macos + macos workload） |
 
-平台由 `WebWindowUI.Platform.props` 的 `$(WWUIPlatform)` 统一选择（TFM + 编译符号）。Linux/macOS 限制：`SetIcon` no-op、scheme 无 Cache-Control。
+平台由 `WebWindowUI.Platform.props` 的 `$(WWUIPlatform)` 统一选择（TFM + 编译符号）。平台限制：`SetIcon` no-op（macOS 窗口图标属 App Bundle）；跨平台 E2E 测试目前覆盖 Windows/Linux（macOS 测试工程待补）。
+
+### macOS 构建要求
+
+macOS 应用使用 `net10.0-macos`，需要 Apple Silicon/Intel Mac + 已安装的 macos workload：
+
+```bash
+sudo dotnet workload install macos
+dotnet build MyApp/MyApp.csproj -c Debug -p:WWUIPlatform=MacOS
+```
+
+- **Workload 与 Xcode 小版本错配**时加 `-p:ValidateXcodeVersion=false`（e.g. workload 要 Xcode 26.6、装了 26.5）。
+- **应用 csproj 必须显式 `ApplicationId`**（bundle identifier）：`<ApplicationId Condition="'$(WWUIPlatform)' == 'MacOS'">com.xxx</ApplicationId>`。
+- `RuntimeIdentifier`（osx-arm64/osx-x64）与 Release `SelfContained=true` 由 `WebWindowUI.Platform.props` 按宿主自动设置，无需手写。
+- Debug 构建自动把 wwwroot 拷进 `.app` bundle 的 `Contents/MonoBundle`；Release wwwroot 内嵌进前端 dll。
+- macOS 需要 Xcode（命令行工具）——`.NET Apple SDK` 依赖 Xcode 的编译工具链。
 
 ## 仓库结构
 
@@ -161,5 +176,5 @@ dotnet test  WebWindowUI.slnx -c Debug   # 129 通过：协议 111 + 平台 18�
 
 - .NET 10 SDK
 - Node.js / npm（前端 vite 构建，rolldown 内核 vite 8）
-- Windows：WebView2 Runtime（Win11 自带）；Linux：`libwebkit2gtk-4.1-0`（Ubuntu，WebKit2GTK 4.1 / GTK3）
+- Windows：WebView2 Runtime（Win11 自带）；Linux：`libwebkit2gtk-4.1-0`（Ubuntu，WebKit2GTK 4.1 / GTK3）；macOS：`dotnet workload install macos` + Xcode（Apple SDK 依赖其编译工具链）
 - NuGet：protobuf-net、CommunityToolkit.Mvvm（CPM 集中版本，见 `Directory.Packages.props`）

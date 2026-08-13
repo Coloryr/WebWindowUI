@@ -2,12 +2,15 @@
 
   <PropertyGroup>
     <!-- 配置键控：Debug=Exe（开发控制台看日志）、Release=WinExe（无控制台窗口）。
-         WinExe 的 WindowsSubsystem 仅 Windows 生效，Linux/macOS 上等效于 Exe。 -->
+         WinExe 的 WindowsSubsystem 仅 Windows 生效；Linux 上等效 Exe，macOS 由 WebWindowUI.targets 覆盖回
+         Exe（.NET Apple SDK 硬拒 WinExe）。 -->
     <OutputType Condition="'$(Configuration)' == 'Debug'">Exe</OutputType>
     <OutputType Condition="'$(Configuration)' == 'Release'">WinExe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- macOS 打包需要 bundle identifier（.NET Apple SDK 生成 .app 必需；Windows/Linux 忽略该属性）。 -->
+    <ApplicationId Condition="'$(WWUIPlatform)' == 'MacOS'">com.webwindowui.demo.sharednotes</ApplicationId>
   </PropertyGroup>
 
   <ItemGroup>

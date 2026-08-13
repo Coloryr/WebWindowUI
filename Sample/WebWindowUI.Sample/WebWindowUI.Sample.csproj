@@ -4,9 +4,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-	<UseCEF>true</UseCEF>
+	<UseCEF>false</UseCEF>
     <OutputType Condition="'$(Configuration)' == 'Debug'">Exe</OutputType>
     <OutputType Condition="'$(Configuration)' == 'Release'">WinExe</OutputType>
+    <ApplicationId Condition="'$(WWUIPlatform)' == 'MacOS'">com.webwindowui.sample</ApplicationId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,5 +15,5 @@
     <ProjectReference Include="..\WebWindowUI.Sample.Frontend\WebWindowUI.Sample.Frontend.csproj" />
     <ProjectReference Include="..\..\Core\WebWindowUI\WebWindowUI.csproj" />
   </ItemGroup>
-  
+
 </Project>

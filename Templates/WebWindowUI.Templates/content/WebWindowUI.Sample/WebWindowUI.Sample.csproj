@@ -7,6 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- macOS 打包需要 bundle identifier（.NET Apple SDK 生成 .app 必需；Windows/Linux 忽略该属性）。
+         换成你自己的反域标识，如 com.yourcompany.<AppName>。 -->
+    <ApplicationId Condition="'$(WWUIPlatform)' == 'MacOS'">com.webwindowui.sample</ApplicationId>
   </PropertyGroup>
 
   <ItemGroup>

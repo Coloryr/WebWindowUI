@@ -1,6 +1,9 @@
+using System.Text;
+using WebKit;
 using WebWindowUI.Core;
+using WebWindowUI.Core.Protocol;
 
-namespace WebWindowUI.MacOS;
+namespace WebWindowUI.Platforms.MacOS;
 
 /// <summary>
 /// macOS 平台：NSWindow + WKWebView 的窗口，可创建多个实例。
@@ -41,12 +44,11 @@ public sealed class MacOSWindow : IWindowBackend
         _windowDelegate = new MacWindowDelegate(OnWindowWillClose);
         window.Delegate = _windowDelegate;
 
-        // 自定义 scheme（app:// / appbin://）按窗口独立注册，回调里经 owner 分派
-        _schemeHandler = new MacSchemeHandler(this);
+        // 自定义 scheme（app:// / appdata://）按窗口独立注册；回调走静态 WebWindowResource 分派
+        _schemeHandler = new MacSchemeHandler();
         var config = new WKWebViewConfiguration();
-        config.SetUrlSchemeHandler(_schemeHandler, options.Scheme);
-        if (!string.IsNullOrEmpty(options.DataScheme) && options.DataScheme != options.Scheme)
-            config.SetUrlSchemeHandler(_schemeHandler, options.DataScheme);
+        config.SetUrlSchemeHandler(_schemeHandler, WebWindowResource.Scheme);
+        config.SetUrlSchemeHandler(_schemeHandler, WebWindowResource.SchemeData);
 
         // JS → native 通道：页面经 window.webkit.messageHandlers.wwui.postMessage(...) 回传 NUL 转义串
         _scriptMessageHandler = new MacScriptMessageHandler(bytes => MessageReceived?.Invoke(bytes));
@@ -76,7 +78,9 @@ public sealed class MacOSWindow : IWindowBackend
             false) // defer: 立即创建原生窗口
         {
             Title = title,
+#pragma warning disable CS0618 // ReleasedWhenClosed 属性过时（新 API ReleaseWhenClosed() 语义相反：关闭即释放，这里正是要防止它）
             ReleasedWhenClosed = false, // 否则 Close() 后 NSObject 可能被过度释放
+#pragma warning restore CS0618
         };
         return new MacOSWindow(window, options);
     }
@@ -92,7 +96,9 @@ public sealed class MacOSWindow : IWindowBackend
                 _window.MakeKeyAndOrderFront(null);
                 _window.MakeFirstResponder(_webView);
             }
-            _webView.LoadRequest(NSUrlRequest.FromUrl(NSUrl.FromString(_options.HomeUrl)));
+            var url = WebWindowResource.GetWindowIndexUrl(_options.WindowPath);
+            WebWindowLog.Debug($"macos show {url}");
+            _webView.LoadRequest(NSUrlRequest.FromUrl(NSUrl.FromString(url)!));
         });
     }
 
@@ -202,9 +208,7 @@ public sealed class MacOSWindow : IWindowBackend
             return;
         _closed = true;
         Closed?.Invoke();
-        WebWindow.NotifyWindowClosed();
-        if (WebWindow.OpenCount == 0)
-            NSApplication.SharedApplication.Terminate(null); // 最后一个窗口关闭，退出主事件循环
+        MacOSPlatform.WindowClose(this); // 注销窗口表；最后一个窗口关闭 → Terminate 退出主事件循环
     }
 
     /// <summary>
@@ -235,7 +239,11 @@ public sealed class MacOSWindow : IWindowBackend
     private sealed class MacNavigationDelegate(Action onFinished) : NSObject, IWKNavigationDelegate
     {
         [Export("webView:didFinishNavigation:")]
-        public void DidFinishNavigation(WKWebView webView, WKNavigation navigation) => onFinished();
+        public void DidFinishNavigation(WKWebView webView, WKNavigation navigation)
+        {
+            WebWindowLog.Debug("macos nav-finished");
+            onFinished();
+        }
     }
 
     /// <summary>
@@ -254,39 +262,31 @@ public sealed class MacOSWindow : IWindowBackend
     }
 
     /// <summary>
-    /// 自定义 scheme 响应（app:// / appbin://）。WKURLSchemeTask 的回调在后台队列触发，
+    /// 自定义 scheme 响应（app:// / appdata://）。WKURLSchemeTask 的回调在后台队列触发，
     /// 这里同步构造响应即可（读流 → NSData → DidReceiveResponse/Data/Finish）。
+    /// app 与 appdata 统一走 <see cref="WebWindowResource"/>：UI 资源（wwwroot）与数据通道
+    /// （custom route）由它按 scheme + host 分派（镜像 Windows 的 OnWebResourceRequested / Linux 的 HandleUriSchemeRequest）。
     /// </summary>
-    private sealed class MacSchemeHandler(MacOSWindow owner) : NSObject, IWKUrlSchemeHandler
+    private sealed class MacSchemeHandler : NSObject, IWKUrlSchemeHandler
     {
         [Export("webView:startURLSchemeTask:")]
         public void StartUrlSchemeTask(WKWebView webView, IWKUrlSchemeTask urlSchemeTask)
         {
             try
             {
-                var uri = urlSchemeTask.Request.Url.AbsoluteString;
-                var options = owner._options;
-
-                // 数据通道：请求来自 DataScheme 时交给 DataRoutes（自动注册路由），否则走 UI 资源（WebResourceResolver）
-                var isData = WebResourceLocator.IsScheme(uri, options.DataScheme);
-                var scheme = isData ? options.DataScheme! : options.Scheme;
-                var resolver = isData ? (Func<string, Stream?>)DataRoutes.Resolve : WebResourceResolver.Resolve;
-
-                if (resolver is not null && WebResourceLocator.TryResolvePath(uri, scheme, out string? relative, out string? mimeType))
+                var uri = urlSchemeTask.Request.Url?.AbsoluteString;
+                if (uri is not null
+                    && WebWindowResource.TryResolvePath(uri, out string? relative, out string? mimeType) is { } stream)
                 {
-                    var stream = resolver(relative!);
-                    if (stream is not null)
+                    using (stream)
                     {
-                        using (stream)
-                        {
-                            // 读全量字节再交给 NSData（响应需一次给完；嵌入式流不可 seek）
-                            using var ms = new MemoryStream();
-                            stream.CopyTo(ms);
-                            var bytes = ms.ToArray();
-                            SendResponse(urlSchemeTask, 200, mimeType!, ResourceHeaders.CacheControl(relative!), bytes);
-                        }
-                        return;
+                        // 读全量字节再交给 NSData（响应需一次给完；嵌入式流不可 seek）
+                        using var ms = new MemoryStream();
+                        stream.CopyTo(ms);
+                        var bytes = ms.ToArray();
+                        SendResponse(urlSchemeTask, 200, mimeType!, ResourceHeaders.CacheControl(relative!), bytes);
                     }
+                    return;
                 }
             }
             catch

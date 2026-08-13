@@ -1,3 +1,5 @@
+using WebWindowUI.Core;
+
 namespace WebWindowUI.Demo.Monitor;
 
 /// <summary>
@@ -10,7 +12,7 @@ internal sealed class MainWindow : WebWindow
     private Timer? _timer;
 
     public MainWindow(MonitorModel model)
-        : base("main", "系统监控", width: 900, height: 680)
+        : base(new WebWindowOptions("main") { Title = "系统监控", Width = 900, Height = 680 })
     {
         Model = model;
         model.Settings.PropertyChanged += OnSettingsChanged;
@@ -39,7 +41,7 @@ internal sealed class MainWindow : WebWindow
 internal sealed class SettingsWindow : WebWindow
 {
     public SettingsWindow(MonitorSettingsModel settings)
-        : base("settings", "监控设置", width: 560, height: 520)
+        : base(new WebWindowOptions("settings") { Title = "监控设置", Width = 560, Height = 520 })
     {
         Model = settings;
     }
@@ -50,8 +52,6 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
-        WebWindowUI.Platform.EnsureRegistered();
-
         // 同一个 MonitorModel 实例给两个窗口用（master-detail）：
         //   main     绑定 MonitorModel（实时监控；Settings 是嵌套模型，主窗口 ordinal 翻译展示）
         //   settings 绑定 model.Settings 同一子实例（强类型编辑，改间隔即时生效）
@@ -59,6 +59,6 @@ internal static class Program
         new MainWindow(model).Show();
         new SettingsWindow(model.Settings).Show();
 
-        WebWindow.RunMessageLoop();
+        WebWindowUIPlatform.Run();
     }
 }

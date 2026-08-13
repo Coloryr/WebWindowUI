@@ -1,4 +1,4 @@
-using WebWindowUI;
+using WebWindowUI.Core;
 
 namespace WebWindowUI.Sample;
 
@@ -8,7 +8,7 @@ namespace WebWindowUI.Sample;
 internal sealed class MainWindow : WebWindow
 {
     public MainWindow(MainModel model)
-        : base("main", "WebWindowUI 应用", width: 800, height: 600)
+        : base(new WebWindowOptions("main") { Title = "WebWindowUI 应用", Width = 800, Height = 600 })
     {
         Model = model;
     }
@@ -19,12 +19,10 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
-        WebWindowUI.Platform.EnsureRegistered();
-
         // 前端页面 src/window/main/（Vue + Vite 产物经 BuildFrontend 直产本工程 wwwroot）。
         MainWindow window = new(new MainModel());
         window.Show();
 
-        WebWindow.RunMessageLoop();
+        WebWindowUIPlatform.Run();
     }
 }

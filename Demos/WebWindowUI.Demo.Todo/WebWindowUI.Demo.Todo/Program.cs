@@ -1,3 +1,5 @@
+using WebWindowUI.Core;
+
 namespace WebWindowUI.Demo.Todo;
 
 /// <summary>
@@ -7,7 +9,7 @@ namespace WebWindowUI.Demo.Todo;
 internal sealed class MainWindow : WebWindow
 {
     public MainWindow(TodoListModel model)
-        : base("main", "待办事项", width: 860, height: 640)
+        : base(new WebWindowOptions("main") { Title = "待办事项", Width = 860, Height = 640 })
     {
         Model = model;
     }
@@ -18,13 +20,11 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
-        WebWindowUI.Platform.EnsureRegistered();
-
         // 启动即从 %LocalAppData%\WebWindowUI.Demo.Todo\todos.json 加载历史任务。
         TodoListModel model = new();
         MainWindow window = new(model);
         window.Show();
 
-        WebWindow.RunMessageLoop();
+        WebWindowUIPlatform.Run();
     }
 }

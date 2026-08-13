@@ -490,6 +490,14 @@
     </ItemGroup>
   </Target>
 
+  <PropertyGroup Condition="'$(WWUIPlatform)' == 'MacOS' And '$(OutputType)' == 'WinExe'">
+    <!-- macOS 的 .NET Apple SDK 硬拒 WinExe（_VerifyValidOutputType：WinExe is not a valid output type for macOS）——
+         Cocoa 无控制台子系统区分，Release 也用 Exe 即可。Linux 上 WinExe 等效 Exe 保留原样。
+         targets 在 csproj 正文之后求值，这里把正文的 Release=WinExe 覆盖回 Exe；
+         Backend/Frontend 的 OutputType=Library 不命中条件，不受影响。 -->
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
   <!-- 平台分派注入（应用工程：_WWUI_EntryRef 非空且 OutputType 非 Library——标记库工程引用入口但
        是 Library，不注入）：
        UseCEF / WWUIPlatform 只对应用工程自身可见，平台选择在此处烤进应用工程的 PlatformBootstrap.g.cs——
@@ -542,6 +550,24 @@
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </ContentWithTargetPath>
     </ItemGroup>
+  </Target>
+
+  <!-- macOS Debug：wwwroot 还要进 .app bundle 的 Contents\MonoBundle（AppContext.BaseDirectory）。
+       AddWebWindowUIResourcesCopy 的 ContentWithTargetPath 只拷到 $(OutDir)（net10.0-macos/osx-arm64\wwwroot），
+       .NET macOS SDK 不把它带进 bundle——运行时 WebResourceResolver 磁盘回退读 AppContext.BaseDirectory\wwwroot
+       = Contents\MonoBundle\wwwroot，缺了页面全 404。Content 项也只落 Contents\Resources（不是 MonoBundle）。
+       Release 短路：wwwroot 已内嵌进前端 dll（同 AddWebWindowUIResourcesCopy），无需磁盘副本。
+       挂 AfterTargets="Build"：bundle 装配（_CreateAppBundle 链）在 Build 内完成，此时 MonoBundle 已就绪可安全拷贝。
+       durable 坑：AppBundleDir 无尾部斜杠（osx-arm64\X.app），拼接 Contents 须显式加分隔符，否则成 X.appContents\。 -->
+  <Target Name="_WWUI_MacOSBundleWwwroot"
+          Condition="'$(Configuration)' != 'Release' And '$(WWUIPlatform)' == 'MacOS' And '$(AppBundleDir)' != '' And Exists('$(OutDir)\wwwroot')"
+          AfterTargets="Build">
+    <ItemGroup>
+      <_WWUI_MacWwwroot Include="$(OutDir)\wwwroot\**" Exclude="$(OutDir)\wwwroot\.frontend-stamp" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WWUI_MacWwwroot)"
+          DestinationFiles="@(_WWUI_MacWwwroot -> '$(MSBuildProjectDirectory)\$(AppBundleDir)\Contents\MonoBundle\wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

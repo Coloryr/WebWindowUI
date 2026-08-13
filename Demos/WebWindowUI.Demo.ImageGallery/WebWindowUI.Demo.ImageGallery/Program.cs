@@ -1,3 +1,5 @@
+using WebWindowUI.Core;
+
 namespace WebWindowUI.Demo.ImageGallery;
 
 /// <summary>
@@ -7,7 +9,7 @@ namespace WebWindowUI.Demo.ImageGallery;
 internal sealed class MainWindow : WebWindow
 {
     public MainWindow(ImageGalleryModel model)
-        : base("main", "图片画廊", width: 920, height: 700)
+        : base(new WebWindowOptions("main") { Title = "图片画廊", Width = 920, Height = 700 })
     {
         Model = model;
     }
@@ -18,13 +20,11 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
-        WebWindowUI.Platform.EnsureRegistered();
-
         // 启动即扫描 %LocalAppData%\WebWindowUI.Demo.ImageGallery\images，把每张图片字节发给前端。
         ImageGalleryModel model = new();
         MainWindow window = new(model);
         window.Show();
 
-        WebWindow.RunMessageLoop();
+        WebWindowUIPlatform.Run();
     }
 }

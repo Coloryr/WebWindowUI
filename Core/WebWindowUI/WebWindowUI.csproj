@@ -96,8 +96,8 @@
   </PropertyGroup>
   <Target Name="_PackGeneratorTools">
     <ItemGroup>
-      <TfmSpecificPackageFile Include="..\..\WebWindowUI.Generator\bin\$(Configuration)\net10.0\**"
-                              Exclude="..\..\WebWindowUI.Generator\bin\$(Configuration)\net10.0\*\*">
+      <TfmSpecificPackageFile Include="..\..\Generator\WebWindowUI.Generator\bin\$(Configuration)\net10.0\**"
+                              Exclude="..\..\Generator\WebWindowUI.Generator\bin\$(Configuration)\net10.0\*\*">
         <PackagePath>tools/net10.0/</PackagePath>
       </TfmSpecificPackageFile>
     </ItemGroup>

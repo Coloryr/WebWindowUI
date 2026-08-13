@@ -1,4 +1,6 @@
-namespace WebWindowUI.MacOS;
+using CoreFoundation;
+
+namespace WebWindowUI.Platforms.MacOS;
 
 /// <summary>
 /// 把 async 延续派发回 Cocoa 主事件循环的 SynchronizationContext（macOS 版）。

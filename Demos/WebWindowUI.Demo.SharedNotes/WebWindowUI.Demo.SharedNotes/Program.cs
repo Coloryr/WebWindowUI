@@ -1,3 +1,5 @@
+using WebWindowUI.Core;
+
 namespace WebWindowUI.Demo.SharedNotes;
 
 /// <summary>
@@ -7,7 +9,7 @@ namespace WebWindowUI.Demo.SharedNotes;
 internal sealed class MainWindow : WebWindow
 {
     public MainWindow(NotesModel model)
-        : base("main", "共享便签 · 编辑", width: 820, height: 620)
+        : base(new WebWindowOptions("main") { Title = "共享便签 · 编辑", Width = 820, Height = 620 })
     {
         Model = model;
     }
@@ -20,7 +22,7 @@ internal sealed class MainWindow : WebWindow
 internal sealed class MonitorWindow : WebWindow
 {
     public MonitorWindow(NotesModel model)
-        : base("monitor", "共享便签 · 监看", width: 640, height: 560)
+        : base(new WebWindowOptions("monitor") { Title = "共享便签 · 监看", Width = 640, Height = 560 })
     {
         Model = model;
     }
@@ -31,14 +33,12 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
-        WebWindowUI.Platform.EnsureRegistered();
-
         // 同一个 NotesModel 实例绑定两个窗口：任一窗口的发送/删除广播到所有订阅者，
         // 改动源窗口不重复接收（框架排除远程回写源），其它窗口实时跟随 —— 双屏共享便签本。
         NotesModel model = new();
         new MainWindow(model).Show();
         new MonitorWindow(model).Show();
 
-        WebWindow.RunMessageLoop();
+        WebWindowUIPlatform.Run();
     }
 }
