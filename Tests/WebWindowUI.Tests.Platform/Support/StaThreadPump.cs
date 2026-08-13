@@ -1,7 +1,7 @@
 #if WINDOWS
 using System.Collections.Concurrent;
+using WebWindowUI.Core;
 using WebWindowUI.Natives.Windows;
-using WebWindowUI.Platforms.Windows;
 
 namespace WebWindowUI.Tests.Platform.Support;
 
@@ -9,14 +9,16 @@ namespace WebWindowUI.Tests.Platform.Support;
 /// STA 泵：一根独占的 STA 线程承载所有触碰平台的测试工作。
 ///
 /// 为什么必须这样：
-///   WebWindowPlatform.Current 是静态单例，首次构造 WindowsPlatform 时会在「当前线程」
-///   创建隐藏消息窗口并绑定单例 MessageLoopSynchronizationContext（UiThreadId 记为当前线程）。
-///   之后任何 off-thread 的 PostMessage/ExecuteScriptAsync 都会 marshal 回这个线程。
-///   如果测试在多个线程各建一次窗口，UiThreadId 被污染 → 死循环。
+///   WebWindowPlatform.Current 是静态单例，平台 [ModuleInitializer] 在「加载平台程序集的线程」上
+///   构造 WindowsPlatform 并绑定单例 MessageLoopSynchronizationContext（隐藏消息窗口 + UiThreadId）。
+///   隐藏消息窗口归创建线程所有，SC.Post（async 延续）经 PostMessageW(WM_RUN) 只投给它的创建线程——
+///   若创建线程不是本泵线程，消息落进那个线程（无泵）的队列，延续永不派发 → 测试挂在 await。
+///   故平台注册必须发生在本泵线程，且泵线程必须先于一切创建自己的隐藏消息窗口。
 ///
-/// 泵线程初始化顺序（与本库 WindowsPlatform 构造逻辑一致）：
-///   GetOrCreateMarshalWindow() → MessageLoopSynchronizationContext.Initialize(hwnd)
-///   → SetSynchronizationContext(Instance)，之后进入泵循环。
+/// 泵线程初始化顺序：
+///   创建隐藏消息窗口（GetOrCreateMarshalWindow 进程单例，泵线程首次创建即归泵）
+///   → 绑定 SC → 本线程加载平台程序集（[ModuleInitializer] 在本线程 Register，
+///   WindowsPlatform ctor 复用上面的 hwnd、把 UiThreadId 重绑为泵线程）→ 进入泵循环。
 ///
 /// 泵循环 = 排干工作队列 → 派发所有就绪消息（吞掉 WM_QUIT，关最后一个窗口会
 /// PostQuitMessage）→ MsgWaitForMultipleObjectsEx 挂起等「工作信号 / 新消息 / 200ms 兜底」。
@@ -95,22 +97,31 @@ internal sealed class StaThreadPump
     {
         try
         {
-            // typeof 强制在泵线程加载平台程序集 → [ModuleInitializer] new WindowsPlatform() 完成注册
-            //（编译期静态引用，AOT 安全）。
-            _ = typeof(WindowsPlatform);
-
-            // 与 WindowsPlatform 构造一致：在本线程绑定平台单例（幂等兜底）
+            // 1. 泵线程先创建自己的隐藏消息窗口并绑定 SC —— 谁创建窗口谁拥有其消息队列。
+            //    所有 SC.Post（async 延续）经 PostMessageW(WM_RUN) 投到该窗口，只能由拥有它的线程
+            //    （本泵）派发。平台 [ModuleInitializer] 的 WindowsPlatform 构造也会 InitMessageLoop
+            //    （GetOrCreateMarshalWindow 是进程单例）——只要这里抢到首次创建，窗口就归泵线程。
+            Win32.SetMarshalMessageHandler(HandleMarshalMessage);
             var hwnd = Win32.GetOrCreateMarshalWindow("WebView2MarshalWindow");
             MessageLoopSynchronizationContext.Initialize(hwnd);
             SynchronizationContext.SetSynchronizationContext(MessageLoopSynchronizationContext.Instance);
+
+            // 2. 在本线程注册平台：加载平台程序集触发 [ModuleInitializer]（Register ??=），
+            //    WindowsPlatform ctor 复用上面的 hwnd、把 UiThreadId 重绑为泵线程。
+            //    绝不能先让别的线程加载平台程序集——module init 会在该线程建 marshal 窗口，
+            //    WM_RUN 落进那个线程（无泵）的队列，async 延续永不派发（历史死锁根因）。
+            EnsurePlatformRegistered();
+            Trace.Log("pump: platform registered");
         }
         catch (Exception ex)
         {
             _initError = ex;
+            Trace.Log($"pump: init error {ex}");
             _ready.Set();
             return;
         }
         _ready.Set();
+        Trace.Log("pump: ready, entering loop");
 
         while (true)
         {
@@ -120,6 +131,7 @@ internal sealed class StaThreadPump
                 try { job(); } catch { /* job 内部已捕获异常并设置 tcs */ }
             }
 
+            Trace.Log("pump: cycle");
             PumpPendingMessages();
 
             // 3. 挂起等待：工作信号 / 新消息 / 200ms 兜底
@@ -127,6 +139,38 @@ internal sealed class StaThreadPump
             PumpWin32.MsgWaitForMultipleObjectsEx(
                 1, new[] { handle }, 200,
                 PumpWin32.QS_ALLINPUT, PumpWin32.MWMO_INPUTAVAILABLE);
+        }
+    }
+
+    /// <summary>
+    /// marshal 窗口的 WM_RUN 处理器：排干 SC 队列、在泵线程执行 async 延续（同 Win32MessageLoop）。
+    /// </summary>
+    private static IntPtr? HandleMarshalMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
+    {
+        if (msg == Win32.WM_RUN)
+        {
+            MessageLoopSynchronizationContext.Instance.RunQueued();
+            return IntPtr.Zero;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 在本线程（泵线程）加载平台程序集并注册：平台 [ModuleInitializer] 在加载线程上
+    /// Register(new WindowsPlatform())。GetOrCreateMarshalWindow 是进程单例——泵线程已在
+    /// 前面创建过，WindowsPlatform ctor 的 InitMessageLoop 只会复用泵线程的窗口。
+    /// 若 module init 因故未生效（Register ??= 已注册则跳过），显式 Register 兜底。
+    /// </summary>
+    private static void EnsurePlatformRegistered()
+    {
+        _ = typeof(WebWindowUI.Platforms.Windows.WindowsPlatform);
+        try
+        {
+            _ = WebWindowPlatform.Current; // module init 已注册即返回
+        }
+        catch (PlatformNotSupportedException)
+        {
+            WebWindowPlatform.Register(new WebWindowUI.Platforms.Windows.WindowsPlatform());
         }
     }
 

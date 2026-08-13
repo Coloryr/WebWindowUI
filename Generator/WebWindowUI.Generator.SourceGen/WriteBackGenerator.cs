@@ -1,6 +1,6 @@
-using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
+using System.Text;
 
 namespace WebWindowUI.Generator.SourceGen;
 
@@ -81,13 +81,15 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
             if (member is IFieldSymbol f && HasAttribute(f, ObservablePropertyAttribute))
             {
                 var pName = FieldToPropertyName(f.Name);
+                var kind = GetCollectionKind(f.Type);
                 props[pName] = new PropInfo(
                     pName,
                     f.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     f.IsReadOnly,
                     IsCollection(f.Type, incc),
                     fieldNumbers.TryGetValue(pName, out int n) ? n : 0,
-                    GetCollectionKind(f.Type));
+                    kind,
+                    IsModelElementCollection(f.Type) && kind == CollectionKind.List);
             }
         }
         foreach (var member in sym.GetMembers())
@@ -102,13 +104,15 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
             {
                 var writable = pr.SetMethod is { IsStatic: false } setter
                     && setter.DeclaredAccessibility == Accessibility.Public;
+                var kind = GetCollectionKind(pr.Type);
                 props[pr.Name] = new PropInfo(
                     pr.Name,
                     pr.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     !writable,
                     IsCollection(pr.Type, incc),
                     fieldNumbers.TryGetValue(pr.Name, out int n) ? n : 0,
-                    GetCollectionKind(pr.Type));
+                    kind,
+                    IsModelElementCollection(pr.Type) && kind == CollectionKind.List);
             }
         }
 
@@ -177,6 +181,17 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
     }
 
     /// <summary>
+    /// 集合元素是否为 WebWindowModel 子类（元素级寻址/逐元素推送的前提：元素带 ModelInstanceId 与 PropertyChanged）。
+    /// 泛型集合取第一个类型实参判定；非泛型/非模型元素返回 false。
+    /// </summary>
+    private static bool IsModelElementCollection(ITypeSymbol type)
+    {
+        if (type is not INamedTypeSymbol nt || !nt.IsGenericType || nt.TypeArguments.Length == 0)
+            return false;
+        return nt.TypeArguments[0] is INamedTypeSymbol elem && IsDerivedFromWebWindowModel(elem);
+    }
+
+    /// <summary>
     /// 集合类型分类（TrySet 原地清空重建用）：可原地重建的可变集合 → List/Dict；其余 None。
     /// ObservableCollection/ObservableDictionary 是框架的 INotifyCollectionChanged 集合，前端整列/整字典
     /// 回写不替换实例而是 Clear + 逐项 Add——get-only 只读属性也能写回，且保留实例与订阅。
@@ -192,7 +207,7 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
             ("System.Collections.ObjectModel", "ObservableCollection") => CollectionKind.List,
             ("System.Collections.Generic", "List") => CollectionKind.List,
             ("System.Collections.Generic", "IList") => CollectionKind.List,
-            ("WebWindowUI.Core", "ObservableDictionary") => CollectionKind.Dict,
+            ("WebWindowUI.Core.Observable", "ObservableDictionary") => CollectionKind.Dict,
             ("System.Collections.Generic", "Dictionary") => CollectionKind.Dict,
             ("System.Collections.Generic", "IDictionary") => CollectionKind.Dict,
             _ => CollectionKind.None,
@@ -331,13 +346,15 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
         foreach (PropInfo p in m.Props)
             if (p.IsCollection)
                 colls.Add(p);
+        var modelElems = colls.Where(p => p.IsModelElements).ToList();
         w.Line("protected override void SubscribeGeneratedCollections()");
+        // 无集合属性 → 空实现；仅集合订阅 → 表达式体；模型元素集合还须挂元素订阅 → 块体。
         if (colls.Count == 0)
         {
             w.Line("{");
             w.Line("}");
         }
-        else if (colls.Count == 1)
+        else if (colls.Count == 1 && modelElems.Count == 0)
         {
             w.Line($"    => EnsureCollectionSubscribed(\"{colls[0].Name}\", {colls[0].Name});");
         }
@@ -346,6 +363,8 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
             w.Open("{");
             foreach (PropInfo p in colls)
                 w.Line($"EnsureCollectionSubscribed(\"{p.Name}\", {p.Name});");
+            foreach (PropInfo p in modelElems)
+                w.Line($"EnsureItemsSubscribed(\"{p.Name}\", {p.Name});");
             w.Close("}");
         }
         w.Line();
@@ -428,8 +447,10 @@ public sealed class WriteBackGenerator : IIncrementalGenerator
     internal enum CollectionKind { None, List, Dict }
 
     /// <summary>属性元数据；Number = proto 字段号（声明顺序 1..N，来自 ModelProtoGenerator.CollectFieldNumbers；
-    /// 0 = 未解析到序号，POCO 序数 case 跳过）。Kind = 集合类型分类（TrySet 原地清空重建用）。</summary>
-    internal sealed record PropInfo(string Name, string Type, bool IsReadOnly, bool IsCollection, int Number, CollectionKind Kind);
+    /// 0 = 未解析到序号，POCO 序数 case 跳过）。Kind = 集合类型分类（TrySet 原地清空重建用）。
+    /// IsModelElements = 集合元素是 WebWindowModel 子类（元素级寻址/逐元素推送，产 EnsureItemsSubscribed）。</summary>
+    internal sealed record PropInfo(string Name, string Type, bool IsReadOnly, bool IsCollection, int Number, CollectionKind Kind,
+        bool IsModelElements = false);
 
     internal sealed record CmdInfo(string Name, string? ParamType);
 

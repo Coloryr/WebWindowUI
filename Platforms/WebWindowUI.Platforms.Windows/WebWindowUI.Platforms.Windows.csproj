@@ -4,7 +4,6 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-
     <PackageId>WebWindowUI.Platforms.Windows</PackageId>
     <Description>WebWindowUI Windows 平台实现：WebView2 窗口宿主 + Win32 P/Invoke。由核心包 WebWindowUI 按平台自动引入，消费方无需显式引用。</Description>
     <PackageTags>webwindowui;webview2;windows</PackageTags>

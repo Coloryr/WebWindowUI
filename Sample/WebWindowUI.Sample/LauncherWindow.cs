@@ -16,7 +16,7 @@ internal sealed class LauncherWindow : WebWindow
     private readonly LauncherModel _model;
 
     public LauncherWindow() : base(new WebWindowOptions("launcher")
-    { 
+    {
         Title = "WebWindowUI 示例入口",
         Width = 760,
         Height = 640

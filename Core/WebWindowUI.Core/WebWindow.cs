@@ -10,13 +10,6 @@ namespace WebWindowUI.Core;
 /// </summary>
 public abstract class WebWindow
 {
-    /// <summary>
-    /// 当前打开的窗口数量。
-    /// </summary>
-    public static int OpenCount => _openCount;
-
-    private static int _openCount;
-
     private readonly IWindowBackend _backend;
     private WebWindowModel? _model;
     private bool _pageLoaded;
@@ -32,7 +25,6 @@ public abstract class WebWindow
         _backend.Closed += () => Closed?.Invoke();
         _backend.MessageReceived += OnBackendMessageReceived;
         Title = options.Title;
-        NotifyWindowOpened();
     }
 
     /// <summary>
@@ -137,11 +129,19 @@ public abstract class WebWindow
                 return;
             }
 
-            // 前端双向绑定回写：ModelSet。应用成功后广播给其它绑定窗口（跨窗口同步）。
+            // 前端双向绑定回写：ModelSet。ElementProperty 非空 = 集合元素级写回（按 ModelInstanceId 定位元素、
+            // 只改该元素属性，保实例），否则旧整属性行为。应用成功后广播给其它绑定窗口（跨窗口同步）。
             if (msg.Set is not null && _model is not null)
             {
-                if (_model.TrySetProperty(msg.Set.Property, msg.Set.Value))
-                    _model.BroadcastPropertyUpdate(msg.Set.Property, _backend.PostMessage);
+                if (string.IsNullOrEmpty(msg.Set.ElementProperty))
+                {
+                    if (_model.TrySetProperty(msg.Set.Property, msg.Set.Value))
+                        _model.BroadcastPropertyUpdate(msg.Set.Property, _backend.PostMessage);
+                }
+                else if (_model.TrySetElementProperty(msg.Set.Property, msg.Set.ElementInstanceId, msg.Set.ElementProperty, msg.Set.Value))
+                {
+                    _model.BroadcastElementUpdate(msg.Set.Property, msg.Set.ElementInstanceId, msg.Set.ElementProperty, _backend.PostMessage);
+                }
             }
 
             // 前端命令调用：ModelInvoke，执行模型上的 ICommand（[RelayCommand] 源生成）。
@@ -153,7 +153,4 @@ public abstract class WebWindow
             // 无法解析或未知消息，忽略
         }
     }
-
-    internal static void NotifyWindowOpened() => Interlocked.Increment(ref _openCount);
-    internal static void NotifyWindowClosed() => Interlocked.Decrement(ref _openCount);
 }

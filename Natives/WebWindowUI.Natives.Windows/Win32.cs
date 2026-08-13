@@ -9,7 +9,7 @@ namespace WebWindowUI.Natives.Windows;
 /// 隐藏消息窗口的 WM_RUN 调度经 <see cref="SetMarshalMessageHandler"/> 由各平台接入自己的
 /// MessageLoopSynchronizationContext，本类不引用任何平台类型。
 /// </summary>
-public static partial class Win32
+internal static partial class Win32
 {
     // ---- 常量 ----
     public const uint CS_HREDRAW = 0x0001;

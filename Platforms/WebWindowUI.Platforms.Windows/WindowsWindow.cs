@@ -1,5 +1,3 @@
-using System.Drawing;
-using System.Text;
 using Microsoft.Web.WebView2.Core;
 using WebWindowUI.Core;
 using WebWindowUI.Core.Protocol;
@@ -13,40 +11,67 @@ namespace WebWindowUI.Platforms.Windows;
 /// </summary>
 public sealed class WindowsWindow : IWindowBackend
 {
-    private readonly IntPtr _hwnd;
     private readonly WebWindowOptions _options;
-    private CoreWebView2Controller? _controller;
-    private IntPtr _hIcon;
-    private bool _closed;
+    private readonly Win32NativeWindow _nativeWindow;
 
-    public IntPtr Hwnd => _hwnd;
+    private CoreWebView2Controller? _controller;
+
+    public IntPtr Hwnd => _nativeWindow.WindowHandle;
+
+    private bool _closed;
 
     /// <summary>
     /// 窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。
     /// </summary>
     public event Action? Closed;
 
-    internal WindowsWindow(IntPtr hwnd, WebWindowOptions options)
+    internal WindowsWindow(WebWindowOptions options)
     {
-        _hwnd = hwnd;
         _options = options;
+        _nativeWindow = new Win32NativeWindow(options);
+
+        _nativeWindow.Destory += NativeWindow_Destory;
+        _nativeWindow.Resize += NativeWindow_Resize;
+
         WindowsPlatform.WindowOpen(this);
     }
 
-    /// <summary>
-    /// 显示窗口并初始化 WebView2。无头模式下只初始化 WebView，窗口永不显示（SW_SHOW 也跳过）。
-    /// </summary>
+    private void NativeWindow_Resize()
+    {
+        if (_controller is null)
+            return;
+
+        _controller.Bounds = _nativeWindow.GetSize();
+    }
+
+    private void NativeWindow_Destory()
+    {
+        _controller?.Close();
+        _controller = null;
+        _closed = true;
+        Closed?.Invoke();
+        WindowsPlatform.WindowClose(this);
+    }
+
     public void Show()
     {
         if (!_options.Headless)
-            Win32.ShowWindow(_hwnd, Win32.SW_SHOW);
+        {
+            _nativeWindow.Show();
+        }
         _ = InitWebViewAsync();
     }
 
     /// <summary>
     /// 隐藏窗口（不关闭、不销毁）。
     /// </summary>
-    public void Hide() => Win32.ShowWindow(_hwnd, Win32.SW_HIDE);
+    public void Hide()
+    {
+        if (!_options.Headless)
+        {
+            _nativeWindow.Hide();
+        }
+    }
 
     /// <summary>
     /// 关闭窗口。关闭最后一个窗口后程序自动退出。
@@ -54,12 +79,12 @@ public sealed class WindowsWindow : IWindowBackend
     public void Close()
     {
         // DestroyWindow 必须在创建窗口的线程调用；宿主可能从任意线程关窗，marshal 回 UI 线程同步执行。
-        RunOnUiThread(() =>
+        WindowsPlatform.RunOnUiThread(() =>
         {
             if (_closed)
                 return;
             _closed = true;
-            Win32.DestroyWindow(_hwnd);
+            _nativeWindow.Close();
         });
     }
 
@@ -68,54 +93,26 @@ public sealed class WindowsWindow : IWindowBackend
     /// </summary>
     public void Activate()
     {
-        RunOnUiThread(() =>
-        {
-            if (Win32.IsIconic(_hwnd))
-                Win32.ShowWindow(_hwnd, Win32.SW_RESTORE);
-            Win32.SetForegroundWindow(_hwnd);
-            Win32.SetFocus(_hwnd);
-        });
+        WindowsPlatform.RunOnUiThread(_nativeWindow.Activate);
     }
 
     /// <summary>
     /// 修改窗口标题（立即同步到标题栏）。
     /// </summary>
     public void SetTitle(string title)
-        => RunOnUiThread(() => Win32.SetWindowTextW(_hwnd, title));
+    {
+        WindowsPlatform.RunOnUiThread(() => _nativeWindow.SetTitle(title));
+    }
 
     /// <summary>
     /// 设置窗口图标（标题栏 + 任务栏）。替换旧图标时释放旧的句柄。
     /// </summary>
     public void SetIcon(WindowIcon icon)
     {
-        RunOnUiThread(() =>
+        WindowsPlatform.RunOnUiThread(() =>
         {
-            var hIcon = LoadIconHandle(icon);
-            if (hIcon == IntPtr.Zero)
-                return;
-
-            if (_hIcon != IntPtr.Zero)
-                Win32.DestroyIcon(_hIcon);
-            _hIcon = hIcon;
-
-            Win32.SendMessageW(_hwnd, Win32.WM_SETICON, Win32.ICON_BIG, hIcon);
-            Win32.SendMessageW(_hwnd, Win32.WM_SETICON, Win32.ICON_SMALL, hIcon);
+            _nativeWindow.SetIcon(icon);
         });
-    }
-
-    /// <summary>
-    /// 把动作 marshal 到 UI 线程同步执行：UI 线程直接运行；非 UI 线程经
-    /// <see cref="MessageLoopSynchronizationContext.Send"/>（回 UI 线程并阻塞等待）。
-    /// Win32 窗口 API（DestroyWindow/SetForegroundWindow/SetWindowTextW/SendMessage）都要求 UI 线程。
-    /// </summary>
-    private static void RunOnUiThread(Action action)
-    {
-        if (Environment.CurrentManagedThreadId == MessageLoopSynchronizationContext.UiThreadId)
-        {
-            action();
-            return;
-        }
-        MessageLoopSynchronizationContext.Instance.Send(_ => action(), null);
     }
 
     /// <summary>
@@ -129,16 +126,14 @@ public sealed class WindowsWindow : IWindowBackend
     {
         try
         {
-            // CoreWebView2 只能在 UI 线程访问。属性变更可能发生在任意线程
-            // （如示例的 System.Threading.Timer 回调），非 UI 线程调用时先投递回 UI 线程。
-            // 用线程 id 判断而非 SynchronizationContext.Current：Timer 会随 ExecutionContext
-            // 把 UI 线程的上下文流到线程池线程，SynchronizationContext.Current 会误判。
-            if (Environment.CurrentManagedThreadId != MessageLoopSynchronizationContext.UiThreadId)
+            if (WindowsPlatform.IsUiThread())
             {
-                MessageLoopSynchronizationContext.Instance.Post(_ => PostMessage(message), null);
-                return;
+                _controller?.CoreWebView2.PostWebMessageAsString(WebView2StringCodec.Encode(message));
             }
-            _controller?.CoreWebView2.PostWebMessageAsString(WebView2StringCodec.Encode(message));
+            else
+            {
+                WindowsPlatform.RunOnUiThread(() => PostMessage(message));
+            }
         }
         catch
         {
@@ -153,14 +148,14 @@ public sealed class WindowsWindow : IWindowBackend
     /// </summary>
     public async Task<string> ExecuteScriptAsync(string script)
     {
-        if (Environment.CurrentManagedThreadId != MessageLoopSynchronizationContext.UiThreadId)
+        if (!WindowsPlatform.IsUiThread())
         {
             var tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
-            MessageLoopSynchronizationContext.Instance.Post(async _ =>
+            WindowsPlatform.RunOnUiThread(async () =>
             {
                 try { tcs.TrySetResult(await ExecuteScriptAsync(script)); }
                 catch (Exception ex) { tcs.TrySetException(ex); }
-            }, null);
+            });
             return await tcs.Task;
         }
 
@@ -179,69 +174,13 @@ public sealed class WindowsWindow : IWindowBackend
     /// </summary>
     public event Action<byte[]>? MessageReceived;
 
-    /// <summary>
-    /// 把 WindowIcon（文件或流）加载成 HICON。流会先落到临时文件再加载。
-    /// </summary>
-    private static IntPtr LoadIconHandle(WindowIcon icon)
-    {
-        var tmp = Path.Combine(Path.GetTempPath(), "webwindowui_" + Guid.NewGuid().ToString("N") + ".ico");
-        try
-        {
-            using (FileStream fs = File.Create(tmp))
-                icon.Stream.CopyTo(fs);
-            return Win32.LoadImageW(IntPtr.Zero, tmp, Win32.IMAGE_ICON,
-                0, 0, Win32.LR_LOADFROMFILE | Win32.LR_DEFAULTSIZE);
-        }
-        finally
-        {
-            File.Delete(tmp);
-        }
-    }
-
-    public IntPtr OnWndProc(uint msg, IntPtr wParam, IntPtr lParam)
-    {
-        switch (msg)
-        {
-            case Win32.WM_CLOSE:
-                Win32.DestroyWindow(_hwnd);
-                return IntPtr.Zero;
-
-            case Win32.WM_DESTROY:
-                if (_hIcon != IntPtr.Zero)
-                {
-                    Win32.DestroyIcon(_hIcon);
-                    _hIcon = IntPtr.Zero;
-                }
-                _controller?.Close();
-                _controller = null;
-                _closed = true;
-                Closed?.Invoke();
-                WindowsPlatform.WindowClose(this);
-                return IntPtr.Zero;
-
-            case Win32.WM_SIZE:
-                ResizeWebView();
-                return IntPtr.Zero;
-
-            default:
-                return Win32.DefWindowProcW(_hwnd, msg, wParam, lParam);
-        }
-    }
-
-    private void ResizeWebView()
-    {
-        if (_controller is null)
-            return;
-
-        Win32.GetClientRect(_hwnd, out Win32.RECT rc);
-        _controller.Bounds = new Rectangle(0, 0, rc.Right, rc.Bottom);
-    }
-
     private async Task InitWebViewAsync()
     {
         try
         {
-            _controller = await WindowsPlatform.CreateCoreWebView2ControllerAsync(_hwnd);
+            System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} win: create controller begin\r\n");
+            _controller = await WindowsPlatform.CreateCoreWebView2ControllerAsync(_nativeWindow.WindowHandle);
+            System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} win: create controller done\r\n");
             if (_closed)
             {
                 _controller.Close();
@@ -249,14 +188,19 @@ public sealed class WindowsWindow : IWindowBackend
                 return;
             }
 
-            ResizeWebView();
+            _controller.Bounds = _nativeWindow.GetSize();
 
             var core = _controller.CoreWebView2;
 
             core.Navigate(WebWindowResource.GetWindowIndexUrl(_options.WindowPath));
+            System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} win: navigate issued\r\n");
 
             // Model 双向绑定通道：页面就绪通知 + JS 回传消息
-            core.NavigationCompleted += (_, _) => NavigationCompleted?.Invoke();
+            core.NavigationCompleted += (_, _) =>
+            {
+                System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} win: nav completed\r\n");
+                NavigationCompleted?.Invoke();
+            };
             core.WebMessageReceived += (_, args) =>
             {
                 var message = args.TryGetWebMessageAsString();

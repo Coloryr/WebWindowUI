@@ -6,7 +6,7 @@ using WebWindowUI.Natives.Windows;
 using Xilium.CefGlue;
 using Xilium.CefGlue.Platform.Windows;
 
-namespace WebWindowUI.Cef;
+namespace WebWindowUI.Platforms.Cef;
 
 /// <summary>
 /// CEF 平台：承载 Chromium 的裸 Win32 顶层窗口（CEF 子浏览器窗口为子控件），可创建多个实例。
@@ -23,26 +23,14 @@ namespace WebWindowUI.Cef;
 /// </summary>
 public sealed class CefWindow : IWindowBackend
 {
-    private const string WindowClass = "CefWindow";
-
-    // ---- 进程级共享状态 ----
-    private static bool _classRegistered;
-    private static Win32.WndProcDelegate _wndProc = null!; // 保活，防止被 GC 回收
-    private static readonly Dictionary<IntPtr, CefWindow> _windows = [];
-
-    private readonly IntPtr _hwnd;
-    private readonly WebWindowOptions _options;
-
-    // 本窗口的 CEF 托管回调对象（CefGlue HANDLER 角色；CEF 持原生引用，这里再字段保活到窗口关闭）
-    private WwuiCefClient _client = null!;
-    private WwuiCefLifeSpanHandler _lifeSpanHandler = null!;
-    private WwuiCefLoadHandler _loadHandler = null!;
+    private readonly INativeWindow _nativeWindow;
+    private readonly WwuiCefClient _client;
+    private readonly WwuiCefLifeSpanHandler _lifeSpanHandler;
+    private readonly WwuiCefLoadHandler _loadHandler;
 
     private CefBrowser? _browser; // on_after_created 记录；on_before_close 置空
     private IntPtr _hIcon;
     private bool _closed;
-
-    public IntPtr Hwnd => _hwnd;
 
     /// <summary>
     /// 窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。
@@ -52,32 +40,16 @@ public sealed class CefWindow : IWindowBackend
     /// <summary>
     /// 窗口选项（scheme / resolver），scheme 处理器按请求分派到对应窗口时读取。
     /// </summary>
-    internal WebWindowOptions Options => _options;
+    private WebWindowOptions _options;
 
-    private CefWindow(IntPtr hwnd, WebWindowOptions options)
+    public CefWindow(WebWindowOptions options)
     {
-        _hwnd = hwnd;
         _options = options;
-        _windows[hwnd] = this;
-    }
 
-    /// <summary>
-    /// 创建并注册一个尚未显示的窗口。
-    /// </summary>
-    public static CefWindow Create(string title, WebWindowOptions options, int width, int height)
-    {
-        EnsureClassRegistered();
-
-        var hwnd = Win32.CreateWindowExW(
-            0, WindowClass, title, Win32.WS_OVERLAPPEDWINDOW,
-            Win32.CW_USEDEFAULT, Win32.CW_USEDEFAULT, width, height,
-            IntPtr.Zero, IntPtr.Zero, Win32.GetModuleHandleW(null), IntPtr.Zero);
-        if (hwnd == IntPtr.Zero)
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "创建窗口失败 (CreateWindowExW)");
-
-        var window = new CefWindow(hwnd, options);
-        window.CreateHandlers();
-        return window;
+        _nativeWindow = new Win32NativeWindow(options);
+        _lifeSpanHandler = new WwuiCefLifeSpanHandler(this);
+        _loadHandler = new WwuiCefLoadHandler(this);
+        _client = new WwuiCefClient(this, _lifeSpanHandler, _loadHandler);
     }
 
     /// <summary>
@@ -85,15 +57,17 @@ public sealed class CefWindow : IWindowBackend
     /// </summary>
     public void Show()
     {
-        if (!_options.Headless)
-            Win32.ShowWindow(_hwnd, Win32.SW_SHOW);
+        _nativeWindow.Show();
         CreateBrowser();
     }
 
     /// <summary>
     /// 隐藏窗口（不关闭、不销毁）。
     /// </summary>
-    public void Hide() => Win32.ShowWindow(_hwnd, Win32.SW_HIDE);
+    public void Hide()
+    {
+        _nativeWindow.Hide();
+    }
 
     /// <summary>
     /// 关闭窗口。关闭最后一个窗口后程序自动退出。
@@ -108,8 +82,8 @@ public sealed class CefWindow : IWindowBackend
                 return;
             if (_browser is not null)
                 CloseBrowserGraceful();
-            else
-                Win32.DestroyWindow(_hwnd); // 浏览器未建成：直接销毁窗口收尾
+            
+            _nativeWindow.Close();
         });
     }
 
@@ -118,20 +92,16 @@ public sealed class CefWindow : IWindowBackend
     /// </summary>
     public void Activate()
     {
-        RunOnUiThread(() =>
-        {
-            if (Win32.IsIconic(_hwnd))
-                Win32.ShowWindow(_hwnd, Win32.SW_RESTORE);
-            Win32.SetForegroundWindow(_hwnd);
-            Win32.SetFocus(_hwnd);
-        });
+        RunOnUiThread(_nativeWindow.Activate);
     }
 
     /// <summary>
     /// 修改窗口标题（立即同步到标题栏）。
     /// </summary>
     public void SetTitle(string title)
-        => RunOnUiThread(() => Win32.SetWindowTextW(_hwnd, title));
+    {
+        RunOnUiThread(() => _nativeWindow.SetTitle(title));
+    }
 
     /// <summary>
     /// 设置窗口图标（标题栏 + 任务栏）。替换旧图标时释放旧的句柄。
@@ -140,16 +110,7 @@ public sealed class CefWindow : IWindowBackend
     {
         RunOnUiThread(() =>
         {
-            var hIcon = LoadIconHandle(icon);
-            if (hIcon == IntPtr.Zero)
-                return;
-
-            if (_hIcon != IntPtr.Zero)
-                Win32.DestroyIcon(_hIcon);
-            _hIcon = hIcon;
-
-            Win32.SendMessageW(_hwnd, Win32.WM_SETICON, (IntPtr)Win32.ICON_BIG, hIcon);
-            Win32.SendMessageW(_hwnd, Win32.WM_SETICON, (IntPtr)Win32.ICON_SMALL, hIcon);
+            _nativeWindow.SetIcon(icon);
         });
     }
 
@@ -250,7 +211,7 @@ public sealed class CefWindow : IWindowBackend
     internal void OnBrowserCreated(CefBrowser browser)
     {
         _browser = browser;
-        CefSchemes.RegisterBrowser(browser, this); // scheme 处理器按浏览器 id 分派回本窗口
+        CefPlatform.RegisterBrowser(browser, this); // scheme 处理器按浏览器 id 分派回本窗口
     }
 
     /// <summary>
@@ -260,21 +221,11 @@ public sealed class CefWindow : IWindowBackend
     {
         if (_browser is not null)
         {
-            CefSchemes.UnregisterBrowser(_browser);
+            CefPlatform.UnregisterBrowser(_browser);
             _browser = null;
         }
         if (!_closed)
             Win32.DestroyWindow(_hwnd); // CEF 子窗口已销毁，顶层窗口随浏览器一起消失
-    }
-
-    private void CreateHandlers()
-    {
-        // 每个窗口一套 CefGlue 托管回调对象（client + life_span + load）。CEF 在 CreateBrowser
-        // 时对 client 及 GetLifeSpanHandler/GetLoadHandler 返回值 add_ref（CefGlue _roots 保活），
-        // 这里字段再显式保活到窗口关闭，杜绝托管对象提前回收。
-        _lifeSpanHandler = new WwuiCefLifeSpanHandler(this);
-        _loadHandler = new WwuiCefLoadHandler(this);
-        _client = new WwuiCefClient(this, _lifeSpanHandler, _loadHandler);
     }
 
     /// <summary>
@@ -300,7 +251,7 @@ public sealed class CefWindow : IWindowBackend
 
         // url 与 client 由 CEF 复制/引用，调用返回即可释放本侧 windowInfo（finalizer 兜底）。
         CefBrowserHost.CreateBrowser(
-            windowInfo, _client, new CefBrowserSettings(), _options.HomeUrl, null, null);
+            windowInfo, _client, new CefBrowserSettings(), WebWindowResource.GetWindowIndexUrl(_options.WindowPath), null, null);
     }
 
     /// <summary>
@@ -323,104 +274,6 @@ public sealed class CefWindow : IWindowBackend
             return;
         var frame = _browser.GetMainFrame();
         frame.ExecuteJavaScript(js, string.Empty, 0);
-    }
-
-    /// <summary>
-    /// 把 WindowIcon（文件或流）加载成 HICON。流会先落到临时文件再加载。
-    /// </summary>
-    private static IntPtr LoadIconHandle(WindowIcon icon)
-    {
-        if (icon.FilePath is not null)
-        {
-            return Win32.LoadImageW(IntPtr.Zero, icon.FilePath, Win32.IMAGE_ICON,
-                0, 0, Win32.LR_LOADFROMFILE | Win32.LR_DEFAULTSIZE);
-        }
-
-        if (icon.Stream is not null)
-        {
-            var tmp = Path.Combine(Path.GetTempPath(), "webwindowui_" + Guid.NewGuid().ToString("N") + ".ico");
-            try
-            {
-                using (FileStream fs = File.Create(tmp))
-                    icon.Stream.CopyTo(fs);
-                return Win32.LoadImageW(IntPtr.Zero, tmp, Win32.IMAGE_ICON,
-                    0, 0, Win32.LR_LOADFROMFILE | Win32.LR_DEFAULTSIZE);
-            }
-            finally
-            {
-                try { File.Delete(tmp); } catch { /* 临时文件清理失败可忽略 */ }
-            }
-        }
-
-        return IntPtr.Zero;
-    }
-
-    private static void EnsureClassRegistered()
-    {
-        if (_classRegistered)
-            return;
-
-        _wndProc = WndProc;
-        var wc = new Win32.WNDCLASSEXW
-        {
-            cbSize = (uint)Marshal.SizeOf<Win32.WNDCLASSEXW>(),
-            style = Win32.CS_HREDRAW | Win32.CS_VREDRAW,
-            lpfnWndProc = _wndProc,
-            hInstance = Win32.GetModuleHandleW(null),
-            hIcon = Win32.LoadIconW(IntPtr.Zero, Win32.IDI_APPLICATION),
-            hCursor = Win32.LoadCursorW(IntPtr.Zero, Win32.IDC_ARROW),
-            hbrBackground = (IntPtr)(Win32.COLOR_WINDOW + 1),
-            lpszMenuName = null,
-            lpszClassName = WindowClass,
-        };
-        if (Win32.RegisterClassExW(ref wc) == 0)
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "注册窗口类失败 (RegisterClassExW)");
-
-        _classRegistered = true;
-    }
-
-    /// <summary>
-    /// 窗口过程入口：通过 HWND 找到对应的窗口实例。
-    /// </summary>
-    private static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
-        => _windows.TryGetValue(hwnd, out CefWindow? window)
-            ? window.OnWndProc(msg, wParam, lParam)
-            : Win32.DefWindowProcW(hwnd, msg, wParam, lParam);
-
-    private IntPtr OnWndProc(uint msg, IntPtr wParam, IntPtr lParam)
-    {
-        switch (msg)
-        {
-            case Win32.WM_CLOSE:
-                // 用户点标题栏 X：交给 CEF 正常关闭；浏览器未建成直接销毁
-                if (_browser is not null)
-                    CloseBrowserGraceful();
-                else
-                    Win32.DestroyWindow(_hwnd);
-                return IntPtr.Zero;
-
-            case Win32.WM_DESTROY:
-                // 最终收尾（由 on_before_close 里的 DestroyWindow 触发）
-                if (_hIcon != IntPtr.Zero)
-                {
-                    Win32.DestroyIcon(_hIcon);
-                    _hIcon = IntPtr.Zero;
-                }
-                _windows.Remove(_hwnd);
-                _closed = true;
-                Closed?.Invoke();
-                WebWindow.NotifyWindowClosed();
-                if (WebWindow.OpenCount == 0)
-                    Win32.PostQuitMessage(0); // 最后一个窗口关闭，退出消息循环
-                return IntPtr.Zero;
-
-            case Win32.WM_SIZE:
-                ResizeBrowser();
-                return IntPtr.Zero;
-
-            default:
-                return Win32.DefWindowProcW(_hwnd, msg, wParam, lParam);
-        }
     }
 
     /// <summary>

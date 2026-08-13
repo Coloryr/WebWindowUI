@@ -13,7 +13,7 @@ namespace WebWindowUI.Tests.Platform.Support;
 internal sealed class TestWindow : WebWindow
 {
     public TestWindow(string windowPath, string title)
-        : base(windowPath, title, new WebWindowOptions { Headless = true }, width: 720, height: 480)
+        : base(new WebWindowOptions(windowPath) { Title = title, Headless = true, Width = 720, Height = 480 })
     {
     }
 }
@@ -35,7 +35,9 @@ internal static class WebView2TestHarness
         TimeSpan t = timeout ?? TimeSpan.FromSeconds(60);
         return StaThreadPump.Instance.RunAsync(async () =>
         {
+            Trace.Log($"harness: window ctor begin ({windowPath})");
             var win = new TestWindow(windowPath, title);
+            Trace.Log("harness: window ctor done");
             try
             {
                 win.Model = model; // 必须在 Show() 前设置，快照才含初始值
@@ -43,8 +45,11 @@ internal static class WebView2TestHarness
                 var nav = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 win.NavigationCompleted += () => nav.TrySetResult(true);
 
+                Trace.Log("harness: Show begin");
                 win.Show(); // 无头：只初始化 WebView，窗口永不显示
+                Trace.Log("harness: Show done, wait nav");
                 await nav.Task.WaitAsync(t);
+                Trace.Log("harness: nav done");
 
                 await WaitBridgeReadyAsync(win, t);
                 await body(win);
@@ -62,12 +67,23 @@ internal static class WebView2TestHarness
     /// 再 Show B，各自收初始快照。
     /// </summary>
     public static Task RunTwoWindowsSharedModelAsync(MultiWindowModel model, Func<TestWindow, TestWindow, Task> body, TimeSpan? timeout = null)
+        => RunTwoWindowsSharedModelCoreAsync("multi", "共享A", "共享B", model, body, timeout);
+
+    /// <summary>
+    /// 双窗口共享模型宿主（泛型）：任意模型任意页面路径，验证跨窗口广播（含元素级 ElementSet 广播）。
+    /// </summary>
+    public static Task RunTwoWindowsSharedModelAsync<T>(string windowPath, string titleA, string titleB, T model, Func<TestWindow, TestWindow, Task> body, TimeSpan? timeout = null)
+        where T : WebWindowModel
+        => RunTwoWindowsSharedModelCoreAsync(windowPath, titleA, titleB, model, body, timeout);
+
+    private static async Task RunTwoWindowsSharedModelCoreAsync<T>(string windowPath, string titleA, string titleB, T model, Func<TestWindow, TestWindow, Task> body, TimeSpan? timeout = null)
+        where T : WebWindowModel
     {
         TimeSpan t = timeout ?? TimeSpan.FromSeconds(60);
-        return StaThreadPump.Instance.RunAsync(async () =>
+        await StaThreadPump.Instance.RunAsync(async () =>
         {
-            var winA = new TestWindow("multi", "共享A");
-            var winB = new TestWindow("multi", "共享B");
+            var winA = new TestWindow(windowPath, titleA);
+            var winB = new TestWindow(windowPath, titleB);
             try
             {
                 winA.Model = model;

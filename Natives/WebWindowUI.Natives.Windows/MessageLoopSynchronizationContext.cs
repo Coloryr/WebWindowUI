@@ -1,19 +1,15 @@
-using WebWindowUI.Natives.Windows;
-
-namespace WebWindowUI.Cef;
+namespace WebWindowUI.Natives.Windows;
 
 /// <summary>
 /// 把 async 延续派发回 UI 线程消息循环的 SynchronizationContext。
 /// 单例：绑定到一个隐藏消息窗口，所有窗口的 CEF 异步工作与跨线程调用都通过它回到 UI 线程
 /// （CEF 单线程消息循环下 UI 线程 == 主线程，Win32 GetMessage 循环同时驱动本上下文与 cef_do_message_loop_work）。
 /// </summary>
-public sealed class MessageLoopSynchronizationContext : SynchronizationContext
+internal sealed class MessageLoopSynchronizationContext : SynchronizationContext
 {
-    public const uint WM_RUN = 0x8000; // WM_APP
-
     public static readonly MessageLoopSynchronizationContext Instance = new();
 
-    private readonly object _lock = new();
+    private readonly Lock _lock = new();
     private readonly Queue<(SendOrPostCallback Callback, object? State)> _queue = new();
     private IntPtr _targetHwnd;
 
@@ -31,7 +27,6 @@ public sealed class MessageLoopSynchronizationContext : SynchronizationContext
     public static void Initialize(IntPtr targetHwnd)
     {
         Instance._targetHwnd = targetHwnd;
-        // Initialize 总是在 UI 线程调用（平台构造 + RunMessageLoop），记录该线程 id
         UiThreadId = Environment.CurrentManagedThreadId;
     }
 
@@ -39,7 +34,8 @@ public sealed class MessageLoopSynchronizationContext : SynchronizationContext
     {
         lock (_lock)
             _queue.Enqueue((d, state));
-        Win32.PostMessageW(_targetHwnd, WM_RUN, IntPtr.Zero, IntPtr.Zero);
+
+        Win32.PostMessageW(_targetHwnd, Win32.WM_RUN, IntPtr.Zero, IntPtr.Zero);
     }
 
     public override void Send(SendOrPostCallback d, object? state)

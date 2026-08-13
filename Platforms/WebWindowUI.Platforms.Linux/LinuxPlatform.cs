@@ -39,7 +39,7 @@ public sealed class LinuxPlatform : IWebWindowPlatform
 
         var loop = MainLoop.New(null, false);
         _mainLoop = loop;
-        loop.RunWithSynchronizationContext(); 
+        loop.RunWithSynchronizationContext();
         _mainLoop = null;
     }
 
@@ -66,9 +66,10 @@ public sealed class LinuxPlatform : IWebWindowPlatform
     internal static void WindowClose(LinuxWindow window)
     {
         _windows.Remove(window.WebView);
-        WebWindow.NotifyWindowClosed();
-        if (WebWindow.OpenCount == 0)
-            QuitMainLoop(); // 最后一个窗口关闭，退出主循环
+        if (_windows.Count == 0)
+        {
+            QuitMainLoop();
+        }
     }
 
     /// <summary>

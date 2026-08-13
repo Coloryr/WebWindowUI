@@ -23,7 +23,6 @@
 
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows'">
     <ProjectReference Include="..\..\Platforms\WebWindowUI.Platforms.Windows\WebWindowUI.Platforms.Windows.csproj" />
-    <ProjectReference Include="..\..\Platforms\WebWindowUI.Platforms.Cef\WebWindowUI.Platforms.Cef.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Linux'">
     <ProjectReference Include="..\..\Platforms\WebWindowUI.Platforms.Linux\WebWindowUI.Platforms.Linux.csproj" />

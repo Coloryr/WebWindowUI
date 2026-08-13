@@ -14,7 +14,7 @@ internal sealed class TodosWindow : WebWindow
     private int _autoTodo;
 
     public TodosWindow() : base(new WebWindowOptions("todos")
-    { 
+    {
         Title = "待办列表",
         Width = 820,
         Height = 640

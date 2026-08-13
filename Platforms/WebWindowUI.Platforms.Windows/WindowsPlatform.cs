@@ -1,6 +1,4 @@
 using Microsoft.Web.WebView2.Core;
-using System.ComponentModel;
-using System.Runtime.InteropServices;
 using System.Text;
 using WebWindowUI.Core;
 using WebWindowUI.Natives.Windows;
@@ -13,21 +11,43 @@ namespace WebWindowUI.Platforms.Windows;
 /// </summary>
 public sealed class WindowsPlatform : IWebWindowPlatform
 {
-    public const string WindowClass = "WebView2Window";
-
     private static readonly Dictionary<IntPtr, WindowsWindow> _windows = [];
     private static CoreWebView2Environment _coreWebView2Environment;
+    private static readonly Win32MessageLoop _message = new();
+
+    private static readonly Lock _envLock = new();
+    private static Task<CoreWebView2Environment>? _envTask;
 
     public WindowsPlatform()
     {
-        InitMessageLoopSynchronizationContext();
-        InitWebView();
-        InitWindowClass();
+        _message.InitMessageLoop();
+        // 注意：不在构造里创建 WebView2 环境。CreateAsync 需要在有消息循环的线程上等待完成
+        //（后台/线程池无泵线程会挂起），且旧 async void InitWebView 在 STA 构造线程上会
+        // RPC_E_CHANGED_MODE 崩溃。环境懒创建于首个 CreateCoreWebView2ControllerAsync，
+        // 在 UI 线程（有泵）上直接 await——与拆分前 WindowsWindow.GetSharedEnvironmentAsync 一致。
+    }
+
+    /// <summary>
+    /// 把动作 marshal 到 UI 线程同步执行：UI 线程直接运行；非 UI 线程经
+    /// <see cref="MessageLoopSynchronizationContext.Send"/>（回 UI 线程并阻塞等待）。
+    /// Win32 窗口 API（DestroyWindow/SetForegroundWindow/SetWindowTextW/SendMessage）都要求 UI 线程。
+    /// </summary>
+    public static void RunOnUiThread(Action action)
+    {
+        _message.RunOnUiThread(action);
+    }
+
+    public static bool IsUiThread()
+    {
+        return _message.IsUiThread();
     }
 
     public static async Task<CoreWebView2Controller> CreateCoreWebView2ControllerAsync(IntPtr hwnd)
     {
-        var controller = await _coreWebView2Environment.CreateCoreWebView2ControllerAsync(hwnd);
+        // 环境懒创建（首个窗口触发，UI 线程有消息泵、CreateAsync 可完成）；await 就绪，
+        // 杜绝 _coreWebView2Environment 空引用
+        var environment = await GetEnvironmentAsync();
+        var controller = await environment.CreateCoreWebView2ControllerAsync(hwnd);
         var core = controller.CoreWebView2;
         core.WebResourceRequested += OnWebResourceRequested;
         core.Settings.IsStatusBarEnabled = false;
@@ -37,44 +57,23 @@ public sealed class WindowsPlatform : IWebWindowPlatform
         return controller;
     }
 
-    private static void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs args)
+    /// <summary>
+    /// WebView2 环境单例（幂等）。跨窗口共享同一环境（自定义 scheme 只注册一次）。
+    /// 必须在有消息循环的 UI 线程 await（CreateAsync 在无泵线程上会挂起）。
+    /// </summary>
+    private static Task<CoreWebView2Environment> GetEnvironmentAsync()
     {
-        try
+        lock (_envLock)
         {
-            if (WebWindowResource.TryResolvePath(args.Request.Uri, out string? relative, out string? mimeType) is { } stream)
-            {
-                string headers =
-                    $"Content-Type: {mimeType}\r\n" +
-                    $"Cache-Control: {ResourceHeaders.CacheControl(relative!)}\r\n" +
-                    $"{ResourceHeaders.AccessControlAllowOrigin}\r\n" +
-                    $"\r\n"; 
-
-                args.Response = _coreWebView2Environment.CreateWebResourceResponse(
-                    stream,
-                    200,
-                    "OK",
-                    headers
-                );
-                return;
-            }
+            return _envTask ??= CreateEnvironmentAsync();
         }
-        catch
-        {
-            
-        }
-
-        var notFound = new MemoryStream(Encoding.UTF8.GetBytes("404 Not Found"));
-        args.Response = _coreWebView2Environment.CreateWebResourceResponse(
-            notFound,
-            404,
-            "Not Found",
-            $"Content-Type: text/plain\r\n" +
-            $"Cache-Control: no-store\r\n" +
-            $"{ResourceHeaders.AccessControlAllowOrigin}" +
-            $"\r\n");
     }
 
-    public static async void InitWebView()
+    /// <summary>
+    /// WebView2 环境工厂。CreateAsync 在调用线程（UI 线程，有泵）上执行、await 等待完成；
+    /// 完成后回填 <c>_coreWebView2Environment</c>（OnWebResourceRequested 同步回调要用）。
+    /// </summary>
+    private static async Task<CoreWebView2Environment> CreateEnvironmentAsync()
     {
         var registrations = new List<CoreWebView2CustomSchemeRegistration>
         {
@@ -93,75 +92,58 @@ public sealed class WindowsPlatform : IWebWindowPlatform
         };
 
         var options = new CoreWebView2EnvironmentOptions(customSchemeRegistrations: registrations);
-        _coreWebView2Environment = await CoreWebView2Environment.CreateAsync(null, null, options);
+        File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} plat: CreateAsync begin\r\n");
+        var environment = await CoreWebView2Environment.CreateAsync(null, null, options);
+        File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"), $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} plat: CreateAsync done\r\n");
+        _coreWebView2Environment = environment;
+        return environment;
     }
 
-    /// <summary>
-    /// 窗口过程入口：通过 HWND 找到对应的窗口实例。
-    /// </summary>
-    private static IntPtr WndProc(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
+    private static void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs args)
     {
-        return _windows.TryGetValue(hwnd, out WindowsWindow? window)
-                ? window.OnWndProc(msg, wParam, lParam)
-                : Win32.DefWindowProcW(hwnd, msg, wParam, lParam);
-    }
-
-    private static void InitWindowClass()
-    {
-        var wc = new Win32.WNDCLASSEXW
+        try
         {
-            cbSize = (uint)Marshal.SizeOf<Win32.WNDCLASSEXW>(),
-            style = Win32.CS_HREDRAW | Win32.CS_VREDRAW,
-            lpfnWndProc = WndProc,
-            hInstance = Win32.GetModuleHandleW(null),
-            hIcon = Win32.LoadIconW(IntPtr.Zero, Win32.IDI_APPLICATION),
-            hCursor = Win32.LoadCursorW(IntPtr.Zero, Win32.IDC_ARROW),
-            hbrBackground = Win32.COLOR_WINDOW + 1,
-            lpszMenuName = null,
-            lpszClassName = WindowClass,
-        };
-        if (Win32.RegisterClassExW(ref wc) == 0)
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "注册窗口类失败 (RegisterClassExW)");
+            if (WebWindowResource.TryResolvePath(args.Request.Uri, out string? relative, out string? mimeType) is { } stream)
+            {
+                string headers =
+                    $"Content-Type: {mimeType}\r\n" +
+                    $"Cache-Control: {ResourceHeaders.CacheControl(relative!)}\r\n" +
+                    $"{ResourceHeaders.AccessControlAllowOrigin}\r\n" +
+                    $"\r\n";
+
+                args.Response = _coreWebView2Environment.CreateWebResourceResponse(
+                    stream,
+                    200,
+                    "OK",
+                    headers
+                );
+                return;
+            }
+        }
+        catch
+        {
+
+        }
+
+        var notFound = new MemoryStream(Encoding.UTF8.GetBytes("404 Not Found"));
+        args.Response = _coreWebView2Environment.CreateWebResourceResponse(
+            notFound,
+            404,
+            "Not Found",
+            $"Content-Type: text/plain\r\n" +
+            $"Cache-Control: no-store\r\n" +
+            $"{ResourceHeaders.AccessControlAllowOrigin}" +
+            $"\r\n");
     }
 
     public IWindowBackend CreateWindow(WebWindowOptions options)
     {
-        var hwnd = Win32.CreateWindowExW(
-            0, WindowClass, options.Title, Win32.WS_OVERLAPPEDWINDOW,
-            Win32.CW_USEDEFAULT, Win32.CW_USEDEFAULT, options.Width, options.Height,
-            IntPtr.Zero, IntPtr.Zero, Win32.GetModuleHandleW(null), IntPtr.Zero);
-        if (hwnd == IntPtr.Zero)
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "创建窗口失败 (CreateWindowExW)");
-
-        return new WindowsWindow(hwnd, options);
+        return new WindowsWindow(options);
     }
 
     public void RunMessageLoop()
     {
-        // 隐藏消息窗口：所有 async 延续都通过它调度回 UI 线程。
-        // 构造里已装过一次，这里是幂等兜底（覆盖未经过窗口创建直接调消息循环的宿主）。
-        InitMessageLoopSynchronizationContext();
-
-        // Win32 消息循环，收到 WM_QUIT（最后一个窗口关闭）后返回
-        Win32.MessageLoop();
-    }
-
-    private static void InitMessageLoopSynchronizationContext()
-    {
-        Win32.SetMarshalMessageHandler(HandleMarshalMessage);
-        var marshalHwnd = Win32.GetOrCreateMarshalWindow("WebView2MarshalWindow");
-        MessageLoopSynchronizationContext.Initialize(marshalHwnd);
-        SynchronizationContext.SetSynchronizationContext(MessageLoopSynchronizationContext.Instance);
-    }
-
-    private static IntPtr? HandleMarshalMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
-    {
-        if (msg == Win32.WM_RUN)
-        {
-            MessageLoopSynchronizationContext.Instance.RunQueued();
-            return IntPtr.Zero;
-        }
-        return null;
+        _message.MessageLoop();
     }
 
     public static void WindowOpen(WindowsWindow window)
@@ -172,9 +154,6 @@ public sealed class WindowsPlatform : IWebWindowPlatform
     public static void WindowClose(WindowsWindow window)
     {
         _windows.Remove(window.Hwnd);
-        WebWindow.NotifyWindowClosed();
-        if (WebWindow.OpenCount == 0)
-            Win32.PostQuitMessage(0); // 最后一个窗口关闭，退出消息循环
 
     }
 }

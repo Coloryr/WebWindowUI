@@ -17,7 +17,7 @@ internal sealed class NestedListWindow : WebWindow
     private readonly Dictionary<NestedListItemModel, NestedListItemWindow> _detailWindows = [];
 
     public NestedListWindow() : base(new WebWindowOptions("nested-list")
-    { 
+    {
         Title = "List<>嵌套窗口",
         Width = 860,
         Height = 660

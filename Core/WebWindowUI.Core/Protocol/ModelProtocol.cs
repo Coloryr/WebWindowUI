@@ -1,8 +1,8 @@
+using ProtoBuf;
 using System.Collections;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Reflection;
-using ProtoBuf;
 using WebWindowUI.Core.Observable;
 
 namespace WebWindowUI.Core.Protocol;
@@ -60,13 +60,17 @@ public sealed class ModelUpdate
 }
 
 /// <summary>
-/// 前端 → .NET：单属性回写。
+/// 前端 → .NET：单属性回写。ElementProperty 非空时是「集合元素级」回写：
+/// Property=集合属性、ElementInstanceId=目标元素（WebWindowModel.ModelInstanceId）、
+/// Value=该元素属性的新值；ElementProperty 为空 = 旧整属性行为（Property/Value）。
 /// </summary>
 [ProtoContract]
 public sealed class ModelSet
 {
     [ProtoMember(1)] public string Property { get; set; } = "";
     [ProtoMember(2)] public ModelValue? Value { get; set; }
+    [ProtoMember(3)] public long ElementInstanceId { get; set; }
+    [ProtoMember(4)] public string? ElementProperty { get; set; }
 }
 
 /// <summary>
@@ -110,6 +114,7 @@ public enum CollectionPatchAction
     Replace = 3, // .NET Replace：以 Items 替换 Index 起 Count 个元素
     Move = 4, // .NET Move：把 FromIndex 起 Count 个元素移到 Index
     Reset = 5, // .NET Reset：事件不带新旧元素，无法差量——Items 承载整列表，前端整体替换
+    ElementSet = 6, // 元素级属性变更：ElementInstanceId 定位元素，ElementProperty/ElementValue 为变更的属性与新值
 }
 
 /// <summary>
@@ -145,6 +150,21 @@ public sealed class CollectionPatch
     /// Move 的源索引（其余操作 0）。
     /// </summary>
     [ProtoMember(6)] public int FromIndex { get; set; }
+
+    /// <summary>
+    /// ElementSet：目标元素（WebWindowModel.ModelInstanceId）。
+    /// </summary>
+    [ProtoMember(7)] public long ElementInstanceId { get; set; }
+
+    /// <summary>
+    /// ElementSet：被修改的元素属性名（camelCase，.NET 侧 ToPascalCase 后写回）。
+    /// </summary>
+    [ProtoMember(8)] public string? ElementProperty { get; set; }
+
+    /// <summary>
+    /// ElementSet：该属性的新值。
+    /// </summary>
+    [ProtoMember(9)] public ModelValue? ElementValue { get; set; }
 }
 
 /// <summary>
@@ -295,23 +315,27 @@ public static class ModelProtocol
                     else
                     {
                         // POCO：优先用源生成器注册的序数序列化器（键 = proto 字段号），miss 走反射（camelCase 键）。
+                        ModelValueMap map;
                         if (_pocoSerializers.TryGetValue(value.GetType(), out PocoToModelValueFunc? serializer)
                             && serializer(value, out ModelValueMap? smap)
                             && smap is not null)
                         {
-                            v.ObjectValue = smap;
+                            map = smap;
                         }
                         else
                         {
-                            var map = new ModelValueMap();
+                            map = new ModelValueMap();
                             foreach (var p in value.GetType().GetProperties(BindingFlags.Public | BindingFlags.Instance))
                             {
                                 if (!p.CanRead || p.GetIndexParameters().Length > 0)
                                     continue;
                                 map.Fields[ToCamelCase(p.Name)] = ToModelValue(p.GetValue(value), seen);
                             }
-                            v.ObjectValue = map;
                         }
+                        // 模型实例统一注入唯一 ID 的 name 键：前端据 id 对元素寻址（差量补丁/整列 update 都经此路径）。
+                        if (value is WebWindowModel wm)
+                            map.Fields["_modelInstanceId"] = new ModelValue { Number = wm.ModelInstanceId };
+                        v.ObjectValue = map;
                     }
                     break;
             }
@@ -326,8 +350,14 @@ public static class ModelProtocol
     /// <summary>
     /// PascalCase → camelCase（与前端 TS 属性名约定一致，仅首字母小写）。
     /// </summary>
-    private static string ToCamelCase(string name)
+    internal static string ToCamelCase(string name)
         => string.IsNullOrEmpty(name) ? name : char.ToLowerInvariant(name[0]) + name[1..];
+
+    /// <summary>
+    /// camelCase → PascalCase（元素级写回把桥发的 camelCase 属性名还原成 .NET 属性名）。
+    /// </summary>
+    internal static string ToPascalCase(string name)
+        => string.IsNullOrEmpty(name) ? name : char.ToUpperInvariant(name[0]) + name[1..];
 
     /// <summary>
     /// 把 ModelValue 转换回目标类型的值。类型不匹配返回 false（TrySetProperty 语义）。

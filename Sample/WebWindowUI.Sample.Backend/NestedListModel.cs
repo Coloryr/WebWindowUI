@@ -1,9 +1,9 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using WebWindowUI.Sample.Items;
+using System.Collections.ObjectModel;
 using WebWindowUI.Core;
 using WebWindowUI.Core.Observable;
+using WebWindowUI.Sample.Items;
 
 namespace WebWindowUI.Sample;
 

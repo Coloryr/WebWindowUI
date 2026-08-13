@@ -1,8 +1,7 @@
-using System.Collections.Immutable;
-using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
-
+using System.Collections.Immutable;
+using System.Text;
 // ModelParsed 嵌套在 ModelProtoGenerator 内（与 ProtoField/ModelCommand 同层），别名避免每次全限定。
 using ParsedModel = WebWindowUI.Generator.ModelProtoGenerator.ModelParsed;
 

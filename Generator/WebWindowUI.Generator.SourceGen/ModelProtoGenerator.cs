@@ -1,8 +1,8 @@
-using System.Text;
-using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using System.Text;
+using System.Text.Json;
 
 namespace WebWindowUI.Generator;
 
@@ -100,12 +100,29 @@ public static class ModelProtoGenerator
         foreach (var kv in all)
             allNamespaces[kv.Key] = kv.Value.Namespace;
 
+        // 完整模型消息 = 数据字段 + 框架保留 modelInstanceId（元素寻址）；Update 消息/TS 镜像/__repeatedFields
+        // 只含数据字段（id 永不变化，不进增量载荷与数据契约；序数键仍从 CollectFields 的纯数据字段来）。
+        var fullFields = WithInstanceId(model.Fields);
         return new ModelProtoResult(
-            CsCode: BuildCs(model.Namespace, model.ClassName, modelId, model.Fields),
-            ProtoText: BuildProto(model.ClassName, model.Fields),
+            CsCode: BuildCs(model.Namespace, model.ClassName, modelId, fullFields, model.Fields),
+            ProtoText: BuildProto(model.ClassName, fullFields, model.Fields),
             DescriptorJson: descriptorJson,
             TsCode: BuildTs(model.ClassName, model.Fields, model.Commands, model.Namespace, rootNs, allNamespaces, all, modelId, fullMessageName),
             Namespace: model.Namespace);
+    }
+
+    /// <summary>给模型数据字段追加框架保留的 modelInstanceId（int64，字段号 = 数据字段数 + 1）。
+    /// 只供「完整模型消息」消费（descriptor 完整消息 + 快照 DTO + .proto 完整消息）：
+    /// 前端从线缆拿到每个元素的唯一 ID 用于元素级寻址；Update/TS/序数契约一律不含。
+    /// WebWindowModel.ModelInstanceId 是 get-only 非 [ObservableProperty]，永不触发 PropertyChanged。</summary>
+    private static List<ProtoField> WithInstanceId(List<ProtoField> fields)
+    {
+        var full = new List<ProtoField>(fields)
+        {
+            new("ModelInstanceId", "modelInstanceId", fields.Count + 1, "int64", false,
+                "long", "", "model.ModelInstanceId", "long?", "int64", "(long?)value"),
+        };
+        return full;
     }
 
     /// <summary>模型序号：完整消息名（package + 类名）的 FNV-1a 32 位哈希，掩到非负 int32。
@@ -403,7 +420,7 @@ public static class ModelProtoGenerator
 
     // ---- 产出 ----
 
-    private static string BuildProto(string modelClassName, List<ProtoField> fields)
+    private static string BuildProto(string modelClassName, List<ProtoField> fullFields, List<ProtoField> updateFields)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// 由 WebWindowUI.Generator 自动生成：完整模型消息 + 增量 update 消息。修改模型类后重新构建。");
@@ -414,7 +431,7 @@ public static class ModelProtoGenerator
         sb.AppendLine($"package {GeneratedPackage};");
         sb.AppendLine();
         sb.AppendLine($"message {modelClassName} {{");
-        foreach (var f in fields)
+        foreach (var f in fullFields)
         {
             var typeRef = f.ProtoType == "ModelValue" ? "webwindowui.model.ModelValue" : f.ProtoType;
             var rep = f.IsRepeated ? "repeated " : "";
@@ -422,10 +439,11 @@ public static class ModelProtoGenerator
         }
         sb.AppendLine("}");
         sb.AppendLine();
-        sb.AppendLine($"// 增量 update：字段与完整模型同序同号，标量/字符串/字节保留原生类型，其余用 ModelValue 兜底。");
+        sb.AppendLine($"// 增量 update：字段与完整模型同序同号（不含框架保留 modelInstanceId，它永不变更），");
+        sb.AppendLine($"// 标量/字符串/字节保留原生类型，其余用 ModelValue 兜底。");
         sb.AppendLine($"// 载荷只编码被修改的字段（.NET 侧可空 DTO，非空即序列化），前端按字段是否出现做增量应用。");
         sb.AppendLine($"message {modelClassName}Update {{");
-        foreach (var f in fields)
+        foreach (var f in updateFields)
         {
             var typeRef = f.UpdProtoType == "ModelValue" ? "webwindowui.model.ModelValue" : f.UpdProtoType;
             sb.AppendLine($"  {typeRef} {f.WireName} = {f.Number};");
@@ -443,7 +461,8 @@ public static class ModelProtoGenerator
         var nested = new Dictionary<string, object?>();
         foreach (KeyValuePair<string, List<ProtoField>> m in models)
         {
-            nested[m.Key] = BuildMessageFields(m.Value);
+            // 完整消息带框架保留 modelInstanceId（元素寻址），Update 消息只含数据字段（id 永不变更）。
+            nested[m.Key] = BuildMessageFields(WithInstanceId(m.Value));
             nested[m.Key + "Update"] = BuildUpdateFields(m.Value);
         }
 
@@ -520,13 +539,16 @@ public static class ModelProtoGenerator
                 ["payload"] = new Dictionary<string, object?> { ["type"] = "bytes", ["id"] = 2 },
             },
         };
-        // 前端→.NET：回写单个属性
+        // 前端→.NET：回写单个属性；elementProperty 非空时是集合元素级回写
+        // （property=集合、elementInstanceId=目标元素、value=该元素属性新值）
         var modelSet = new Dictionary<string, object?>
         {
             ["fields"] = new Dictionary<string, object?>
             {
                 ["property"] = new Dictionary<string, object?> { ["type"] = "string", ["id"] = 1 },
                 ["value"] = new Dictionary<string, object?> { ["type"] = "ModelValue", ["id"] = 2 },
+                ["elementInstanceId"] = new Dictionary<string, object?> { ["type"] = "int64", ["id"] = 3 },
+                ["elementProperty"] = new Dictionary<string, object?> { ["type"] = "string", ["id"] = 4 },
             },
         };
         // 前端→.NET：执行模型命令（MVVM Command，[RelayCommand] 生成的 ICommand）。
@@ -557,7 +579,7 @@ public static class ModelProtoGenerator
             },
         };
         // .NET→前端：集合增删差量补丁（前端对响应式数组原地 splice；Reset 时 Items 承载整列表整体替换）。
-        // action 枚举取值与 ModelProtocol.CollectionPatchAction 严格一致（1=Insert 2=Remove 3=Replace 4=Move 5=Reset）。
+        // action 枚举取值与 ModelProtocol.CollectionPatchAction 严格一致（1=Insert 2=Remove 3=Replace 4=Move 5=Reset 6=ElementSet）。
         var collectionPatchAction = new Dictionary<string, object?>
         {
             ["values"] = new Dictionary<string, object?>
@@ -567,6 +589,7 @@ public static class ModelProtoGenerator
                 ["Replace"] = 3,
                 ["Move"] = 4,
                 ["Reset"] = 5,
+                ["ElementSet"] = 6,
             },
         };
         var collectionPatch = new Dictionary<string, object?>
@@ -579,6 +602,10 @@ public static class ModelProtoGenerator
                 ["count"] = new Dictionary<string, object?> { ["type"] = "int32", ["id"] = 4 },
                 ["items"] = new Dictionary<string, object?> { ["rule"] = "repeated", ["type"] = "ModelValue", ["id"] = 5 },
                 ["fromIndex"] = new Dictionary<string, object?> { ["type"] = "int32", ["id"] = 6 },
+                // ElementSet：目标元素（ModelInstanceId）+ 被改属性 + 新值
+                ["elementInstanceId"] = new Dictionary<string, object?> { ["type"] = "int64", ["id"] = 7 },
+                ["elementProperty"] = new Dictionary<string, object?> { ["type"] = "string", ["id"] = 8 },
+                ["elementValue"] = new Dictionary<string, object?> { ["type"] = "ModelValue", ["id"] = 9 },
             },
         };
         // 信封：所有 postMessage 载荷都是它，oneof payload 同时只命中一个成员
@@ -911,7 +938,8 @@ public static class ModelProtoGenerator
         return string.Join(".", keep);
     }
 
-    private static string BuildCs(string ns, string modelClassName, int modelId, List<ProtoField> fields)
+    private static string BuildCs(string ns, string modelClassName, int modelId,
+        List<ProtoField> fullFields, List<ProtoField> updateFields)
     {
         var sb = new StringBuilder();
         sb.AppendLine("// <auto-generated>");
@@ -929,12 +957,12 @@ public static class ModelProtoGenerator
         sb.AppendLine("[ProtoContract]");
         sb.AppendLine($"public sealed class {modelClassName}Snapshot");
         sb.AppendLine("{");
-        foreach (ProtoField f in fields)
+        foreach (ProtoField f in fullFields)
             sb.AppendLine($"    [ProtoMember({f.Number})] public {f.DtoType} {f.CsName} {{ get; set; }}{f.DtoInit}");
         sb.AppendLine();
         sb.AppendLine($"    public static {modelClassName}Snapshot From({modelClassName} model) => new()");
         sb.AppendLine("    {");
-        foreach (ProtoField f in fields)
+        foreach (ProtoField f in fullFields)
             sb.AppendLine($"        {f.CsName} = {f.MapExpr},");
         sb.AppendLine("    };");
         sb.AppendLine("}");
@@ -942,7 +970,7 @@ public static class ModelProtoGenerator
         sb.AppendLine("[ProtoContract]");
         sb.AppendLine($"public sealed class {modelClassName}Update");
         sb.AppendLine("{");
-        foreach (ProtoField f in fields)
+        foreach (ProtoField f in updateFields)
             sb.AppendLine($"    [ProtoMember({f.Number})] public {f.UpdDtoType} {f.CsName} {{ get; set; }}");
         sb.AppendLine("}");
         sb.AppendLine();
@@ -961,7 +989,7 @@ public static class ModelProtoGenerator
         sb.AppendLine($"        var u = new {modelClassName}Update();");
         sb.AppendLine("        switch (propertyName)");
         sb.AppendLine("        {");
-        foreach (ProtoField f in fields)
+        foreach (ProtoField f in updateFields)
             sb.AppendLine($"            case \"{f.CsName}\": u.{f.CsName} = {f.UpdSetExpr}; break;");
         sb.AppendLine("        }");
         sb.AppendLine("        using var ms = new MemoryStream();");

@@ -1,60 +1,42 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- CEF 平台实现（CefGlue 托管包装 + 裸 Win32 子窗口 + 启动自动下载运行时）：
-       独立包，由 WebWindowUI 入口包在 UseCEF=true 时按平台引入（替换 WebWindowUI.Platforms.Windows，
-       与 WebView2 互斥）。本程序集不写 [ModuleInitializer]——CEF 渲染/GPU 子进程会复进主 exe 加载
-       本程序集，ModuleInitializer 会在子进程里也执行，而子进程需要的是短路退出而非注册；
-       引导全显式：入口 Platform.EnsureRegistered() 的 #if WWUI_CEF 分支调 CefBootstrap.EnsureRegistered()。 -->
-
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- Windows 上引用 Natives.Windows（net10.0-windows，Win32 共享层）→ TFM 须镜像；其余平台无 native 依赖保持 net10.0 -->
+    <TargetFramework Condition="'$(WWUIPlatform)' == 'Windows'">net10.0-windows</TargetFramework>
+    <TargetFramework Condition="'$(WWUIPlatform)' != 'Windows'">net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-
     <PackageId>WebWindowUI.Platforms.Cef</PackageId>
-    <Description>WebWindowUI CEF 平台实现：CefGlue（Deon-Berlin 分支，CEF 150.0.11）+ 裸 Win32 子窗口 + 启动自动下载运行时（%LocalAppData%\WebWindowUI\cef）。由 WebWindowUI 入口包在 UseCEF=true 时自动引入（替换 WebView2）。</Description>
-    <PackageTags>webwindowui;cef;chromium;windows</PackageTags>
+    <Description>WebWindowUI CEF 平台实现</Description>
+    <PackageTags>webwindowui;cef;chromium</PackageTags>
     <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
   </PropertyGroup>
 
   <PropertyGroup>
-    <DefineConstants>$(DefineConstants);WINDOWS;WWUI_CEF</DefineConstants>
+    <DefineConstants>$(DefineConstants);WWUI_CEF</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="cef.runtime.linux-arm64" Condition="'$(WWUIPlatform)' == 'Linux' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'" />
+    <PackageReference Include="cef.runtime.linux-x64" Condition="'$(WWUIPlatform)' == 'Linux' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'X64'" />
+    <PackageReference Include="cef.runtime.osx-arm64" Condition="'$(WWUIPlatform)' == 'MacOS' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'" />
+    <PackageReference Include="cef.runtime.osx-x64" Condition="'$(WWUIPlatform)' == 'MacOS' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'X64'" />
+    <PackageReference Include="chromiumembeddedframework.runtime.win-arm64" Condition="'$(WWUIPlatform)' == 'Windows' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'" />
+    <PackageReference Include="chromiumembeddedframework.runtime.win-x64" Condition="'$(WWUIPlatform)' == 'Windows' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'X64'" />
     <PackageReference Include="SharpCompress" />
-    <!-- CefGlue（Deon-Berlin 分支）：.NET 托管包装，钉版 150.7871.115 = CEF 150.0.11。
-         只引 CefGlue.Next.Core（纯托管、零依赖、不含 native redist）——native 运行时由
-         CefRuntimeManager 下载到 %LocalAppData% 缓存并经 SetDllDirectory + CefRuntime.Load(path) 接入，
-         与 CefGlue 自带 redist 互斥（勿引 CefGlue.Next.* 带 native 的包）。API hash 硬校验要求
-         CefRuntimeManager.Version 必须与 150.7871.115 匹配（见 CefRuntimeManager）。 -->
     <PackageReference Include="CefGlue.Next.Core" />
   </ItemGroup>
 
-  <!-- 反向引用核心（WebWindowUI.Core，非入口包）：PrivateAssets=all 抑制 pack 依赖——
-       本包由入口包引入，入口已带 Core，nuspec 不必重复声明。编译期仍拿到 Core 全部类型与 internal（IVT）。 -->
   <ItemGroup>
     <ProjectReference Include="..\..\Core\WebWindowUI.Core\WebWindowUI.Core.csproj" PrivateAssets="all" />
   </ItemGroup>
 
-  <!-- Win32 共享层：普通 ProjectReference（不带 PrivateAssets）→ 平台包 nuspec 声明 Natives 依赖
-       （入口包不带 Natives，消费方必须经平台包还原到本程序集；dotnet pack 会一并打包 Natives.nupkg）。 -->
-  <ItemGroup>
-    <ProjectReference Include="..\..\Natives\WebWindowUI.Natives.Windows\WebWindowUI.Natives.Windows.csproj" />
+  <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows'">
+	  <ProjectReference Include="..\..\Natives\WebWindowUI.Natives.Windows\WebWindowUI.Natives.Windows.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="WebWindowUI.Tests.Platform" />
   </ItemGroup>
 
-
-  <!-- PDB 内嵌策略显式化：Debug=portable（独立 .pdb）、Release=embedded（符号随程序集，无独立 .pdb 文件）。
-       仓库工程与根 Directory.Build.props 的 Release=embedded 重复但无害（自包含）；模板生成工程无根 props，靠这里保证。 -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <DebugType>portable</DebugType>
-  </PropertyGroup>
-
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <DebugType>embedded</DebugType>
-  </PropertyGroup>
 </Project>

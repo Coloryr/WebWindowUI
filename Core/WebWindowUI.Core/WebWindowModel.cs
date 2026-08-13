@@ -1,8 +1,8 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Reflection;
-using CommunityToolkit.Mvvm.ComponentModel;
 using WebWindowUI.Core.Protocol;
 
 namespace WebWindowUI.Core;
@@ -75,13 +75,17 @@ public abstract partial class WebWindowModel : ObservableObject
     }
 
     /// <summary>
-    /// 退订全部集合属性的 CollectionChanged（防泄漏；重绑时重新挂接）。
+    /// 退订全部集合属性的 CollectionChanged 与模型元素订阅（防泄漏；重绑时重新挂接）。
     /// </summary>
     private void UnbindCollections()
     {
         foreach (var kv in _collectionSubs)
             kv.Value.CollectionChanged -= OnCollectionChanged;
         _collectionSubs.Clear();
+        foreach (var set in _itemSubs.Values)
+            foreach (var m in set)
+                m.PropertyChanged -= OnItemPropertyChanged;
+        _itemSubs.Clear();
     }
 
     /// <summary>
@@ -198,6 +202,10 @@ public abstract partial class WebWindowModel : ObservableObject
         // 集合属性被替换时切换 CollectionChanged 订阅（须在回声抑制前，否则回写期间 .Add() 静默丢失）。
         EnsureCollectionSubscribed(e.PropertyName, value);
 
+        // 模型元素集合属性被替换时切换元素订阅（同样在回声抑制前，远程整列回写也要跟上新元素）。
+        if (_itemSubs.ContainsKey(e.PropertyName))
+            EnsureItemsSubscribed(e.PropertyName, value as IEnumerable);
+
         // 前端回写引起的属性变化不再回传（冗余回声）。
         if (_isApplyingRemoteWrite)
             return;
@@ -207,6 +215,86 @@ public abstract partial class WebWindowModel : ObservableObject
             return;
 
         PushEnvelope(BuildUpdateEnvelope(e.PropertyName, value));
+    }
+
+    /// <summary>
+    /// 模型元素订阅：集合属性（ObservableCollection&lt;WebWindowModel&gt;）每个元素挂 PropertyChanged，
+    /// 元素属性变化 → 逐元素 ElementSet 补丁推前端。差量增删：新项挂接、离开集合的退订。
+    /// 生成的 SubscribeGeneratedCollections 对模型元素集合调用；结构变化/整体替换由
+    /// <see cref="OnCollectionChanged"/> / <see cref="OnModelPropertyChanged"/> 重同步。
+    /// </summary>
+    private readonly Dictionary<string, HashSet<WebWindowModel>> _itemSubs = [];
+
+    /// <summary>
+    /// 确保集合的每个元素都订阅 PropertyChanged（差量增删；items 为 null/空集合时退订全部）。
+    /// 供生成的 SubscribeGeneratedCollections 调用。
+    /// </summary>
+    protected void EnsureItemsSubscribed(string propertyName, IEnumerable? items)
+    {
+        var wanted = new HashSet<WebWindowModel>();
+        if (items is not null)
+        {
+            foreach (var item in items)
+            {
+                if (item is WebWindowModel m)
+                    wanted.Add(m);
+            }
+        }
+
+        if (!_itemSubs.TryGetValue(propertyName, out HashSet<WebWindowModel>? cur))
+        {
+            cur = new HashSet<WebWindowModel>();
+            _itemSubs[propertyName] = cur;
+        }
+
+        foreach (var m in wanted)
+        {
+            if (cur.Add(m))
+                m.PropertyChanged += OnItemPropertyChanged;
+        }
+
+        var stale = new List<WebWindowModel>();
+        foreach (var m in cur)
+            if (!wanted.Contains(m))
+                stale.Add(m);
+        foreach (var m in stale)
+        {
+            cur.Remove(m);
+            m.PropertyChanged -= OnItemPropertyChanged;
+        }
+    }
+
+    /// <summary>
+    /// 元素属性变化 → 逐元素 ElementSet 补丁推全部绑定窗口（.NET 侧原地改元素属性的推送方向）。
+    /// 远程元素级回写期间不推（回声抑制）。元素可出现在多个集合 → 每个包含它的集合各推一条。
+    /// </summary>
+    private void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_isApplyingRemoteWrite)
+            return;
+        if (e.PropertyName is null || sender is not WebWindowModel item)
+            return;
+
+        foreach (var kv in _itemSubs)
+        {
+            if (!kv.Value.Contains(item))
+                continue;
+            if (!item.TryGetGeneratedProperty(e.PropertyName, out object? value))
+                continue;
+            TraceElem($"OnItemPropertyChanged push {kv.Key} id={item.ModelInstanceId} {e.PropertyName}={value}");
+            PushEnvelope(BuildElementUpdateEnvelope(kv.Key, item.ModelInstanceId, e.PropertyName, value));
+        }
+    }
+
+    private static void TraceElem(string message)
+    {
+        try
+        {
+            System.IO.File.AppendAllText(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "wwui_trace.txt"),
+                $"{System.DateTime.Now:HH:mm:ss.fff} T{Environment.CurrentManagedThreadId} elem: {message}\r\n");
+        }
+        catch { }
     }
 
     /// <summary>
@@ -245,13 +333,15 @@ public abstract partial class WebWindowModel : ObservableObject
     /// </summary>
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (_isApplyingRemoteWrite)
-            return;
-
         foreach (var kv in _collectionSubs)
         {
             if (!ReferenceEquals(kv.Value, sender))
                 continue;
+            // 模型元素订阅随结构变化重同步（须在回声抑制前：远程整列回写 Clear+Add 也要跟上新元素）。
+            if (_itemSubs.ContainsKey(kv.Key) && sender is IEnumerable items)
+                EnsureItemsSubscribed(kv.Key, items);
+            if (_isApplyingRemoteWrite)
+                return;
             if (sender is IDictionary)
             {
                 // 字典（ObservableDictionary 等）：键值语义无索引差量，原地改 → 整属性重推，前端整体替换。
@@ -347,6 +437,80 @@ public abstract partial class WebWindowModel : ObservableObject
         // 未命中（属性非生成）不广播。
         if (TryGetGeneratedProperty(propertyName, out object? value))
             PushEnvelope(BuildUpdateEnvelope(propertyName, value), exclude);
+    }
+
+    /// <summary>
+    /// 前端元素级写回：ModelSet{ElementProperty 非空}。按 ModelInstanceId 在集合里找元素，
+    /// 在回声抑制下原地写该元素属性（复用 item.TrySetProperty，保实例）。ElementProperty 为空 =
+    /// 旧整属性回写（回退 TrySetProperty）。命中返回 true，未命中（元素不存在/属性不可写）返回 false。
+    /// </summary>
+    internal bool TrySetElementProperty(string collection, long elementInstanceId, string? elementProperty, ModelValue? value)
+    {
+        if (string.IsNullOrEmpty(elementProperty))
+            return TrySetProperty(collection, value);
+        if (!TryGetGeneratedProperty(collection, out object? collValue) || collValue is not IEnumerable items)
+            return false;
+
+        WebWindowModel? target = null;
+        foreach (var item in items)
+        {
+            if (item is WebWindowModel m && m.ModelInstanceId == elementInstanceId)
+            {
+                target = m;
+                break;
+            }
+        }
+        if (target is null)
+            return false;
+
+        bool ok = false;
+        _isApplyingRemoteWrite = true; // 抑制本侧 OnItemPropertyChanged 回声
+        try
+        {
+            ok = target.TrySetProperty(ModelProtocol.ToPascalCase(elementProperty), value);
+        }
+        finally
+        {
+            _isApplyingRemoteWrite = false;
+        }
+        return ok;
+    }
+
+    /// <summary>
+    /// 把元素级写回结果广播给除源窗口外的所有绑定窗口（共享模型实例跨窗口逐元素同步）。
+    /// elementProperty 是线缆上的 camelCase；按 ID 重读权威值后推 ElementSet 补丁。
+    /// </summary>
+    internal void BroadcastElementUpdate(string collection, long elementInstanceId, string elementProperty, Action<byte[]> exclude)
+    {
+        if (!TryGetGeneratedProperty(collection, out object? collValue) || collValue is not IEnumerable items)
+            return;
+        foreach (var item in items)
+        {
+            if (item is WebWindowModel m && m.ModelInstanceId == elementInstanceId)
+            {
+                if (!m.TryGetGeneratedProperty(ModelProtocol.ToPascalCase(elementProperty), out object? value))
+                    return;
+                PushEnvelope(BuildElementUpdateEnvelope(collection, elementInstanceId, ModelProtocol.ToPascalCase(elementProperty), value), exclude);
+                return;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 把单个元素的属性变更编码成 ElementSet 补丁信封（元素级推送 / 元素级写回后跨窗口广播共用）。
+    /// elementProperty 为 .NET 侧 PascalCase 名，线缆上转 camelCase；元素由 ModelInstanceId 寻址。
+    /// </summary>
+    private byte[] BuildElementUpdateEnvelope(string collection, long elementInstanceId, string elementProperty, object? value)
+    {
+        var patch = new CollectionPatch
+        {
+            Action = CollectionPatchAction.ElementSet,
+            Property = collection,
+            ElementInstanceId = elementInstanceId,
+            ElementProperty = ModelProtocol.ToCamelCase(elementProperty),
+            ElementValue = ModelProtocol.ToModelValue(value),
+        };
+        return ModelProtocol.Encode(new WebMessage { ModelInstanceId = ModelInstanceId, Patch = patch });
     }
 
     /// <summary>

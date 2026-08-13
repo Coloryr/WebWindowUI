@@ -267,18 +267,80 @@ public class WebView2ModelBridgeTests
                 "window.__model.todos[1].title === \"t2\" && window.__model.todos[1].done === false",
                 "快照 todos[1]");
 
-            // .NET 追加：ObservableCollection.Add 触发 CollectionChanged → 框架发 Insert 差量补丁，前端原地 splice（无需整列推送）
-            model.Todos.Add(new TodoItemModel { Title = "t3", Done = false });
-            await WebView2TestHarness.WaitJsAsync(win, "window.__model.todos.length === 3 && window.__model.todos[2].title === \"t3\"", ".NET 追加 t3");
+            // 快照来源的元素带 _modelInstanceId（生成器合成字段 → 桥抽出为不可枚举），与 .NET ModelInstanceId 一一对应
+            var item = model.Todos[0];
+            var itemId = item.ModelInstanceId;
+            await WebView2TestHarness.WaitJsAsync(
+                win,
+                $"window.__model.todos[0]._modelInstanceId === {itemId}",
+                "快照元素 _modelInstanceId 对应 .NET");
 
-            // 前端改元素字段 → 整列表回写 .NET（桥按 proto 字段号序数键序列化元素，.NET 序数转换器重建）
+            // .NET 追加：ObservableCollection.Add 触发 CollectionChanged → 框架发 Insert 差量补丁，前端原地 splice（无需整列推送）
+            var added = new TodoItemModel { Title = "t3", Done = false };
+            model.Todos.Add(added);
+            await WebView2TestHarness.WaitJsAsync(win, "window.__model.todos.length === 3 && window.__model.todos[2].title === \"t3\"", ".NET 追加 t3");
+            await WebView2TestHarness.WaitJsAsync(
+                win,
+                $"window.__model.todos[2]._modelInstanceId === {added.ModelInstanceId}",
+                "Insert 补丁元素带 _modelInstanceId");
+
+            // 前端改元素字段 → 元素级 set（按 _modelInstanceId 寻址）→ .NET 原地写、元素实例保持
             await win.ExecuteScriptAsync("window.__model.todos[0].title = 'renamed'; 0");
             await WebView2TestHarness.WaitDotNetAsync(() => model.Todos[0].Title == "renamed", ".NET todos[0] 被前端回写");
+            Assert.True(ReferenceEquals(model.Todos[0], item)); // 元素级写回保持实例（旧整列重建已不复存在）
             Assert.True(model.Todos[0].Done); // 未动字段保持
+
+            // .NET 直接改元素属性 → 逐元素推送（ElementSet 补丁）→ 前端该项跟随、实例不重建
+            model.Todos[0].Done = false;
+            await WebView2TestHarness.WaitJsAsync(
+                win,
+                $"window.__model.todos[0].done === false && window.__model.todos[0]._modelInstanceId === {itemId}",
+                ".NET 改元素属性逐项推送");
+            Assert.True(ReferenceEquals(model.Todos[0], item));
+
+            // 非快照来源的元素（Insert 补丁新增）也能被逐项编辑 → .NET 命中（覆盖补丁路径寻址）
+            await win.ExecuteScriptAsync("window.__model.todos[2].title = 't3-edited'; 0");
+            await WebView2TestHarness.WaitDotNetAsync(() => model.Todos[2].Title == "t3-edited", ".NET todos[2]（Insert 来源）被前端回写");
+            Assert.True(ReferenceEquals(model.Todos[2], added));
 
             // .NET 删除：RemoveAt → Remove 差量补丁 → 前端数组原地 splice，不重建其余元素
             model.Todos.RemoveAt(0);
             await WebView2TestHarness.WaitJsAsync(win, "window.__model.todos.length === 2 && window.__model.todos[0].title === \"t2\"", ".NET 删除首个");
+        }, Timeout);
+    }
+
+    [Fact]
+    public async Task TodoList_SharedModel_ElementEdit_BroadcastsToOtherWindow()
+    {
+        var model = new TodoListModel
+        {
+            Todos =
+            {
+                new TodoItemModel { Title = "t1", Done = true },
+                new TodoItemModel { Title = "t2", Done = false },
+            },
+        };
+
+        // 双窗口绑同一模型实例（"todos" 页面），验证元素级写回后跨窗口只推被改元素、源窗口不回声。
+        await WebView2TestHarness.RunTwoWindowsSharedModelAsync("todos", "编辑A", "只读B", model, async (winA, winB) =>
+        {
+            await WebView2TestHarness.WaitJsAsync(winA, "window.__model.todos.length === 2", "A 快照就绪");
+            await WebView2TestHarness.WaitJsAsync(winB, "window.__model.todos.length === 2", "B 快照就绪");
+
+            var item = model.Todos[0];
+            var itemId = item.ModelInstanceId;
+
+            // A 窗改元素 title → 元素级 set → B 窗该项跟随（跨窗口 ElementSet 广播）
+            await winA.ExecuteScriptAsync("window.__model.todos[0].title = 'renamed'; 0");
+            await WebView2TestHarness.WaitJsAsync(
+                winB,
+                $"window.__model.todos[0].title === \"renamed\" && window.__model.todos[0]._modelInstanceId === {itemId}",
+                "B 窗该项跟随元素级广播");
+            Assert.True(ReferenceEquals(model.Todos[0], item)); // 写回保持实例
+
+            // B 窗未做任何操作：改 title 后 A 窗不回声重建（元素实例与 done 未动）
+            await WebView2TestHarness.WaitJsAsync(winA, "window.__model.todos[0].done === true", "A 窗元素未被回声重建");
+            Assert.True(model.Todos[0].Done);
         }, Timeout);
     }
 

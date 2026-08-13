@@ -8,7 +8,7 @@ namespace WebWindowUI.Sample;
 internal sealed class AboutWindow : WebWindow
 {
     public AboutWindow() : base(new WebWindowOptions("about")
-    { 
+    {
         Title = "关于",
         Width = 700,
         Height = 500

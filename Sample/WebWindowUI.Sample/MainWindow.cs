@@ -12,10 +12,10 @@ internal sealed class MainWindow : WebWindow
     private readonly Timer _timer;
 
     public MainWindow() : base(new WebWindowOptions("main")
-    { 
-        Title = "主窗口", 
-        Width = 800, 
-        Height = 640 
+    {
+        Title = "主窗口",
+        Width = 800,
+        Height = 640
     })
     {
         var model = new MainWindowModel();

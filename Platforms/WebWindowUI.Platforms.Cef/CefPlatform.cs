@@ -1,8 +1,11 @@
+using System.Collections.Concurrent;
+using System.Text;
 using WebWindowUI.Core;
+using WebWindowUI.Core.Protocol;
 using WebWindowUI.Natives.Windows;
 using Xilium.CefGlue;
 
-namespace WebWindowUI.Cef;
+namespace WebWindowUI.Platforms.Cef;
 
 /// <summary>
 /// CEF 平台实现（Windows：CefGlue 托管包装 + 裸 Win32 子窗口 + 启动自动下载运行时）。
@@ -14,48 +17,247 @@ namespace WebWindowUI.Cef;
 /// </summary>
 public sealed class CefPlatform : IWebWindowPlatform
 {
+    private const CefSchemeOptions SchemeOptions =
+        CefSchemeOptions.Standard
+        | CefSchemeOptions.DisplayIsolated
+        | CefSchemeOptions.Secure
+        | CefSchemeOptions.CorsEnabled
+        | CefSchemeOptions.FetchEnabled;
+
+    private static WwuiCefApp _app;
+    private static IMessageLoop _message;
+
+    private static readonly ConcurrentDictionary<int, CefWindow> _browsers = new();
+
+    private static CefSchemeHandlerFactory? _factoryApp;
+    private static CefSchemeHandlerFactory? _factoryData;
+
     public CefPlatform()
     {
-        // 尽早安装 SynchronizationContext（平台是懒加载单例，首次创建窗口即触发，
-        // 一定先于任何窗口 Show()/浏览器创建）：否则 async 延续会恢复在
-        // 线程池线程上，跨线程 marshal 下行/关窗也会失去目标线程。
-        InstallMessageLoopSynchronizationContext();
+        CefRuntime.Load();
+
+        var mainArgs = new CefMainArgs(Environment.GetCommandLineArgs());
+        _app = new WwuiCefApp();
+
+        var exitCode = CefRuntime.ExecuteProcess(mainArgs, _app, IntPtr.Zero);
+        if (exitCode >= 0)
+            Environment.Exit(exitCode);
+
+        var settings = new CefSettings
+        {
+            NoSandbox = true,               // 不链 cef_sandbox，Chromium 沙箱须关掉
+            MultiThreadedMessageLoop = true, // 单线程环：CefRuntime.RunMessageLoop 泵消息 + CEF 任务
+            ExternalMessagePump = false,
+            LogSeverity = CefLogSeverity.Verbose,
+        };
+
+        CefRuntime.Initialize(mainArgs, settings, _app, IntPtr.Zero);
+
+        _factoryApp = new ResourceSchemeHandlerFactory();
+        _factoryData = new MessageSchemeHandlerFactory();
+
+        CefRuntime.RegisterSchemeHandlerFactory(WebWindowResource.Scheme, null, _factoryApp);
+        CefRuntime.RegisterSchemeHandlerFactory(WebWindowResource.SchemeData, null, _factoryData);
+
+        _message = new Win32MessageLoop();
+        _message.InitMessageLoop();
     }
 
-    public string Name => "Cef";
+    /// <summary>
+    /// on_after_created：记录浏览器 id → 窗口映射，供工厂 Create 分派回对应窗口。
+    /// </summary>
+    internal static void RegisterBrowser(CefBrowser browser, CefWindow window)
+        => _browsers[browser.Identifier] = window;
 
-    public IWindowBackend CreateWindow(string title, WebWindowOptions options, int width, int height)
-        => CefWindow.Create(title, options, width, height);
+    /// <summary>
+    /// on_before_close：摘除映射，避免回调落到已关闭窗口。
+    /// </summary>
+    internal static void UnregisterBrowser(CefBrowser browser)
+        => _browsers.TryRemove(browser.Identifier, out _);
+
+    /// <summary>
+    /// 当前请求匹配的窗口
+    /// </summary>
+    internal static bool TryGetWindow(CefBrowser browser, out CefWindow? window)
+    {
+        var id = browser.Identifier;
+        if (_browsers.TryGetValue(id, out window))
+            return true;
+        for (int i = 0; i < 500; i++)
+        {
+            Thread.Sleep(10);
+            if (_browsers.TryGetValue(id, out window))
+                return true;
+        }
+        window = null;
+        return false;
+    }
+
+    /// <summary>
+    /// CefApp 子类：唯一两个回调——on_before_command_line_processing（--disable-gpu）与
+    /// on_register_custom_schemes（app/appbin）。每个进程（浏览器 + 各子进程）都执行，
+    /// scheme 注册须全进程一致（CEF 要求），--disable-gpu 只注入浏览器进程。
+    /// </summary>
+    internal sealed class WwuiCefApp : CefApp
+    {
+        protected override void OnRegisterCustomSchemes(CefSchemeRegistrar registrar)
+        {
+            registrar.AddCustomScheme(WebWindowResource.Scheme, SchemeOptions);
+            registrar.AddCustomScheme(WebWindowResource.SchemeData, SchemeOptions);
+        }
+    }
+
+    internal class MessageSchemeHandlerFactory : CefSchemeHandlerFactory
+    {
+        protected override CefResourceHandler Create(CefBrowser browser, CefFrame frame, string schemeName, CefRequest request)
+        {
+            try
+            {
+                var payload = ReadPostDataPayload(request);
+                if (TryGetWindow(browser, out var window))
+                {
+                    MessageLoopSynchronizationContext.Instance.Post(_ => window!.OnMessageFromWeb(payload), null);
+                }
+            }
+            catch
+            {
+                // 单个请求失败回退 404，不影响其他请求
+            }
+            return new WwuiResourceHandler(Encoding.UTF8.GetBytes("404 Not Found"), "text/plain; charset=utf-8", 404, "no-store");
+        }
+    }
+
+    internal class ResourceSchemeHandlerFactory : CefSchemeHandlerFactory
+    {
+        protected override CefResourceHandler Create(CefBrowser browser, CefFrame frame, string schemeName, CefRequest request)
+        {
+            try
+            {
+                var uri = request.Url ?? "";
+
+                if (WebWindowResource.TryResolvePath(uri, out string? relative, out string? mimeType) is { } stream)
+                {
+                    var data = new byte[stream.Length];
+                    stream.ReadExactly(data);
+                    return new WwuiResourceHandler(data, mimeType!, 200, ResourceHeaders.CacheControl(relative!));
+                }
+            }
+            catch
+            {
+                // 单个请求失败回退 404，不影响其他请求
+            }
+            return new WwuiResourceHandler(Encoding.UTF8.GetBytes("404 Not Found"), "text/plain; charset=utf-8", 404, "no-store");
+        }
+    }
+
+    /// <summary>
+    /// 单请求 resource handler：整读进内存后同步输出（Open 即完成 → GetResponseHeaders → Read）。
+    /// </summary>
+    internal sealed class WwuiResourceHandler(byte[] data, string mime, int status, string? cacheControl) : CefResourceHandler
+    {
+        private int _offset;
+
+        /// <summary>
+        /// 同步处理：handle_request=1 + 返回 true → CEF 继续 GetResponseHeaders → Read。
+        /// </summary>
+        protected override bool Open(CefRequest request, out bool handleRequest, CefCallback callback)
+        {
+            handleRequest = true;
+            return true;
+        }
+
+        protected override void GetResponseHeaders(CefResponse response, out long responseLength, out string redirectUrl)
+        {
+            responseLength = data.LongLength;
+            redirectUrl = string.Empty;
+            response.Status = status;
+            response.StatusText = StatusText(status);
+            response.MimeType = mime;
+
+            response.SetHeaderByName("Access-Control-Allow-Origin", "*", true);
+            if (cacheControl is { } cache)
+            {
+                response.SetHeaderByName("Cache-Control", cache, true);
+            }
+        }
+
+        protected override bool Read(Stream response, int bytesToRead, out int bytesRead, CefResourceReadCallback callback)
+        {
+            bytesRead = Math.Min(bytesToRead, data.Length - _offset);
+            if (bytesRead > 0)
+            {
+                response.Write(data, _offset, bytesRead);
+                _offset += bytesRead;
+                return true;
+            }
+            bytesRead = 0;
+            return false;
+        }
+
+        protected override bool Skip(long bytesToSkip, out long bytesSkipped, CefResourceSkipCallback callback)
+        {
+            var remaining = data.Length - _offset;
+            var actual = Math.Min(bytesToSkip, remaining);
+            _offset += (int)actual;
+            bytesSkipped = actual;
+            return _offset < data.Length;
+        }
+
+        /// <summary>
+        /// 请求被取消：byte[] 可 GC（CefGlue 的 HANDLER 引用计数归零时释放原生包装）。
+        /// </summary>
+        protected override void Cancel() { }
+    }
+
+    private static string StatusText(int status) => status switch
+    {
+        200 => "OK",
+        204 => "No Content",
+        404 => "Not Found",
+        _ => "OK",
+    };
+
+    /// <summary>读 POST body：CEF 的 fetch POST 把 JS 字符串按 UTF-8 编码成 post data 字节，
+    /// 这里 UTF-8 解码还原成 NUL 转义串，再经 WebView2StringCodec.Decode 还原成 protobuf 字节
+    /// （与前端 bytesToEscaped 对称，桥两侧同一 codec）。</summary>
+    private static byte[] ReadPostDataPayload(CefRequest request)
+    {
+        var postData = request.PostData;
+        if (postData is null)
+            return [];
+        var merged = new List<byte>();
+        foreach (var element in postData.GetElements())
+            merged.AddRange(element.GetBytes());
+        if (merged.Count == 0)
+            return [];
+        // fetch 把 JS 字符串按 UTF-8 编码成 body 字节，先解码回 NUL 转义串，再还原成 protobuf 字节
+        var escaped = Encoding.UTF8.GetString([.. merged]);
+        return WebView2StringCodec.Decode(escaped);
+    }
+
+    public IWindowBackend CreateWindow(WebWindowOptions options)
+    { 
+        return new CefWindow(options);
+    }
 
     public void RunMessageLoop()
     {
-        // 隐藏消息窗口：所有 async 延续都通过它调度回 UI 线程。
-        // 构造里已装过一次，这里是幂等兜底（覆盖未经过窗口创建直接调消息循环的宿主）。
-        InstallMessageLoopSynchronizationContext();
-
-        // 单线程 CEF 消息循环：CefRuntime.RunMessageLoop 内部泵 Windows 消息 + CEF 任务，
-        // 末窗关闭（WM_QUIT）后返回。
         CefRuntime.RunMessageLoop();
-
-        // 同线程（UI 线程）关停 CEF。Shutdown 会等剩余浏览器上下文销毁，必须最后调用。
         CefRuntime.Shutdown();
     }
 
-    private static void InstallMessageLoopSynchronizationContext()
+    /// <summary>
+    /// 把动作 marshal 到 UI 线程同步执行：UI 线程直接运行；非 UI 线程经
+    /// <see cref="MessageLoopSynchronizationContext.Send"/>（回 UI 线程并阻塞等待）。
+    /// Win32 窗口 API（DestroyWindow/SetForegroundWindow/SetWindowTextW/SendMessage）都要求 UI 线程。
+    /// </summary>
+    public static void RunOnUiThread(Action action)
     {
-        Win32.SetMarshalMessageHandler(HandleMarshalMessage);
-        var marshalHwnd = Win32.GetOrCreateMarshalWindow("CefMarshalWindow");
-        MessageLoopSynchronizationContext.Initialize(marshalHwnd);
-        SynchronizationContext.SetSynchronizationContext(MessageLoopSynchronizationContext.Instance);
-    }
-
-    private static IntPtr? HandleMarshalMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)
-    {
-        if (msg == MessageLoopSynchronizationContext.WM_RUN)
+        if (Environment.CurrentManagedThreadId == MessageLoopSynchronizationContext.UiThreadId)
         {
-            MessageLoopSynchronizationContext.Instance.RunQueued();
-            return IntPtr.Zero;
+            action();
+            return;
         }
-        return null;
+        MessageLoopSynchronizationContext.Instance.Send(_ => action(), null);
     }
 }

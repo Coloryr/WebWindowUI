@@ -20,10 +20,13 @@ import * as protobuf from 'protobufjs'
  *     update   单属性增量：ModelUpdate{ modelId, payload }，payload 用生成器为模型单独产出的
  *              update 消息类型解码（如 MainWindowModelUpdate），只编码被修改的字段
  *     patch    集合增删差量：CollectionPatch{ action, property, index, count, items, fromIndex }，
- *              对响应式数组原地 splice（Insert/Remove/Replace/Move）；Reset 时 items 承载整列表整体替换
+ *              对响应式数组原地 splice（Insert/Remove/Replace/Move）；Reset 时 items 承载整列表整体替换；
+ *              ElementSet 是元素级属性变更（elementInstanceId 定位元素，只改 elementProperty 一个属性）
  *   JS → .NET：
  *     ready    ModelReady：页面脚本就绪，请求补发快照
- *     set      ModelSet{ property, value }：本地修改回写
+ *     set      ModelSet{ property, value }：本地修改回写；
+ *              元素字段级修改回写带 elementInstanceId + elementProperty（.NET 按 ModelInstanceId 定位
+ *              元素、只写该属性，保实例——不再整列表重建）
  *     invoke   ModelInvoke{ commandId, value }：执行 .NET 命令（[RelayCommand] 生成的 ICommand），
  *              commandId = 命令序号（[RelayCommand] 方法声明序），value 为参数（可空）
  *
@@ -143,7 +146,13 @@ interface WebMessageLike {
   ready?: object
   /** 增量更新：payload 是生成器为模型产出的 update 消息（如 MainWindowModelUpdate）字节。 */
   update?: { modelId?: number; payload?: Uint8Array }
-  set?: { property?: string; value?: ModelValueLike }
+  set?: {
+    property?: string
+    value?: ModelValueLike
+    /** 集合元素级回写：elementProperty 非空时定位元素（elementInstanceId）并只改该元素属性。 */
+    elementInstanceId?: number
+    elementProperty?: string
+  }
   snapshot?: { data?: Record<string, ModelValueLike> }
   full?: { modelId?: number; payload?: Uint8Array }
   /** 命令执行（前端 → .NET）：commandId = 命令序号，value = 参数（可空）。 */
@@ -156,6 +165,10 @@ interface WebMessageLike {
     count?: number
     items?: ModelValueLike[]
     fromIndex?: number
+    /** ElementSet：目标元素（ModelInstanceId）定位元素级属性变更。 */
+    elementInstanceId?: number
+    elementProperty?: string
+    elementValue?: ModelValueLike
   }
 }
 
@@ -165,6 +178,7 @@ const PATCH_REMOVE = 2
 const PATCH_REPLACE = 3
 const PATCH_MOVE = 4
 const PATCH_RESET = 5
+const PATCH_ELEMENT_SET = 6
 
 // ---- ModelValue ↔ JS ----
 
@@ -278,6 +292,29 @@ function toPascalCase(key: string): string {
 }
 
 /**
+ * 给收敛出的元素对象注入不可枚举的 _modelInstanceId（元素级寻址用）。
+ * 完整消息路径元素带 modelInstanceId（int64 → Long → number）；ModelValue 序数路径元素带
+ * _modelInstanceId name 键（.NET ToModelValue 注入，Number 字段直通 number）。两者都收敛成
+ * 不可枚举 _modelInstanceId——不进 Object.keys watch 循环、不落快照键（同根模型 _modelInstanceId 模式）。
+ * id 缺省/非正数 = 旧端未携带，不注入（元素级回写退回整列表兜底）。
+ */
+const defineElementId = (target: Record<string, unknown>, id: unknown): void => {
+  const num = typeof id === 'number'
+    ? id
+    : typeof id === 'object' && id !== null && typeof (id as { toNumber?: unknown }).toNumber === 'function'
+      ? (id as { toNumber: () => number }).toNumber()
+      : 0
+  if (num > 0) {
+    Object.defineProperty(target, '_modelInstanceId', {
+      enumerable: false,
+      configurable: false,
+      writable: true,
+      value: num,
+    })
+  }
+}
+
+/**
  * 命令执行宿主基类：带 [RelayCommand] 的模型生成的 TS 类继承它（如
  * `class LauncherModel extends ModelCommandHost`），命令方法经 `this._commandChannel`
  * 把命令调用发给 .NET（ModelInvoke { commandId, value }）。
@@ -369,16 +406,82 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
     },
   })
 
+  /** typed-repeated 整列表回写（结构变化 / 元素未带 ID 的兜底）：元素用序数键（proto 字段号 int）序列化，
+      与 .NET ConvertFromModelValue 的 switch (kv.Key) case 1: 匹配。 */
+  const sendElementList = (key: string, arr: unknown[]): void => {
+    const elemFields = typedElemFields.get(key)
+    if (!elemFields || !Array.isArray(arr)) return
+    const items = arr.map((elem) => {
+      const fields: Record<string, unknown> = {}
+      const el = elem as Record<string, unknown>
+      for (const [num, fieldName] of Object.entries(elemFields)) fields[num] = jsToModelValue(el[fieldName])
+      return { object: { ordinalFields: fields } }
+    })
+    sendEnvelope({ set: { property: toPascalCase(key), value: { list: { items } } } })
+  }
+
+  /** 已挂的元素级 watch（按属性键）——重挂时先停旧（元素可能已离开集合/被整体替换）。 */
+  const elementWatchRefs = new Map<string, Array<() => void>>()
+
+  /**
+   * 给 typed-repeated 数组的每个元素、每个字段挂一个 watch（deep 覆盖嵌套 typed-repeated 再嵌套改动）：
+   * 元素字段变化 → 只回写该元素的该属性（ModelSet{ elementInstanceId, elementProperty }），不再整列表回写。
+   * 元素未带 ID（旧端没发 modelInstanceId）→ 退回整列表回写兜底。结构变化（增删/整体替换）不在这里处理，
+   * 由结构 watch 负责（元素级 watch 的 getter 只读 arr[i][fieldName]，下标/引用替换后 cb 由守卫放行）。
+   */
+  const armElementWatches = (key: string, arr: unknown[]): void => {
+    const elemFields = typedElemFields.get(key)
+    const prev = elementWatchRefs.get(key)
+    if (prev) {
+      for (const stop of prev) stop()
+      elementWatchRefs.delete(key)
+    }
+    if (!elemFields || !Array.isArray(arr)) return
+    const refs: Array<() => void> = []
+    arr.forEach((el, i) => {
+      if (!el || typeof el !== 'object') return
+      for (const fieldName of Object.values(elemFields)) {
+        const stop = watch(
+          () => (arr[i] as Record<string, unknown>)[fieldName],
+          (nv) => {
+            if (suppressEcho) return
+            if (arr[i] !== el) return // 元素被结构替换（splice/整体替换）：结构 watch 处理
+            const elementId = (el as Record<string, unknown>)._modelInstanceId
+            if (typeof elementId !== 'number' || elementId <= 0) {
+              sendElementList(key, arr) // 未带 ID（旧端）：退回整列表回写
+              return
+            }
+            sendEnvelope({
+              set: {
+                property: toPascalCase(key),
+                elementInstanceId: elementId,
+                elementProperty: fieldName,
+                value: jsToModelValue(nv),
+              },
+            })
+          },
+          { deep: true },
+        )
+        refs.push(stop)
+      }
+    })
+    elementWatchRefs.set(key, refs)
+  }
+
   /** 批量应用来自 .NET 的远程值（快照 / 增量），不触发本地回写。 */
   const applyRemote = (entries: Iterable<[string, unknown]>): void => {
     suppressEcho = true
+    let touchedTyped = false
     for (const [name, value] of entries) {
       const local = toCamelCase(name)
       if (!(local in values)) continue // 前端模型类没声明的属性不接收（类型以类为准）
+      if (typedElemFields.has(local)) touchedTyped = true
       values[local] = value
     }
     nextTick(() => {
       suppressEcho = false
+      // 整列表被替换后重挂元素级 watch（新元素要能被逐字段回写）。
+      if (touchedTyped) for (const key of typedElemFields.keys()) armElementWatches(key, values[key] as unknown[])
     })
   }
 
@@ -394,6 +497,7 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
     const decoded = type.decode(full.payload as Uint8Array) as unknown as Record<string, unknown>
     const entries: Array<[string, unknown]> = []
     for (const fieldName of Object.keys(type.fields)) {
+      if (fieldName === 'modelInstanceId') continue // 框架保留字段：根级实例 ID 走信封（onMessage 已处理）
       const raw = decoded[fieldName]
       if (raw === undefined) continue
       const f = type.fields[fieldName]
@@ -412,7 +516,11 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
           value = (raw as unknown[]).map((el) => {
             const out: Record<string, unknown> = {}
             const e = el as Record<string, unknown>
-            for (const k of elemFieldNames) if (e[k] !== undefined) out[k] = normalize(e[k])
+            for (const k of elemFieldNames) {
+              if (k === 'modelInstanceId') continue // 框架保留字段：抽出为不可枚举 _modelInstanceId
+              if (e[k] !== undefined) out[k] = normalize(e[k])
+            }
+            defineElementId(out, normalize(e.modelInstanceId))
             return out
           })
         } else {
@@ -445,17 +553,20 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
     const entries: Array<[string, unknown]> = []
     for (const fieldName of Object.keys(type.fields)) {
       if (!Object.prototype.hasOwnProperty.call(decoded, fieldName)) continue
+      if (fieldName === 'modelInstanceId') continue // 框架保留字段：不进 update（生成器已排除，防御）
       const f = type.fields[fieldName]
       const isModelValue = f.type === MODEL_VALUE_TYPE
       const elemFields = typedElemFields.get(fieldName)
       if (isModelValue && elemFields) {
         // typed-repeated：.NET 用序数键（proto 字段号）序列化元素（ConvertToModelValue），
         // 解码后把 { "1": v } 翻译回 { title: v } 命名键模型对象（Vue 模板按模型属性名访问）。
+        // 元素带 _modelInstanceId name 键（ToModelValue 注入）→ 抽出为不可枚举 _modelInstanceId。
         const raw = modelValueToJs(decoded[fieldName] as ModelValueLike)
         entries.push([fieldName, Array.isArray(raw) ? raw.map((el) => {
           const src = el as Record<string, unknown>
           const out: Record<string, unknown> = {}
           for (const [num, name] of Object.entries(elemFields)) if (src[num] !== undefined) out[name] = src[num]
+          defineElementId(out, src['_modelInstanceId'])
           return out
         }) : raw])
       } else {
@@ -478,10 +589,12 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
       items.map((iv) => {
         const raw = modelValueToJs(iv)
         if (elemFields && raw && typeof raw === 'object' && !Array.isArray(raw)) {
-          // typed-repeated 元素：{ "1": v } → { title: v } 命名键（Vue 模板按模型属性名访问）
+          // typed-repeated 元素：{ "1": v } → { title: v } 命名键（Vue 模板按模型属性名访问）；
+          // 元素带 _modelInstanceId name 键（ToModelValue 注入）→ 抽出为不可枚举 _modelInstanceId
           const src = raw as Record<string, unknown>
           const out: Record<string, unknown> = {}
           for (const [num, name] of Object.entries(elemFields)) if (src[num] !== undefined) out[name] = src[num]
+          defineElementId(out, src['_modelInstanceId'])
           return out
         }
         return raw
@@ -489,7 +602,17 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
     const arr = values[local]
     suppressEcho = true
     try {
-      if (patch?.action === PATCH_RESET || !Array.isArray(arr)) {
+      if (patch?.action === PATCH_ELEMENT_SET && Array.isArray(arr)) {
+        // 元素级属性变更（.NET 侧改元素属性 / 元素级写回后的跨窗口广播）：按 ModelInstanceId 定位元素，
+        // 只改该元素属性（setter 触发该元素字段级 watch，但 suppressEcho 已包住 → 不回声）。
+        // elementInstanceId 是 int64 → protobufjs 解出 Long，必须 normalize 成 number 才能和
+        // _modelInstanceId（number）比较（同 onMessage 的 modelInstanceId 处理）。
+        const id = normalize(patch?.elementInstanceId) ?? 0
+        const el = arr.find((e) => (e as Record<string, unknown>)._modelInstanceId === id)
+        if (el && typeof patch?.elementProperty === 'string') {
+          ;(el as Record<string, unknown>)[toCamelCase(patch.elementProperty)] = modelValueToJs(patch.elementValue)
+        }
+      } else if (patch?.action === PATCH_RESET || !Array.isArray(arr)) {
         // Reset（或集合属性被替换成非数组，防御）：整列表替换
         values[local] = decodeItems(patch?.items)
       } else {
@@ -515,6 +638,8 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
     } finally {
       nextTick(() => {
         suppressEcho = false
+        // 结构变化后重挂元素级 watch（新元素要能被逐字段回写；旧元素已停）。
+        if (elemFields) armElementWatches(local, values[local] as unknown[])
       })
     }
   }
@@ -560,29 +685,33 @@ export function bindModel<T extends object>(model: T, generatedJson: unknown): T
   // 每个根属性一条 watch：本地变更（如 v-model 输入）自动回写 .NET。
   // deep:true —— object/数组属性原地修改（model.extra.a=1、model.tags.push(x)）也要触发回写；
   // 浅 watch 只在引用替换时触发，嵌套变更会静默丢失。echo 已由 suppressEcho 挡住。
+  // typed-repeated 属性例外：元素字段级变化走「逐元素回写」（armElementWatches），这里只挂结构 watch
+  // （浅拷贝只读 length+下标，元素字段变化不触发），push/splice/整体替换才整列回写 + 重挂元素级 watch。
   for (const key of Object.keys(values)) {
-    watch(
-      () => values[key],
-      (value) => {
-        if (suppressEcho) return
-        const elemFields = typedElemFields.get(key)
-        if (elemFields && Array.isArray(value)) {
-          // typed-repeated 整列表回写：每个元素用序数键（proto 字段号 int）序列化进 ordinalFields，
-          // 与 .NET ConvertFromModelValue 的 switch (kv.Key) case 1: 匹配；非 typed 属性走通用 jsToModelValue（name 键）。
-          const items = value.map((elem) => {
-            const fields: Record<string, unknown> = {}
-            const el = elem as Record<string, unknown>
-            for (const [num, fieldName] of Object.entries(elemFields)) fields[num] = jsToModelValue(el[fieldName])
-            return { object: { ordinalFields: fields } }
-          })
-          sendEnvelope({ set: { property: toPascalCase(key), value: { list: { items } } } })
-        } else {
+    if (typedElemFields.has(key)) {
+      watch(
+        () => [...((values[key] as unknown[]) ?? [])],
+        () => {
+          if (suppressEcho) return
+          const arr = values[key] as unknown[]
+          armElementWatches(key, arr)
+          sendElementList(key, arr) // 增删仍走整列回写（结构变化非本次诉求）
+        },
+      )
+    } else {
+      watch(
+        () => values[key],
+        (value) => {
+          if (suppressEcho) return
           sendEnvelope({ set: { property: toPascalCase(key), value: jsToModelValue(value) } })
-        }
-      },
-      { deep: true },
-    )
+        },
+        { deep: true },
+      )
+    }
   }
+
+  // 初始挂元素级 watch（模型字段初始化器产出默认数组时为空；首张快照到达后由 applyRemote 重挂）。
+  for (const key of typedElemFields.keys()) armElementWatches(key, values[key] as unknown[])
 
   // 下行回调：WebKit 走已定义的 window.wwuiReceive（见模块顶部）；WebView2 挂 chrome.webview 'message' 事件（每页一次）
   receiveHandler = onMessage

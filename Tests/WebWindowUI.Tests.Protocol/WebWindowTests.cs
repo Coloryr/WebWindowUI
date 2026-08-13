@@ -4,22 +4,20 @@ using Xunit;
 namespace WebWindowUI.Tests;
 
 /// <summary>
-/// WebWindow 窗口模式的纯逻辑测试：窗口路径 → 首页地址推导（不创建窗口）。
+/// 首页地址推导的纯逻辑测试（不创建窗口）。旧 <c>WebWindow.BuildHomeUrl(scheme, windowPath)</c>
+/// 重构为 <see cref="WebWindowResource.GetWindowIndexUrl(windowPath)"/>（scheme 固定 app://localhost），
+/// 归一化（trim/去尾斜杠）职责随路径解析一并移入 TryResolvePath。
 /// </summary>
 public class WebWindowTests
 {
     [Theory]
-    [InlineData("app", "main", "app://localhost/window/main/index.html")]
-    [InlineData("app", "main/", "app://localhost/window/main/index.html")]
-    [InlineData("app", "/main", "app://localhost/window/main/index.html")]
-    [InlineData("app", " main ", "app://localhost/window/main/index.html")]
-    [InlineData("app", "deep/path", "app://localhost/window/deep/path/index.html")]
-    [InlineData("app", "/about/", "app://localhost/window/about/index.html")]
-    [InlineData("myapp", "settings", "myapp://localhost/window/settings/index.html")]
-    [InlineData("app", "", "app://localhost/window/index.html")]
-    [InlineData("app", null, "app://localhost/window/index.html")]
-    public void BuildHomeUrl_DerivesFromSchemeAndWindowPath(string? scheme, string? windowPath, string expected)
+    [InlineData("main", "app://localhost/window/main/index.html")]
+    [InlineData("todos", "app://localhost/window/todos/index.html")]
+    [InlineData("deep/path", "app://localhost/window/deep/path/index.html")]
+    [InlineData("about", "app://localhost/window/about/index.html")]
+    [InlineData("settings", "app://localhost/window/settings/index.html")]
+    public void GetWindowIndexUrl_DerivesHomeUrlFromWindowPath(string windowPath, string expected)
     {
-        Assert.Equal(expected, WebWindow.BuildHomeUrl(scheme!, windowPath!));
+        Assert.Equal(expected, WebWindowResource.GetWindowIndexUrl(windowPath));
     }
 }

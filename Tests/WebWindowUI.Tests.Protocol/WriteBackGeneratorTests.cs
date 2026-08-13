@@ -1,8 +1,8 @@
-using System.Collections.Immutable;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using ProtoBuf;
+using System.Collections.Immutable;
 using WebWindowUI.Core;
 using WebWindowUI.Generator.SourceGen;
 using Xunit;
@@ -51,11 +51,11 @@ public class WriteBackGeneratorTests
         Assert.Contains("typeof(string)", launcher);
         Assert.Contains("if (!CommandWithArgCommand.CanExecute(arg)) return false;", launcher);
 
-        // ---- TodoListModel：ObservableCollection<TodoItemModel> 写回 + 单条集合订阅表达式 ----
+        // ---- TodoListModel：ObservableCollection<TodoItemModel> 写回 + 模型元素订阅（块体：集合订阅 + 元素订阅）----
         var todoList = run["TodoListModel.WriteBack.g.cs"];
         Assert.Contains("case \"Todos\":", todoList);
         Assert.Contains("EnsureCollectionSubscribed(\"Todos\", Todos)", todoList);
-        Assert.Contains("=> EnsureCollectionSubscribed(\"Todos\", Todos);", todoList);
+        Assert.Contains("EnsureItemsSubscribed(\"Todos\", Todos)", todoList); // 元素级：List<Model> 元素挂 PropertyChanged
 
         // ---- TodoItemModel：POCO 转换 + 反向序列化 + [ModuleInitializer] 注册 ----
         var todoItem = run["TodoItemModel.WriteBack.g.cs"];
@@ -158,6 +158,7 @@ public class WriteBackGeneratorTests
         using System.Collections.ObjectModel;
         using CommunityToolkit.Mvvm.ComponentModel;
         using WebWindowUI.Core;
+        using WebWindowUI.Core.Observable;
 
         namespace WebWindowUI.Sample;
 

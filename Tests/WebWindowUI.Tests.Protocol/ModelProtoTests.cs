@@ -1,9 +1,10 @@
+using ProtoBuf;
 using System.Reflection;
 using System.Text.Json;
-using ProtoBuf;
 using WebWindowUI.Core.Protocol;
 using WebWindowUI.Generator;
 using WebWindowUI.Sample;
+using WebWindowUI.Sample.Items;
 using Xunit;
 
 namespace WebWindowUI.Tests;
@@ -181,6 +182,70 @@ public class ModelProtoTests
         Assert.Equal(1, back.Patch.Count);
     }
 
+    [Fact]
+    public void Envelope_RoundTrip_SetElement()
+    {
+        var msg = new WebMessage
+        {
+            Set = new ModelSet
+            {
+                Property = "Todos",
+                ElementInstanceId = 12345,
+                ElementProperty = "done",
+                Value = new ModelValue { Flag = true },
+            },
+        };
+
+        WebMessage? back = ModelProtocol.Decode(ModelProtocol.Encode(msg));
+
+        Assert.NotNull(back?.Set);
+        Assert.Equal("Todos", back.Set!.Property);
+        Assert.Equal(12345, back.Set.ElementInstanceId);
+        Assert.Equal("done", back.Set.ElementProperty);
+        Assert.True(back.Set.Value!.Flag);
+    }
+
+    [Fact]
+    public void Envelope_RoundTrip_PatchElementSet()
+    {
+        var msg = new WebMessage
+        {
+            Patch = new CollectionPatch
+            {
+                Action = CollectionPatchAction.ElementSet,
+                Property = "Todos",
+                ElementInstanceId = 67890,
+                ElementProperty = "title",
+                ElementValue = new ModelValue { Text = "renamed" },
+            },
+        };
+
+        WebMessage? back = ModelProtocol.Decode(ModelProtocol.Encode(msg));
+
+        Assert.NotNull(back?.Patch);
+        Assert.Equal(CollectionPatchAction.ElementSet, back.Patch!.Action);
+        Assert.Equal("Todos", back.Patch.Property);
+        Assert.Equal(67890, back.Patch.ElementInstanceId);
+        Assert.Equal("title", back.Patch.ElementProperty);
+        Assert.Equal("renamed", back.Patch.ElementValue!.Text);
+    }
+
+    [Fact]
+    public void ToModelValue_ModelElement_InjectsInstanceId_NameKey()
+    {
+        var item = new TodoItemModel { Title = "t", Done = true };
+
+        ModelValue v = ModelProtocol.ToModelValue(item);
+        var map = Assert.IsType<ModelValueMap>(v.ObjectValue);
+
+        // 序数契约（proto 字段号 1/2）不受影响：元素数据仍在 OrdinalFields。
+        Assert.Equal("t", map.OrdinalFields[1].Text);
+        Assert.True(map.OrdinalFields[2].Flag);
+        // 元素唯一 ID 注入为 name 键（不占序数契约，deserialize 侧 ConvertFromModelValue 只读 OrdinalFields 天然忽略）。
+        Assert.True(map.Fields.TryGetValue("_modelInstanceId", out ModelValue? id));
+        Assert.Equal(item.ModelInstanceId, id!.Number!.Value);
+    }
+
     // ---- descriptor ↔ .NET DTO 锁 ----
 
     /// <summary>
@@ -294,14 +359,15 @@ public class ModelProtoTests
         AssertDescriptorMatchesDto(model.GetProperty("ModelValueList").GetProperty("fields"), typeof(ModelValueList));
         AssertDescriptorMatchesDto(model.GetProperty("ModelValueMap").GetProperty("fields"), typeof(ModelValueMap));
         AssertDescriptorMatchesDto(model.GetProperty("CollectionPatch").GetProperty("fields"), typeof(CollectionPatch));
-        // CollectionPatchAction 枚举取值 ↔ .NET（protobuf-net 3.2 直通为底层 int）：1=Insert … 5=Reset
+        // CollectionPatchAction 枚举取值 ↔ .NET（protobuf-net 3.2 直通为底层 int）：1=Insert … 6=ElementSet
         JsonElement patchAction = model.GetProperty("CollectionPatchAction").GetProperty("values");
-        Assert.Equal(5, patchAction.EnumerateObject().Count());
+        Assert.Equal(6, patchAction.EnumerateObject().Count());
         Assert.Equal(1, patchAction.GetProperty("Insert").GetInt32());
         Assert.Equal(2, patchAction.GetProperty("Remove").GetInt32());
         Assert.Equal(3, patchAction.GetProperty("Replace").GetInt32());
         Assert.Equal(4, patchAction.GetProperty("Move").GetInt32());
         Assert.Equal(5, patchAction.GetProperty("Reset").GetInt32());
+        Assert.Equal(6, patchAction.GetProperty("ElementSet").GetInt32());
         Assert.Empty(model.GetProperty("ModelReady").GetProperty("fields").EnumerateObject()); // 空消息
     }
 
