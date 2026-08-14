@@ -18,15 +18,9 @@
 
     <DefineConstants Condition="'$(UseCEF)' == 'true'">$(DefineConstants);WWUI_CEF</DefineConstants>
 
-    <!-- macOS 必须显式 RuntimeIdentifier：Apple SDK 的 _ComputeTargetArchitectures 只认
-         $(RuntimeIdentifier)（调试时 SDK 自探测的 osx-arm64 不喂给它），Release 裁剪路径
-         PostTrimmingProcessing 拿空 Architecture 直接报 MSB4044。按宿主架构取 RID
-         （Apple Silicon=osx-arm64 / Intel=osx-x64；交叉编译可显式覆盖）。 -->
     <RuntimeIdentifier Condition="'$(WWUIPlatform)' == 'MacOS' And '$(RuntimeIdentifier)' == '' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'">osx-arm64</RuntimeIdentifier>
     <RuntimeIdentifier Condition="'$(WWUIPlatform)' == 'MacOS' And '$(RuntimeIdentifier)' == ''">osx-x64</RuntimeIdentifier>
 
-    <!-- macOS Release 强制裁剪/AOT（_MustTrim + EnableAssemblyILStripping 只认 Release），
-         裁剪要求 self-contained（否则 NETSDK1102）。Debug 保持 framework-dependent（精简）。 -->
     <SelfContained Condition="'$(WWUIPlatform)' == 'MacOS' And '$(Configuration)' == 'Release' And '$(SelfContained)' == ''">true</SelfContained>
   </PropertyGroup>
 

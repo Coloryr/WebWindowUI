@@ -1,10 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Windows（WebView2）平台 E2E 测试：独立 xunit 工程，只测 WebView2 后端。
-       TFM 继承根 Platform.props（同 Tests.Protocol）——Sample/Sample.Backend 在 macOS 主机上是
-       net10.0-macos，本工程必须同 TFM 才能引用；IsTestProject 按 WWUIPlatform 门控，
-       保证 dotnet test WebWindowUI.slnx 只在 Windows 主机跑本套件（其它主机编译但不跑）。 -->
-
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -23,11 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Core\WebWindowUI.Core\WebWindowUI.Core.csproj" />
     <ProjectReference Include="..\..\Sample\WebWindowUI.Sample.Backend\WebWindowUI.Sample.Backend.csproj" />
-    <!-- Sample app 只在测试运行主机（Windows）需要：wwwroot 经它传递复制到测试 bin。
-         macOS 上本工程非测试工程（IsTestProject 关）、只做编译检查，且 Sample app 是
-         net10.0-macos26.5（ApplicationId → app bundle 平台版本高），Library 26.0 引用会
-         NU1201——故 macOS 去掉该引用（测试代码只用 Sample.Backend 的模型类型）。 -->
-    <ProjectReference Include="..\..\Sample\WebWindowUI.Sample\WebWindowUI.Sample.csproj" Condition="'$(WWUIPlatform)' != 'MacOS'" />
+    <ProjectReference Include="..\..\Sample\WebWindowUI.Sample\WebWindowUI.Sample.csproj" />
     <ProjectReference Include="..\..\Platforms\WebWindowUI.Platforms.Windows\WebWindowUI.Platforms.Windows.csproj" />
   </ItemGroup>
 

@@ -35,7 +35,20 @@ public sealed class CefPlatform : IWebWindowPlatform
     private static readonly ConcurrentDictionary<int, CefWindow> _browsers = new();
 
     /// <summary>
-    /// 初始化 CEF 运行时（单线程模式）并注册 app/appbin 自定义 scheme 处理器。
+    /// CEF 上下文就绪信号（OnContextInitialized 触发；浏览器须在其后创建）。
+    /// </summary>
+    private static readonly ManualResetEventSlim _contextReady = new();
+
+    /// <summary>
+    /// 是否已调过 CefRuntime.Shutdown（防 ProcessExit 与 RunMessageLoop 双关）。
+    /// </summary>
+    private static bool _shutdownDone;
+
+    /// <summary>
+    /// 初始化 CEF 运行时并注册 app/appbin 自定义 scheme 处理器。
+    /// 镜像 CefRuntimeLoader.InternalInitialize（CefGlue.Demo.Avalonia 的启动路径）：
+    /// CefRuntime.Load + UncaughtExceptionStackSize=100 + 按平台设置 MTML/NoSandbox/ExternalMessagePump
+    /// + ProcessExit 关闭 + 自定义 scheme 注册。
     /// </summary>
     public CefPlatform()
     {
@@ -47,36 +60,53 @@ public sealed class CefPlatform : IWebWindowPlatform
         var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "logs");
         Directory.CreateDirectory(logPath);
 
-        // **durable：CefRuntimeLoader.Initialize 只是登记延迟初始化委托，真实 cef_initialize
-        // （CefRuntime.Initialize）要等 CefRuntimeLoader.Load() 才触发；且 Load() 在 Windows 上
-        // 强制 MultiThreadedMessageLoop=true，与本平台单线程消息循环设计（CEF UI 线程==主线程、
-        // CefRuntime.RunMessageLoop）冲突。此前从不调 Load() → CEF 从未初始化 →
-        // CefBrowserHost.CreateBrowser 对未初始化 libcef 调 create_browser → 原生崩溃（EXIT=3）。
-        // 这里绕开 loader 直接单线程初始化（MTML=false，经典 CefGlue 用法），CreateBrowser 才在 UI 线程安全。**
-        // **durable：ResourcesDirPath/LocalesDirPath 必须显式指向 app 基目录（cef_initialize 后
-        // resource_bundle 加载 en-US.pak 需要，否则 locale_file_path.empty() abort；CEF 151 的
-        // ICU 只认 libcef.dll 所在目录（DIR_ASSETS），icudtl.dat 已随 runtime 平铺在基目录，
-        // resources_dir_path 对它无效但 .pak/locales 仍需此设置）。**
-        CefRuntime.Initialize(
-            new CefMainArgs(Environment.GetCommandLineArgs()),
-            new CefSettings
-            {
-                RootCachePath = cachePath,
-                NoSandbox = true,
-                MultiThreadedMessageLoop = false,
-                ResourcesDirPath = AppContext.BaseDirectory,
-                LocalesDirPath = Path.Combine(AppContext.BaseDirectory, "locales"),
-                LogSeverity = CefLogSeverity.Verbose,
-                LogFile = Path.Combine(logPath, "cef_debug.log"),
-            },
-            new WwuiCefApp(),
-            IntPtr.Zero);
+        CefRuntime.Load();
 
-        // scheme 处理器工厂须在 cef_initialize 后注册（loader 的 InternalInitialize 亦在此注册）。
+        var settings = new CefSettings
+        {
+            RootCachePath = cachePath,
+            ResourcesDirPath = AppContext.BaseDirectory, // 必须显式：resource_bundle 加载 en-US.pak 需要
+            LocalesDirPath = Path.Combine(AppContext.BaseDirectory, "locales"),
+            LogSeverity = CefLogSeverity.Verbose,
+            LogFile = Path.Combine(logPath, "cef_debug.log"),
+            UncaughtExceptionStackSize = 100, // 供未捕获异常事件
+        };
+
+        switch (CefRuntime.Platform)
+        {
+            case CefRuntimePlatform.Windows:
+                settings.MultiThreadedMessageLoop = true; // DevTools（Chrome-only）需要 MTML=true
+                break;
+            case CefRuntimePlatform.MacOS:
+                settings.NoSandbox = true;
+                settings.MultiThreadedMessageLoop = false;
+                settings.ExternalMessagePump = true;
+                break;
+            default: // Linux
+                settings.NoSandbox = true;
+                settings.MultiThreadedMessageLoop = true;
+                break;
+        }
+
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => Shutdown();
+
+        CefRuntime.Initialize(new CefMainArgs(Environment.GetCommandLineArgs()), settings, new WwuiCefApp(), IntPtr.Zero);
+
         CefRuntime.RegisterSchemeHandlerFactory(WebWindowResource.Scheme, "", new ResourceSchemeHandlerFactory());
         CefRuntime.RegisterSchemeHandlerFactory(WebWindowResource.SchemeData, "", new MessageSchemeHandlerFactory());
 
         _message.InitMessageLoop();
+    }
+
+    /// <summary>
+    /// 关闭 CEF 运行时（幂等）。
+    /// </summary>
+    internal static void Shutdown()
+    {
+        if (_shutdownDone)
+            return;
+        _shutdownDone = true;
+        CefRuntime.Shutdown();
     }
 
     /// <summary>
@@ -163,6 +193,32 @@ public sealed class CefPlatform : IWebWindowPlatform
             commandLine.AppendSwitch("--custom-scheme", _customSchemes);
             commandLine.AppendSwitch("--parent-pid", _parentPid);
         }
+
+        /// <summary>
+        /// CEF 上下文就绪（在 CEF UI 线程回调）：放行浏览器创建。
+        /// </summary>
+        protected override void OnContextInitialized() => _contextReady.Set();
+    }
+
+    /// <summary>
+    /// CefTask 包装一个 Action（PostTask 到 CEF 线程用）。
+    /// </summary>
+    /// <param name="action">要执行的委托。</param>
+    internal sealed class CefActionTask(Action action) : CefTask
+    {
+        /// <summary>
+        /// 待执行委托；执行后置空（CEF 任务只跑一次）。
+        /// </summary>
+        private Action? _action = action;
+
+        /// <summary>
+        /// 在目标线程执行委托。
+        /// </summary>
+        protected override void Execute()
+        {
+            _action?.Invoke();
+            _action = null;
+        }
     }
 
     /// <summary>
@@ -185,7 +241,7 @@ public sealed class CefPlatform : IWebWindowPlatform
                 var payload = ReadPostDataPayload(request);
                 if (TryGetWindow(browser, out var window))
                 {
-                    _message.RunOnUiThread(() => window!.OnMessageFromWeb(payload));
+                    RunOnCefUiThread(() => window!.OnMessageFromWeb(payload));
                 }
             }
             catch
@@ -368,26 +424,61 @@ public sealed class CefPlatform : IWebWindowPlatform
     }
 
     /// <summary>
-    /// 运行 CEF 主消息循环（末窗关闭后返回），随后同线程关闭 CEF 运行时。
+    /// 运行主消息循环（末窗关闭后返回），随后同线程关闭 CEF 运行时。
+    /// MTML=true 下 CEF 自带消息循环线程，主线程只跑 Win32 消息循环（原生窗口需要）。
     /// </summary>
     public void RunMessageLoop()
     {
-        CefRuntime.RunMessageLoop();
-        CefRuntime.Shutdown();
+        _message.MessageLoop();
+        Shutdown();
     }
 
     /// <summary>
-    /// 把动作 marshal 到 UI 线程同步执行（Win32 窗口 API 与 CEF 调用都要求 UI 线程）。
+    /// 把动作 marshal 到原生 UI 线程（主线程）同步执行：Win32 窗口 API 要求主线程。
     /// </summary>
     /// <param name="action">要执行的动作。</param>
     public void RunOnUiThread(Action action)
         => _message.RunOnUiThread(action);
 
     /// <summary>
-    /// 当前线程是否是 UI 线程（CEF UI 线程 == 主线程）。
+    /// 当前线程是否是原生 UI 线程（主线程）。
     /// </summary>
-    /// <returns>是否在 UI 线程。</returns>
+    /// <returns>是否在主线程。</returns>
     public bool IsUiThread() => _message.IsUiThread();
+
+    /// <summary>
+    /// 当前线程是否是 CEF UI 线程（MTML=true 下为 CEF 独立线程，浏览器操作都要求它）。
+    /// </summary>
+    /// <returns>是否在 CEF UI 线程。</returns>
+    internal static bool IsCefUiThread() => CefRuntime.CurrentlyOn(CefThreadId.UI);
+
+    /// <summary>
+    /// 把动作 marshal 到 CEF UI 线程同步执行：已在则直接运行，否则 PostTask 后阻塞等待。
+    /// 浏览器操作（CreateBrowser/ExecuteJavaScript/CloseBrowser/ShowDevTools）必须在 CEF UI 线程。
+    /// </summary>
+    /// <param name="action">要执行的动作。</param>
+    internal static void RunOnCefUiThread(Action action)
+    {
+        _contextReady.Wait(); // 浏览器须在 OnContextInitialized 后创建
+        if (IsCefUiThread())
+        {
+            action();
+            return;
+        }
+        using var done = new ManualResetEventSlim();
+        Exception? error = null;
+        var posted = CefRuntime.PostTask(CefThreadId.UI, new CefActionTask(() =>
+        {
+            try { action(); }
+            catch (Exception ex) { error = ex; }
+            finally { done.Set(); }
+        }));
+        if (!posted)
+            throw new InvalidOperationException("CEF UI 线程任务投递失败（运行时可能已关闭）。");
+        done.Wait();
+        if (error is not null)
+            throw error;
+    }
 
     /// <summary>
     /// 系统消息框。

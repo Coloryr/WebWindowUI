@@ -1,6 +1,6 @@
 using GLib;
+using WebWindowUI.Platforms.Linux;
 using Thread = System.Threading.Thread; // GLib 也有 Thread 类型，避免歧义
-using WebWindowUI.Linux;
 
 namespace WebWindowUI.Tests.Linux.Support;
 
@@ -74,11 +74,7 @@ internal sealed class GtkPump
     {
         try
         {
-            // 平台构造放本线程：gtk_init、WebKit 初始化、UiThreadId=泵线程、SetSynchronizationContext。
-            // typeof 强制在泵线程加载平台程序集 → [ModuleInitializer] new LinuxPlatform() 完成注册
-            //（编译期静态引用，AOT 安全），后续所有 WebWindow 复用同一实例，不会出现第二次 gtk_init。
-            _ = typeof(LinuxPlatform);
-            _ = WebWindowPlatform.Current;
+            WebWindowUIPlatform.RegisterPlatformLoader(new LinuxPlatform());
             _loop = MainLoop.New(null, false); // null = 默认 MainContext（与 SyncContext.Post 同一上下文）
         }
         catch (Exception ex)

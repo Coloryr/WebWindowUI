@@ -9,12 +9,15 @@ namespace WebWindowUI.Tests.Linux.Support;
 /// 无头模式（<see cref="WebWindowOptions.Headless"/>）：GTK 窗口永不 show，但导航/DOM/JS/消息通道照常，
 /// 测试全程不出现在屏幕与任务栏。
 /// </summary>
-internal sealed class TestWindow : WebWindow
-{
-    public TestWindow(string windowPath, string title)
-        : base(windowPath, title, new WebWindowOptions { Headless = true }, width: 720, height: 480)
+internal sealed class TestWindow(string windowPath, string title) 
+    : WebWindow(new WebWindowOptions(windowPath) 
     {
-    }
+        Title = title,
+        Width = 720,
+        Headless = true,
+        Height = 480
+    })
+{
 }
 
 /// <summary>
