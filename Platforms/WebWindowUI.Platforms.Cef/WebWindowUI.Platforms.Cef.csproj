@@ -15,7 +15,7 @@
       Windows 运行时用手动下载的 CEF 151 二进制：CefRuntimeDir 指向合并后的目录
       （libcef.dll + icudtl.dat + *.pak + locales + chrome_elf 等，不含 wrapper DLL——后者由 vendored 工程引用提供）。
     -->
-    <CefRuntimeDir Condition="'$(WWUIPlatform)' == 'Windows'">C:\temp\cef151\runtime-bin</CefRuntimeDir>
+    <CefRuntimeDir Condition="'$(WWUIPlatform)' == 'Windows'">C:\temp\cef150\runtime-bin</CefRuntimeDir>
   </PropertyGroup>
 
   <!-- Linux/macOS 运行时仍走 NuGet 包（本仓库未 vendored 这些平台的 CEF 二进制） -->

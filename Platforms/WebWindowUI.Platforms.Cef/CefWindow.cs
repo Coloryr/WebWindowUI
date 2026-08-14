@@ -71,7 +71,14 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
         _nativeWindow = nativeWindow;
         _control!.Attach(nativeWindow); // 基类 ctor 已经 CreateControl 建空壳，这里绑定原生窗口
 
-        Address = "data:text/html,<html><body style='background:#222;color:#fff;font:24px sans-serif'><h1>data scheme 测试</h1><p>非自定义 scheme</p></body></html>"; // 临时：验证 DevTools 是否因自定义 scheme 崩
+        Task.Run(() =>
+        {
+            Thread.Sleep(10000);
+            RunOnUiThread(() =>
+            {
+                Address = "chrome://gpu"; // 临时：验证 DevTools 是否因自定义 scheme 崩
+            });
+        });
 
         BrowserInitialized += OnBrowserInitialized;
         BrowserClosed += OnBrowserClosed;

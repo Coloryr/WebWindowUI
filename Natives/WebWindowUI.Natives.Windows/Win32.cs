@@ -16,6 +16,10 @@ internal static partial class Win32
     public const uint CS_VREDRAW = 0x0002;
     public const int CW_USEDEFAULT = unchecked((int)0x80000000);
     public const int WS_OVERLAPPEDWINDOW = 0x00CF0000;
+    public const int WS_CLIPCHILDREN = 0x02000000;
+    public const uint WS_EX_APPWINDOW = 0x00040000;
+    public const uint WS_EX_NOREDIRECTIONBITMAP = 0x00200000;
+    public const uint WS_EX_WINDOWEDGE = 0x00000100;
     public const int SW_HIDE = 0;
     public const int SW_SHOW = 5;
     public const int SW_RESTORE = 9;

@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using WebWindowUI.Core;
 using WebWindowUI.Core.Protocol;
@@ -7,6 +9,7 @@ using Xilium.CefGlue;
 using Xilium.CefGlue.BrowserProcess;
 using Xilium.CefGlue.Common;
 using Xilium.CefGlue.Common.Shared;
+using Xilium.CefGlue.Common.Shared.Helpers;
 
 namespace WebWindowUI.Platforms.Cef;
 
@@ -17,16 +20,6 @@ namespace WebWindowUI.Platforms.Cef;
 /// </summary>
 public sealed class CefPlatform : IWebWindowPlatform
 {
-    /// <summary>
-    /// 自定义 scheme 选项（Standard/Secure/CorsEnabled 等）。
-    /// </summary>
-    private const CefSchemeOptions SchemeOptions =
-        CefSchemeOptions.Standard
-        | CefSchemeOptions.DisplayIsolated
-        | CefSchemeOptions.Secure
-        | CefSchemeOptions.CorsEnabled
-        | CefSchemeOptions.FetchEnabled;
-
     /// <summary>
     /// Win32 消息循环（隐藏消息窗口调度，供跨线程 marshal 回 UI 线程）。
     /// </summary>
@@ -42,14 +35,37 @@ public sealed class CefPlatform : IWebWindowPlatform
     /// </summary>
     private static bool _shutdownDone;
 
+    internal static class StackDebug
+    {
+        [Conditional("DEBUG")]
+        internal static void Log(string[] args, string prefix)
+        {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+
+            Directory.CreateDirectory(Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "logs"));
+
+            WriteAllocatedStackSize($"{prefix} Stack [{string.Join(",", args).Replace("--type=", "")}]");
+        }
+
+        private static void WriteAllocatedStackSize(string header)
+        {
+
+            // Log to file so renderer subprocess output is also visible
+            var msg = $"{header,-25}: {ThreadStack.GetSize(),6} KB  [pid={Environment.ProcessId}]";
+            Debug.WriteLine(msg);
+            File.AppendAllText(
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "logs", "stack.log"),
+                msg + Environment.NewLine);
+        }
+    }
+
     /// <summary>
-    /// 初始化 CEF 运行时并注册 app/appbin 自定义 scheme 处理器。
-    /// 镜像 CefRuntimeLoader.InternalInitialize（CefGlue.Demo.Avalonia 的启动路径）：
-    /// CefRuntime.Load + UncaughtExceptionStackSize=100 + 按平台设置 MTML/NoSandbox/ExternalMessagePump
-    /// + ProcessExit 关闭 + 自定义 scheme 注册。
     /// </summary>
     public CefPlatform()
     {
+        StackDebug.Log(Environment.GetCommandLineArgs(), "WebUI");
+
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
             System.IO.File.AppendAllText(@"C:\temp\unhandled.log", $"[{Environment.ProcessId}] {e.ExceptionObject}\n\n");
 #if !MACOS
@@ -63,18 +79,14 @@ public sealed class CefPlatform : IWebWindowPlatform
         var settings = new CefSettings
         {
             RootCachePath = cachePath,
-            ResourcesDirPath = AppContext.BaseDirectory, // 必须显式：resource_bundle 加载 en-US.pak 需要
-            LocalesDirPath = Path.Combine(AppContext.BaseDirectory, "locales"),
             LogSeverity = CefLogSeverity.Verbose,
             LogFile = Path.Combine(logPath, "cef_debug.log"),
-            UncaughtExceptionStackSize = 100, // 供未捕获异常事件
         };
 
-        // 用 CefGlue.Common.CefRuntimeLoader 初始化（延迟到首个 BaseCefBrowser 构造时 Load，浏览器托管层
-        // 就是 CefGlue.Common 自带实现）；自定义 scheme（app/appdata）经 CustomScheme 传入，处理器工厂由 loader 注册。
-        // --disable-gpu：VM/损坏 GPU 上 GPU 进程反复崩溃；--remote-debugging-port：进程内 DevTools 窗口在
-        // CEF 150/151 上不稳定（V8 fastfail/frame 超时），稳定调试走外部浏览器 chrome://inspect 连接。
-        CefRuntimeLoader.Initialize(settings, customSchemes:
+        CefRuntimeLoader.Initialize(settings, flags:
+        [
+            new("use-gl", "disabled"), // 对齐 Avalonia demo：GPU 进程禁用 GL（软件渲染），避免 Failed to create shared context 崩溃
+        ], customSchemes:
         [
             new CustomScheme
             {
