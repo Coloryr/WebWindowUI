@@ -515,6 +515,13 @@ internal static partial class Win32
     public static partial bool DestroyWindow(IntPtr hWnd);
 
     [LibraryImport("user32.dll")]
+    public static partial IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool MoveWindow(IntPtr hWnd, int x, int y, int nWidth, int nHeight, [MarshalAs(UnmanagedType.Bool)] bool bRepaint);
+
+    [LibraryImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetClientRect(IntPtr hWnd, out RECT lpRect);
 

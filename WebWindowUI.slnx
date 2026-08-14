@@ -6,8 +6,8 @@
     <Project Path="Core/WebWindowUI/WebWindowUI.csproj" />
   </Folder>
   <Folder Name="/Natives/">
-    <Project Path="Natives/WebWindowUI.Natives.Windows/WebWindowUI.Natives.Windows.csproj" />
     <Project Path="Natives/WebWindowUI.Natives.Linux/WebWindowUI.Natives.Linux.csproj" />
+    <Project Path="Natives/WebWindowUI.Natives.Windows/WebWindowUI.Natives.Windows.csproj" />
   </Folder>
   <Folder Name="/Platforms/">
     <Project Path="Platforms/WebWindowUI.Platforms.Cef/WebWindowUI.Platforms.Cef.csproj" />
@@ -28,9 +28,9 @@
     <Project Path="Templates/WebWindowUI.Templates/WebWindowUI.Templates.csproj" />
   </Folder>
   <Folder Name="/Tests/">
+    <Project Path="Tests/WebWindowUI.Tests.Linux/WebWindowUI.Tests.Linux.csproj" />
     <Project Path="Tests/WebWindowUI.Tests.Protocol/WebWindowUI.Tests.Protocol.csproj" />
     <Project Path="Tests/WebWindowUI.Tests.Windows/WebWindowUI.Tests.Windows.csproj" />
-    <Project Path="Tests/WebWindowUI.Tests.Linux/WebWindowUI.Tests.Linux.csproj" />
   </Folder>
   <Folder Name="/Files/">
     <File Path=".editorconfig" />
@@ -40,5 +40,20 @@
     <File Path="NuGet.config" />
     <File Path="WebWindowUI.Platform.props" />
     <File Path="WebWindowUI.targets" />
+  </Folder>
+  <Folder Name="/third-party/" />
+  <Folder Name="/third-party/CefGlue/">
+    <Project Path="third-party/CefGlue/CefGlue.BrowserProcess.Core/CefGlue.BrowserProcess.Core.csproj" />
+    <Project Path="third-party/CefGlue/CefGlue.Common.Shared/CefGlue.Common.Shared.csproj" />
+    <Project Path="third-party/CefGlue/CefGlue.Common/CefGlue.Common.csproj" />
+    <Project Path="third-party/CefGlue/CefGlue/CefGlue.csproj" />
+  </Folder>
+  <Folder Name="/third-party/CefGlue/Files/">
+    <File Path="third-party/CefGlue/cef-version.json" />
+    <File Path="third-party/CefGlue/CefGlue.Packages.props" />
+    <File Path="third-party/CefGlue/CefVersion.props" />
+    <File Path="third-party/CefGlue/Directory.Build.props" />
+    <File Path="third-party/CefGlue/Directory.Build.targets" />
+    <File Path="third-party/CefGlue/Directory.Packages.props" />
   </Folder>
 </Solution>

@@ -7,7 +7,11 @@
       "Bash(powershell -NoProfile -Command ' *)",
       "Bash(git mv *)",
       "Bash(dotnet restore *)",
-      "Bash(dotnet nuget *)"
+      "Bash(dotnet nuget *)",
+      "Bash(rm -f ~/Desktop/logs/cef_debug.log)",
+      "Bash(./WebWindowUI.Sample.exe)",
+      "Bash(cmd //c \"taskkill /IM WebWindowUI.Sample.exe /F\")",
+      "Read(//tmp/**)"
     ]
   }
 }

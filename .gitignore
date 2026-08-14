@@ -8,3 +8,4 @@ artifacts/
 **/src/bridge/
 **/src/models/
 package-lock.json
+/third-party/CefGlue/Nuget

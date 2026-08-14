@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+    <!-- Vendored CefGlue：不引用 CEF 运行时 NuGet 包，CEF 151 二进制由 WebWindowUI.Platforms.Cef 的 Content 复制提供。 -->
+</Project>

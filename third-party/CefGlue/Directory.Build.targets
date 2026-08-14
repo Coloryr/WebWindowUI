@@ -1,0 +1,17 @@
+<Project>
+  <!-- For any non-packable projects, suppress generate documentation. -->
+  <PropertyGroup Condition="'$(IsPackable)' == 'false'">
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DocumentationFile />
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(PackageId)' == ''">
+    <PackageId>$(CefGluePackageNamePrefix)$(AssemblyName.Replace('Xilium.CefGlue.', ''))</PackageId>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+  
+  <PropertyGroup Condition="'$(PackageId)' != ''">
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+  </PropertyGroup>
+
+</Project>

@@ -1,31 +1,42 @@
 # WebWindowUI.Platforms.Cef
 
-**CEF 平台实现**（与 Windows 平台互斥）：CefGlue.Next 托管包装 + Chromium 渲染内核，承载于裸 Win32 子窗口（CEF 子浏览器窗口为子控件）。Windows 上经 `Natives.Windows` 复用 Win32 共享层；Linux/macOS 上无独立 Natives 层（GTK 窗口壳供未来复用，见 `Natives.Linux`）。
+**CEF 平台实现**（与 Windows 平台互斥）：CefGlue 托管包装 + Chromium 渲染内核，承载于裸 Win32 顶层窗口。**浏览器托管层直接用 CefGlue.Common 自带实现**（不再自写镜像 CommonBrowserAdapter/CommonCefClient），宿主控件为隐藏宿主 + 重挂载（对齐 CefGlue.Avalonia）。Windows 上经 `Natives.Windows` 复用 Win32 共享层。
 
 ## 依赖
 
-- `CefGlue.Next.Core` / `CefGlue.Next.Common` / `CefGlue.Next.Common.Shared` / `CefGlue.Next.BrowserProcess.Core`
-- 运行时包按 `WWUIPlatform` + 主机架构条件引入：`cef.runtime.linux-{arm64,x64}` / `cef.runtime.osx-{arm64,x64}` / `chromiumembeddedframework.runtime.win-{arm64,x64}`（启动自动下载运行时）
-- `WebWindowUI.Core`（`PrivateAssets="all"`）
-- Windows 上额外普通 ProjectReference `WebWindowUI.Natives.Windows`（Win32 消息循环 + 窗口宿主）
+- **vendored CefGlue**（`third-party/CefGlue`，针对 **CEF 151** 用 `upgrade-cef.ps1` 重生成）：`CefGlue` / `CefGlue.Common` / `CefGlue.Common.Shared` / `CefGlue.BrowserProcess.Core` 四个工程 ProjectReference
+- **Windows 运行时用手动下载的 CEF 151 二进制**（NuGet 的 `chromiumembeddedframework.runtime` / `CefGlue.Next` 止步 150）：`CefRuntimeDir`（Windows）= `C:\temp\cef151\runtime-bin`，经 Content 项传播到 app 输出（libcef.dll + icudtl.dat + *.pak + locales + chrome_elf 等，不含 wrapper DLL）
+- Linux/macOS 运行时仍走 NuGet 包：`cef.runtime.linux-{arm64,x64}` / `cef.runtime.osx-{arm64,x64}`
+- `WebWindowUI.Core`（`PrivateAssets="all"`）；Windows 上额外普通 ProjectReference `WebWindowUI.Natives.Windows`
 
 ## 组成
 
 | 文件 | 内容 |
 |------|------|
-| `CefPlatform.cs` | `CefPlatform : IWebWindowPlatform`：初始化 CEF 运行时（**镜像 `CefRuntimeLoader`**：`CefRuntime.Load` + `UncaughtExceptionStackSize=100` + 按平台 MTML/NoSandbox/ExternalMessagePump——Windows/Linux **MTML=true**、Mac MTML=false+ExternalMessagePump + `ProcessExit→Shutdown`）+ 注册 app/appbin 自定义 scheme 处理器（Standard/Secure/CorsEnabled/FetchEnabled）；`_browsers` 浏览器 id → 窗口映射分派 scheme 回调；`RunOnCefUiThread`（PostTask 到 CEF UI 线程 + 等 OnContextInitialized 门控） |
-| `CommonBrowserAdapter.cs` | `CommonBrowserAdapter`（镜像上游同名类）：浏览器生命周期引擎——持 `CommonCefClient`/主浏览器、建浏览器（`SetupBrowserView` = `SetAsChild` + `WS_EX_NOACTIVATE`、**不设 runtime_style** → Chrome 样式子窗口嵌入）、路由 CEF 回调、执行 JS、DevTools、关闭；事件 `Initialized`/`LoadEnd`/`BrowserClosed`。**浏览器操作一律 marshal 到 CEF UI 线程**。裁剪上游渲染进程 IPC/对象绑定/崩溃管道。含 `ICefBrowserHost`/`IControl` 接口与 `LoadEnd` 事件类型 |
-| `CommonCefClient.cs` | `CommonCefClient : CefClient`（镜像上游）：安装生命期/加载处理器（`CommonCefLifeSpanHandler`/`CommonCefLoadHandler`），CEF 回调路由回 `ICefBrowserHost` |
-| `BaseCefBrowser.cs` | `BaseCefBrowser` 抽象基类（薄壳）：只暴露事件 `BrowserInitialized`/`LoadEnd`/`BrowserClosed` 与操作 `ExecuteJavaScript`/`ShowDeveloperTools`/`CloseBrowser`/`Address`/`CreateBrowser`，全部委托给 `CommonBrowserAdapter`；宿主控件由子类传入（构造 `internal`，本平台每窗口一个 CEF 显示） |
-| `CefWindow.cs` | `CefWindow : BaseCefBrowser, IWindowBackend`：镜像 `WindowsWindow`、渲染内核换 CEF。**持有 `_nativeWindow`（Win32 顶层窗口）** 并适配成 `Win32Control` 交给基类；订阅基类事件：`BrowserInitialized` → scheme 映射注册 + 1s 后自动 DevTools，`LoadEnd` → `NavigationCompleted`，`BrowserClosed` → 摘映射 + 销毁顶层窗口 |
+| `CefPlatform.cs` | `CefPlatform : IWebWindowPlatform`：`CefSubProcess.Run` → `CefRuntimeLoader.Initialize(settings, customSchemes:[app, appdata])`（延迟到首个 BaseCefBrowser 构造时 Load）→ `_message.InitMessageLoop()`。保留 `_browsers` 浏览器 id → 窗口映射、`RunOnCefUiThread`、`RunMessageLoop`、对话框。**不再自建 WwuiCefApp/WwuiCefBrowserProcessHandler**（CefGlue.Common 的 BrowserCefApp 处理 scheme 注册与子进程参数） |
+| `CefWindow.cs` | `CefWindow : Xilium.CefGlue.Common.BaseCefBrowser, IWindowBackend`：链接 `BaseCefBrowser.cs` partial + `BaseCefBrowser.Address.cs`（Address 实现）；实现 `CreateControl()` → `Win32CefControl`，OSR 方法抛 NotSupported。`BrowserInitialized` → 注册 scheme 映射；`BrowserClosed` → **仅主浏览器**(`ReferenceEquals(browser, UnderlyingBrowser)`)销毁顶层窗口；`LoadEnd` → `NavigationCompleted` |
+| `Win32CefControl.cs` | `IControl` 实现：**隐藏宿主 + 重挂载**——`GetHostViewHandle` 返回隐藏宿主窗口，`InitializeRender` 把浏览器 HWND SetParent 重挂载进可见窗口并铺满客户区。上下文菜单/光标/工具提示最小实现 |
+| `BaseCefBrowser.Address.cs` | CefGlue.Common 排除 BaseCefBrowser.cs（partial），平台工程链接后需提供 Address partial 实现 |
+
+**给 vendored CefGlue.Common 的改动**：`InternalsVisibleTo("WebWindowUI.Platforms.Cef")`；`CommonBrowserAdapter` 加 `BrowserClosed` 事件（HandleBrowserDestroyed 触发）+ `CloseBrowser(bool)`；`BaseCefBrowser` 暴露 `BrowserClosed` 事件 + `CloseBrowser(bool)`。**DevTools 关闭也触发 BrowserClosed（所有浏览器）——CefWindow.OnBrowserClosed 必须只对主浏览器销毁窗口**，否则关 DevTools 会把主窗口一起关掉（用户实测程序崩溃/卡死）。
 
 ## 关键设计
 
-- **消费公开 API**：`CefWindow` 用 `_nativeWindow.WindowHandle`/`GetSize()`/`Close()`——曾残留直引 internal `Win32` + 已删除 `_hwnd` 字段致 CS0122/CS0103（拆分 native 后未同步），一律走 `Win32MessageLoop.RunOnUiThread`。
-- **浏览器生命周期在 `CommonBrowserAdapter`**：`CefClient`/处理器/建浏览器/执行 JS/DevTools/关闭全在适配器，`BaseCefBrowser` 只是薄壳、`CefWindow` 只承载窗口宿主与 `IWindowBackend` 契约；`BrowserClosed`（on_before_close 主浏览器）同时触发 `Closed` 事件（对齐 Windows 平台 `NativeWindow_Destory → Closed`）。
-- **MTML=true + Chrome 样式主浏览器**：镜像 CefGlue.Demo.Avalonia 的启动路径。CEF UI 线程独立于主线程——`CommonBrowserAdapter` 的浏览器操作内部 `RunOnCefUiThread`（`PostTask(UI)` + 同步等待，`OnContextInitialized` 门控），`CefWindow` 的原生窗口操作走主线程（`Win32MessageLoop`）。主浏览器 `SetupBrowserView` 不设 runtime_style（Chrome bootstrap 下解析为 Chrome 子窗口嵌入），DevTools（Chrome-only）才能附着。
-- **DevTools 自动打开**：`BrowserInitialized` 后 1s 自动 `ShowDeveloperTools`（Chrome 样式、**不设父窗口**）。**durable 坑：不能 `SetAsPopup(GetWindowHandle())`**——主浏览器是顶层窗口的子控件，GetWindowHandle() 返回子窗口句柄，作 SetAsPopup 父句柄会被 CEF 用作 DevTools 宿主 → DevTools 顶替主网页内容显示（实测用户机器）。不设父窗口则 CEF 用独立 DevTools 窗口。损坏/虚拟化 GPU 下 DevTools 窗口仍可能即开即关（本机 VM 复现，renderer 无崩溃、窗口关闭原因未明）。
-- **平台选择**：`UseCEF` 只对消费方应用可见（MSBuild 属性不跨 ProjectReference 传播），包模式 CEF 消费方另显式 `PackageReference WebWindowUI.Platforms.Cef`；仓库模式由 targets 按 `UseCEF` 给应用工程补平台 ProjectReference。
+- **隐藏宿主 + 重挂载（对齐 CefGlue.Avalonia，DevTools 行为的关键）**：`GetHostViewHandle` 返回隐藏宿主窗口（`Win32BrowserHost.CreateHiddenHost`，Natives.Windows 新增公开类），浏览器先作为隐藏窗口子窗口创建；`InitializeRender` 时 `Win32BrowserHost.Reparent`（SetParent+MoveWindow）重挂载进可见顶层窗口。浏览器直接作为可见窗口子控件时，`SetAsPopup(GetWindowHandle())` 的 DevTools 弹窗会顶替内容/即开即关。
+- **初始化走 CefRuntimeLoader**：自定义 scheme（app/appdata）经 `CustomScheme` 传入，处理器工厂（`ResourceSchemeHandlerFactory`/`MessageSchemeHandlerFactory`）由 loader 注册。
+- **MTML=true（CEF UI 线程独立）**：CefGlue.Common 内部 marshal 浏览器操作；`CefWindow` 原生窗口操作走主线程（`Win32MessageLoop.RunOnUiThread`）。
+- **DevTools 关闭不影响主窗口**：`BrowserClosed` 对 DevTools 浏览器也触发，`OnBrowserClosed` 用 `ReferenceEquals(browser, UnderlyingBrowser)` 过滤。
+
+## durable 坑
+
+- **DevTools 窗口即开即关/崩溃不是 GPU 问题（2026-08-14 用户明确：不要动 GPU）**：`--disable-gpu` 无效、`Failed to create shared context for virtualization` 是 VM GPU 合成器噪音但非根因。**DevTools 前端（devtools:// 重 JS）在 CEF 150/151 的 V8 间歇 fastfail（0xC0000409）**，与嵌入方式/scheme/GPU 都无关（data: 页面 + --disable-gpu 也照样崩）。**可靠 DevTools = 远程调试**（`--remote-debugging-port` + 外部 Chrome `chrome://inspect`）。
+- **launcher 的 STATUS_STACK_BUFFER_OVERRUN = protobufjs 描述符解析 V8 fastfail**：`protobuf.Root.fromJSON(descriptor)` 解析共享 descriptor（含全部模型，其中引用递归 ModelValue 的模型如 About）时 V8 fastfail；`base + LauncherModel + LauncherModelUpdate`（不引用 ModelValue）干净；打破 ModelValue 递归也干净。**方案：每模型独立 descriptor 或打破递归**。CEF 151 升级未修复（V8 bug 横跨 150/151）。
+- **CEF 响应 MimeType 不能带 charset（「网页只有文本」根因）**：`CefResponse.MimeType` 塞整串 `text/html; charset=utf-8` 会让 CEF 不识别为 HTML、页面按纯文本显示源码——`WwuiResourceHandler.GetResponseHeaders` 用 `;` 剥离。**不要显式设 `CefResponse.Charset`**（触发原生 STATUS_STACK_BUFFER_OVERRUN 崩溃）。
+- **CEF 回调里访问 CefFrame/CefBrowser 属性 → fastfail 崩溃**：`OnAfterCreated` 里 `GetMainFrame().Url`、`OnLoadStart` 里 `frame.Url` 等诊断日志会崩 libcef（0xC0000409）。CEF 回调内不得访问 frame/browser 的 URL 属性。
+
+## 平台选择
+
+`UseCEF` 只对消费方应用可见（MSBuild 属性不跨 ProjectReference 传播），包模式 CEF 消费方另显式 `PackageReference WebWindowUI.Platforms.Cef`；仓库模式由 targets 按 `UseCEF` 给应用工程补平台 ProjectReference。
 
 ## 打包
 

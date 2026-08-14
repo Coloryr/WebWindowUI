@@ -5,12 +5,15 @@ using WebWindowUI.Core.Protocol;
 using WebWindowUI.Natives.Windows;
 using Xilium.CefGlue;
 using Xilium.CefGlue.BrowserProcess;
+using Xilium.CefGlue.Common;
+using Xilium.CefGlue.Common.Shared;
 
 namespace WebWindowUI.Platforms.Cef;
 
 /// <summary>
 /// CEF 平台实现（Windows：CefGlue 托管包装 + 裸 Win32 子窗口 + 启动自动下载运行时），与 Windows 平台互斥。
-/// 单线程消息循环（MTML=false）：CEF UI 线程 == 主线程，RunMessageLoop 用 CefRuntime.RunMessageLoop()。
+/// 浏览器托管层用 CefGlue.Common 自带实现（BaseCefBrowser/CommonBrowserAdapter），初始化走
+/// CefRuntimeLoader（延迟到首个窗口构造时 Load）。MTML=true（CEF UI 线程独立于主线程）。
 /// </summary>
 public sealed class CefPlatform : IWebWindowPlatform
 {
@@ -35,11 +38,6 @@ public sealed class CefPlatform : IWebWindowPlatform
     private static readonly ConcurrentDictionary<int, CefWindow> _browsers = new();
 
     /// <summary>
-    /// CEF 上下文就绪信号（OnContextInitialized 触发；浏览器须在其后创建）。
-    /// </summary>
-    private static readonly ManualResetEventSlim _contextReady = new();
-
-    /// <summary>
     /// 是否已调过 CefRuntime.Shutdown（防 ProcessExit 与 RunMessageLoop 双关）。
     /// </summary>
     private static bool _shutdownDone;
@@ -52,6 +50,8 @@ public sealed class CefPlatform : IWebWindowPlatform
     /// </summary>
     public CefPlatform()
     {
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            System.IO.File.AppendAllText(@"C:\temp\unhandled.log", $"[{Environment.ProcessId}] {e.ExceptionObject}\n\n");
 #if !MACOS
         CefSubProcess.Run(Environment.GetCommandLineArgs(), true);
 #endif
@@ -59,8 +59,6 @@ public sealed class CefPlatform : IWebWindowPlatform
         var cachePath = Path.Combine(Path.GetTempPath(), "CefGlue", Environment.ProcessId.ToString());
         var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "logs");
         Directory.CreateDirectory(logPath);
-
-        CefRuntime.Load();
 
         var settings = new CefSettings
         {
@@ -72,28 +70,27 @@ public sealed class CefPlatform : IWebWindowPlatform
             UncaughtExceptionStackSize = 100, // 供未捕获异常事件
         };
 
-        switch (CefRuntime.Platform)
-        {
-            case CefRuntimePlatform.Windows:
-                settings.MultiThreadedMessageLoop = true; // DevTools（Chrome-only）需要 MTML=true
-                break;
-            case CefRuntimePlatform.MacOS:
-                settings.NoSandbox = true;
-                settings.MultiThreadedMessageLoop = false;
-                settings.ExternalMessagePump = true;
-                break;
-            default: // Linux
-                settings.NoSandbox = true;
-                settings.MultiThreadedMessageLoop = true;
-                break;
-        }
-
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => Shutdown();
-
-        CefRuntime.Initialize(new CefMainArgs(Environment.GetCommandLineArgs()), settings, new WwuiCefApp(), IntPtr.Zero);
-
-        CefRuntime.RegisterSchemeHandlerFactory(WebWindowResource.Scheme, "", new ResourceSchemeHandlerFactory());
-        CefRuntime.RegisterSchemeHandlerFactory(WebWindowResource.SchemeData, "", new MessageSchemeHandlerFactory());
+        // 用 CefGlue.Common.CefRuntimeLoader 初始化（延迟到首个 BaseCefBrowser 构造时 Load，浏览器托管层
+        // 就是 CefGlue.Common 自带实现）；自定义 scheme（app/appdata）经 CustomScheme 传入，处理器工厂由 loader 注册。
+        // --disable-gpu：VM/损坏 GPU 上 GPU 进程反复崩溃；--remote-debugging-port：进程内 DevTools 窗口在
+        // CEF 150/151 上不稳定（V8 fastfail/frame 超时），稳定调试走外部浏览器 chrome://inspect 连接。
+        CefRuntimeLoader.Initialize(settings, customSchemes:
+        [
+            new CustomScheme
+            {
+                SchemeName = WebWindowResource.Scheme,
+                DomainName = "",
+                IsDisplayIsolated = true,
+                SchemeHandlerFactory = new ResourceSchemeHandlerFactory(),
+            },
+            new CustomScheme
+            {
+                SchemeName = WebWindowResource.SchemeData,
+                DomainName = "",
+                IsDisplayIsolated = true,
+                SchemeHandlerFactory = new MessageSchemeHandlerFactory(),
+            },
+        ]);
 
         _message.InitMessageLoop();
     }
@@ -143,61 +140,6 @@ public sealed class CefPlatform : IWebWindowPlatform
         }
         window = null;
         return false;
-    }
-
-    /// <summary>
-    /// 浏览器进程侧 CefApp：注册自定义 scheme，并把 scheme 列表经 --custom-scheme 传给各子进程。
-    /// </summary>
-    internal sealed class WwuiCefApp : CefApp
-    {
-        /// <summary>
-        /// 注册 app/appdata 自定义 scheme（scheme 注册须全进程一致）。
-        /// </summary>
-        /// <param name="registrar">scheme 注册器。</param>
-        protected override void OnRegisterCustomSchemes(CefSchemeRegistrar registrar)
-        {
-            registrar.AddCustomScheme(WebWindowResource.Scheme, SchemeOptions);
-            registrar.AddCustomScheme(WebWindowResource.SchemeData, SchemeOptions);
-        }
-
-        /// <summary>
-        /// 返回浏览器进程处理器。
-        /// </summary>
-        protected override CefBrowserProcessHandler GetBrowserProcessHandler()
-            => new WwuiCefBrowserProcessHandler();
-    }
-
-    /// <summary>
-    /// 浏览器进程处理器：子进程启动前注入 --custom-scheme（renderer 侧 CustomScheme.FromCommandLineValue
-    /// 还原注册，否则 appbin:// fetch 在 renderer 里被 CORS 门控）与 --parent-pid（子进程监听父进程退出）。
-    /// 镜像 loader 的 CommonBrowserProcessHandler。
-    /// </summary>
-    internal sealed class WwuiCefBrowserProcessHandler : CefBrowserProcessHandler
-    {
-        /// <summary>
-        /// 传给子进程的 --custom-scheme 参数值。
-        /// </summary>
-        private readonly string _customSchemes =
-            $"{WebWindowResource.Scheme}||{(int)SchemeOptions};{WebWindowResource.SchemeData}||{(int)SchemeOptions}";
-        /// <summary>
-        /// 传给子进程的 --parent-pid 参数值。
-        /// </summary>
-        private readonly string _parentPid = Environment.ProcessId.ToString();
-
-        /// <summary>
-        /// 子进程启动前注入 scheme 列表与父进程 pid（renderer 侧据此还原 scheme 注册与监听父进程退出）。
-        /// </summary>
-        /// <param name="commandLine">子进程命令行。</param>
-        protected override void OnBeforeChildProcessLaunch(CefCommandLine commandLine)
-        {
-            commandLine.AppendSwitch("--custom-scheme", _customSchemes);
-            commandLine.AppendSwitch("--parent-pid", _parentPid);
-        }
-
-        /// <summary>
-        /// CEF 上下文就绪（在 CEF UI 线程回调）：放行浏览器创建。
-        /// </summary>
-        protected override void OnContextInitialized() => _contextReady.Set();
     }
 
     /// <summary>
@@ -325,7 +267,8 @@ public sealed class CefPlatform : IWebWindowPlatform
             redirectUrl = string.Empty;
             response.Status = status;
             response.StatusText = StatusText(status);
-            response.MimeType = mime;
+            // CEF 不识别带 charset 的 MIME（按纯文本显示源码），`;` 剥离。勿设 CefResponse.Charset（触发原生崩溃）。
+            response.MimeType = mime.Split(';', 2)[0].Trim();
 
             response.SetHeaderByName("Access-Control-Allow-Origin", "*", true);
             if (cacheControl is { } cache)
@@ -459,7 +402,6 @@ public sealed class CefPlatform : IWebWindowPlatform
     /// <param name="action">要执行的动作。</param>
     internal static void RunOnCefUiThread(Action action)
     {
-        _contextReady.Wait(); // 浏览器须在 OnContextInitialized 后创建
         if (IsCefUiThread())
         {
             action();
