@@ -104,9 +104,7 @@ public static class ModelProtoGenerator
     {
         var fullMessageName = $"{GeneratedPackage}.{model.ClassName}";
         var modelId = ModelIdFor(fullMessageName);
-        var descriptorJson = all.Count > 0
-            ? BuildDescriptor(BuildAllModelFields(all))
-            : BuildDescriptor(new[] { new KeyValuePair<string, List<ProtoField>>(model.ClassName, model.Fields) });
+        var descriptorJson = BuildDescriptor(CollectDescriptorModels(model, all));
 
         var allNamespaces = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var kv in all)
@@ -284,15 +282,33 @@ public static class ModelProtoGenerator
     }
 
     /// <summary>
-    /// 把全模型已解析表收敛成 类名 → 字段 表，供全量 descriptor 使用（无需重新解析源码）。
+    /// 单模型 descriptor 的模型集合：本模型 + 它经 typed-repeated 引用的元素模型（传递闭包，按先序）。
+    /// 不再把全部模型内联进每个 descriptor——CEF 150/151 的 V8 对「递归 ModelValue + 引用它的模型
+    /// 消息」的 descriptor 解析 fastfail 崩溃（见 CEF_DEBUGGING.md），逐模型独立 descriptor 只含本模型
+    /// 与必要引用，避开该触发组合。typed-repeated 元素模型必须带上，否则前端桥对 repeated 字段
+    /// <c>f.resolve()</c> 落空、typed 解码退化成序数透传（元素 _modelInstanceId 丢失）。
     /// </summary>
-    private static IReadOnlyList<KeyValuePair<string, List<ProtoField>>> BuildAllModelFields(
-        IReadOnlyDictionary<string, ModelParsed> allParsed)
+    /// <param name="model">本模型。</param>
+    /// <param name="allParsed">全模型已解析表（typed-repeated 元素解析用）。</param>
+    /// <returns>descriptor 用的 类名 → 字段 表。</returns>
+    private static IReadOnlyList<KeyValuePair<string, List<ProtoField>>> CollectDescriptorModels(
+        ModelParsed model, IReadOnlyDictionary<string, ModelParsed> allParsed)
     {
-        var all = new List<KeyValuePair<string, List<ProtoField>>>();
-        foreach (KeyValuePair<string, ModelParsed> kv in allParsed)
-            all.Add(new(kv.Key, kv.Value.Fields));
-        return all;
+        var ordered = new List<ModelParsed> { model };
+        var visited = new HashSet<string>(StringComparer.Ordinal) { model.ClassName };
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            foreach (ProtoField f in ordered[i].Fields)
+            {
+                if (f.TsElem is not null && allParsed.TryGetValue(f.TsElem, out ModelParsed? elem)
+                    && visited.Add(elem.ClassName))
+                    ordered.Add(elem);
+            }
+        }
+        var result = new List<KeyValuePair<string, List<ProtoField>>>(ordered.Count);
+        foreach (ModelParsed m in ordered)
+            result.Add(new KeyValuePair<string, List<ProtoField>>(m.ClassName, m.Fields));
+        return result;
     }
 
     // ---- 类型映射 ----

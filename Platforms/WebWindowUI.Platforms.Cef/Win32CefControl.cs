@@ -43,6 +43,7 @@ internal sealed class Win32CefControl : IControl
         nativeWindow.Resize += NotifySize;
         // 隐藏宿主：普通隐藏顶层窗口（浏览器 SetAsChild 到这里，避免直接嵌入可见窗口）
         _hiddenHost = Win32BrowserHost.CreateHiddenHost();
+        RenderTrace.Log($"Attach native=0x{nativeWindow.WindowHandle:x} hiddenHost=0x{_hiddenHost:x}");
     }
 
     /// <summary>
@@ -62,7 +63,11 @@ internal sealed class Win32CefControl : IControl
     /// <param name="initialWidth">初始宽度。</param>
     /// <param name="initialHeight">初始高度。</param>
     /// <returns>隐藏宿主窗口句柄。</returns>
-    public IntPtr? GetHostViewHandle(int initialWidth, int initialHeight) => _hiddenHost;
+    public IntPtr? GetHostViewHandle(int initialWidth, int initialHeight)
+    {
+        RenderTrace.Log($"GetHostViewHandle size={initialWidth}x{initialHeight} -> 0x{_hiddenHost:x}");
+        return _hiddenHost;
+    }
 
     /// <summary>
     /// 渲染挂载：把浏览器 HWND 重挂载（SetParent）进可见顶层窗口并铺满客户区（marshal 到主线程）。
@@ -70,12 +75,14 @@ internal sealed class Win32CefControl : IControl
     /// <param name="browserHandle">浏览器窗口句柄。</param>
     public void InitializeRender(IntPtr browserHandle)
     {
+        RenderTrace.Log($"InitializeRender browser=0x{browserHandle:x}");
         WebWindowPlatform.Current.RunOnUiThread(() =>
         {
             if (_nativeWindow is not { } native)
                 return;
             var rc = native.GetSize();
-            Win32BrowserHost.Reparent(browserHandle, native.WindowHandle, rc.Width, rc.Height);
+            var oldParent = Win32BrowserHost.Reparent(browserHandle, native.WindowHandle, rc.Width, rc.Height);
+            RenderTrace.Log($"Reparent browser=0x{browserHandle:x} oldParent=0x{oldParent:x} -> native=0x{native.WindowHandle:x} size={rc.Width}x{rc.Height}");
         });
     }
 

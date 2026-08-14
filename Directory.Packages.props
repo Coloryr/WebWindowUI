@@ -12,6 +12,7 @@
     <PackageVersion Include="CefGlue.Next.Common.Shared" Version="150.7871.115" />
     <PackageVersion Include="chromiumembeddedframework.runtime.win-arm64" Version="150.0.11" />
     <PackageVersion Include="chromiumembeddedframework.runtime.win-x64" Version="150.0.11" />
+	<PackageVersion Include="chromiumembeddedframework.runtime" Version="150.0.11" />
     <PackageVersion Include="WebWindowUI" Version="$(Version)" />
     <PackageVersion Include="WebWindowUI.Backend" Version="$(Version)" />
     <PackageVersion Include="WebWindowUI.Frontend" Version="$(Version)" />

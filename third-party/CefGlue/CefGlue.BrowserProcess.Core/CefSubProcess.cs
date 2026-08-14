@@ -19,10 +19,10 @@ public static class CefSubProcess
 
     public static string GetSubProcessPath() => CefRuntime.Platform switch
     {
-       CefRuntimePlatform.MacOS => Environment.ProcessPath?.Replace("MonoBundle", "MacOS").Replace(".dll", ""),
-       _ => Environment.ProcessPath
+        CefRuntimePlatform.MacOS => Environment.ProcessPath?.Replace("MonoBundle", "MacOS").Replace(".dll", ""),
+        _ => Environment.ProcessPath
     };
-    
+
     internal static void RunCef(string[] args)
     {
 #if DEBUG
@@ -53,7 +53,7 @@ public static class CefSubProcess
         catch (Exception e)
         {
             Debugger.Break();
-            
+
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 Debugger.Launch();
@@ -62,7 +62,7 @@ public static class CefSubProcess
         }
 #endif
     }
-    
+
     private static string GetArgumentValue(string[] args, string argName)
     {
         var arg = args.FirstOrDefault(a => a?.StartsWith(argName + "=") == true);

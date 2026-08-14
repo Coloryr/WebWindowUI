@@ -16,8 +16,16 @@ public static class WebWindowUIPlatform
         WebWindowPlatform.Register(platform);
     }
 
+    public static void Init()
+    {
+        WebWindowPlatform.Current.Init();
+    }
+
     /// <summary>
     /// 运行当前平台的消息循环，直到所有窗口关闭后返回。
     /// </summary>
-    public static void Run() => WebWindowPlatform.Current.RunMessageLoop();
+    public static void Run()
+    {
+        WebWindowPlatform.Current.RunMessageLoop();
+    }
 }

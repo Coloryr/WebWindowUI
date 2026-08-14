@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- RootNamespace 避开 WebWindowUI.CefSubProcess（会遮蔽 Xilium.CefGlue.BrowserProcess.CefSubProcess 类） -->
+    <RootNamespace>WebWindowUI.CefSubProcessClient</RootNamespace>
+    <!-- 简易子进程 client：不出 NuGet 包，只随 CEF 平台工程进消费方 bin -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.BrowserProcess.Core\CefGlue.BrowserProcess.Core.csproj" />
+  </ItemGroup>
+
+</Project>

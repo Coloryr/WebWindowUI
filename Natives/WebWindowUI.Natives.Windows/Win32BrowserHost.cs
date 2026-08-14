@@ -64,9 +64,11 @@ public static class Win32BrowserHost
     /// <param name="newParent">新父窗口句柄。</param>
     /// <param name="width">铺满宽度。</param>
     /// <param name="height">铺满高度。</param>
-    public static void Reparent(IntPtr child, IntPtr newParent, int width, int height)
+    /// <returns>重挂载前的旧父窗口句柄。</returns>
+    public static IntPtr Reparent(IntPtr child, IntPtr newParent, int width, int height)
     {
-        Win32.SetParent(child, newParent);
+        var oldParent = Win32.SetParent(child, newParent);
         Win32.MoveWindow(child, 0, 0, width, height, true);
+        return oldParent;
     }
 }

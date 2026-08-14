@@ -25,6 +25,11 @@ public class NullPlatform : IWebWindowPlatform
         throw new NotImplementedException();
     }
 
+    public void Init()
+    {
+        throw new NotImplementedException();
+    }
+
     /// <summary>
     /// 是否在 UI 线程（未实现）。
     /// </summary>

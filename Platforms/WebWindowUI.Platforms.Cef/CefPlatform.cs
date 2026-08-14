@@ -13,6 +13,31 @@ using Xilium.CefGlue.Common.Shared.Helpers;
 
 namespace WebWindowUI.Platforms.Cef;
 
+public static class StackDebug
+{
+    [Conditional("DEBUG")]
+    public static void Log(string[] args, string prefix)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
+
+        Directory.CreateDirectory(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "logs"));
+
+        WriteAllocatedStackSize($"{prefix} Stack [{string.Join(",", args).Replace("--type=", "")}]");
+    }
+
+    private static void WriteAllocatedStackSize(string header)
+    {
+
+        // Log to file so renderer subprocess output is also visible
+        var msg = $"{header,-25}: {ThreadStack.GetSize(),6} KB  [pid={Environment.ProcessId}]";
+        Debug.WriteLine(msg);
+        File.AppendAllText(
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "logs", "stack.log"),
+            msg + Environment.NewLine);
+    }
+}
+
 /// <summary>
 /// CEF 平台实现（Windows：CefGlue 托管包装 + 裸 Win32 子窗口 + 启动自动下载运行时），与 Windows 平台互斥。
 /// 浏览器托管层用 CefGlue.Common 自带实现（BaseCefBrowser/CommonBrowserAdapter），初始化走
@@ -35,43 +60,8 @@ public sealed class CefPlatform : IWebWindowPlatform
     /// </summary>
     private static bool _shutdownDone;
 
-    internal static class StackDebug
+    public void Init()
     {
-        [Conditional("DEBUG")]
-        internal static void Log(string[] args, string prefix)
-        {
-            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
-
-            Directory.CreateDirectory(Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "logs"));
-
-            WriteAllocatedStackSize($"{prefix} Stack [{string.Join(",", args).Replace("--type=", "")}]");
-        }
-
-        private static void WriteAllocatedStackSize(string header)
-        {
-
-            // Log to file so renderer subprocess output is also visible
-            var msg = $"{header,-25}: {ThreadStack.GetSize(),6} KB  [pid={Environment.ProcessId}]";
-            Debug.WriteLine(msg);
-            File.AppendAllText(
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "logs", "stack.log"),
-                msg + Environment.NewLine);
-        }
-    }
-
-    /// <summary>
-    /// </summary>
-    public CefPlatform()
-    {
-        StackDebug.Log(Environment.GetCommandLineArgs(), "WebUI");
-
-        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-            System.IO.File.AppendAllText(@"C:\temp\unhandled.log", $"[{Environment.ProcessId}] {e.ExceptionObject}\n\n");
-#if !MACOS
-        CefSubProcess.Run(Environment.GetCommandLineArgs(), true);
-#endif
-
         var cachePath = Path.Combine(Path.GetTempPath(), "CefGlue", Environment.ProcessId.ToString());
         var logPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "logs");
         Directory.CreateDirectory(logPath);
@@ -81,11 +71,16 @@ public sealed class CefPlatform : IWebWindowPlatform
             RootCachePath = cachePath,
             LogSeverity = CefLogSeverity.Verbose,
             LogFile = Path.Combine(logPath, "cef_debug.log"),
+            BrowserSubprocessPath = Path.Combine("C:\\Temp\\cef150-sdk\\cef_binary_150.0.11+gb887805+chromium-150.0.7871.115_windows64_minimal\\tests\\cefsimple_capi", "cefsimple_capi.exe"),
         };
 
+        // 强制硬件 GPU：浏览器默认按环境回退软件渲染（--use-gl=disabled）。
+        // 子进程已换原生 cefsimple_capi.exe（不引导 .NET）；use-gl=angle 启用 GL、
+        // use-angle=d3d11 指定 ANGLE D3D11 硬件后端（硬件合成经 D3D 交换链呈现，不走软件 GDI）。
         CefRuntimeLoader.Initialize(settings, flags:
         [
-            new("use-gl", "disabled"), // 对齐 Avalonia demo：GPU 进程禁用 GL（软件渲染），避免 Failed to create shared context 崩溃
+            new("use-gl", "angle"),
+            new("use-angle", "d3d11"),
         ], customSchemes:
         [
             new CustomScheme
@@ -375,6 +370,11 @@ public sealed class CefPlatform : IWebWindowPlatform
     /// <returns>窗口后端。</returns>
     public IWindowBackend CreateWindow(WebWindowOptions options)
     {
+        if (!CefRuntimeLoader.IsLoaded)
+        {
+            CefRuntimeLoader.Load(null);
+        }
+
         return new CefWindow(options);
     }
 

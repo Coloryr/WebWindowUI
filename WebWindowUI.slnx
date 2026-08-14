@@ -10,6 +10,7 @@
     <Project Path="Natives/WebWindowUI.Natives.Windows/WebWindowUI.Natives.Windows.csproj" />
   </Folder>
   <Folder Name="/Platforms/">
+    <Project Path="Platforms/WebWindowUI.CefSubProcess/WebWindowUI.CefSubProcess.csproj" />
     <Project Path="Platforms/WebWindowUI.Platforms.Cef/WebWindowUI.Platforms.Cef.csproj" />
     <Project Path="Platforms/WebWindowUI.Platforms.Linux/WebWindowUI.Platforms.Linux.csproj" />
     <Project Path="Platforms/WebWindowUI.Platforms.MacOS/WebWindowUI.Platforms.MacOS.csproj" />

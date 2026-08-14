@@ -71,14 +71,9 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
         _nativeWindow = nativeWindow;
         _control!.Attach(nativeWindow); // 基类 ctor 已经 CreateControl 建空壳，这里绑定原生窗口
 
-        Task.Run(() =>
-        {
-            Thread.Sleep(10000);
-            RunOnUiThread(() =>
-            {
-                Address = "chrome://gpu"; // 临时：验证 DevTools 是否因自定义 scheme 崩
-            });
-        });
+        //Address = WebWindowResource.GetWindowIndexUrl(options.WindowPath);
+
+        Address = "chrome://gpu";
 
         BrowserInitialized += OnBrowserInitialized;
         BrowserClosed += OnBrowserClosed;
@@ -121,6 +116,8 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
     public void Show()
     {
         _nativeWindow.Show();
+        var rc = _nativeWindow.GetSize();
+        RenderTrace.Log($"Show hwnd=0x{_nativeWindow.WindowHandle:x} client={rc.Width}x{rc.Height}");
         _control?.NotifySize(); // 触发尺寸 → CefGlue.Common 首次尺寸创建浏览器
     }
 
@@ -226,7 +223,10 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
     private void OnBrowserInitialized()
     {
         if (UnderlyingBrowser is { } browser)
+        {
             CefPlatform.RegisterBrowser(browser, this); // scheme 处理器按浏览器 id 分派回本窗口
+            RenderTrace.Log($"BrowserInitialized browser=0x{browser.GetHost().GetWindowHandle():x} id={browser.Identifier}");
+        }
     }
 
     /// <summary>

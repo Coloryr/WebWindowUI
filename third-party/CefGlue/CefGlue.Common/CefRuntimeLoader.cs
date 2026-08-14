@@ -83,7 +83,7 @@ namespace Xilium.CefGlue.Common
                 exeFileName = "CefGlue";
             }
 
-            var args = new[] { 
+            var args = new[] {
                 exeFileName,
 #if DEBUG
                 "--use-mock-keychain"

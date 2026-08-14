@@ -3,7 +3,7 @@ namespace WebWindowUI.Core;
 /// <summary>
 /// 程序日志
 /// </summary>
-internal static class WebWindowLog
+public static class WebWindowLog
 {
     /// <summary>
     /// 输出调试日志。

@@ -8,32 +8,34 @@
     <Description>WebWindowUI CEF 平台实现</Description>
     <PackageTags>webwindowui;cef;chromium</PackageTags>
     <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
-    <!--
-      CefGlue 已 vendored（third-party/CefGlue，针对 CEF 151 重生成），不再用 NuGet 包
-      （chromiumembeddedframework.runtime / CefGlue.Next 止步 150，Chromium 151 的 V8 有 protobufjs
-      描述符解析 CHECK 崩溃，见 README）。
-      Windows 运行时用手动下载的 CEF 151 二进制：CefRuntimeDir 指向合并后的目录
-      （libcef.dll + icudtl.dat + *.pak + locales + chrome_elf 等，不含 wrapper DLL——后者由 vendored 工程引用提供）。
-    -->
-    <CefRuntimeDir Condition="'$(WWUIPlatform)' == 'Windows'">C:\temp\cef150\runtime-bin</CefRuntimeDir>
   </PropertyGroup>
 
-  <!-- Linux/macOS 运行时仍走 NuGet 包（本仓库未 vendored 这些平台的 CEF 二进制） -->
   <ItemGroup>
-    <PackageReference Include="cef.runtime.linux-arm64" Condition="'$(WWUIPlatform)' == 'Linux' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'" />
-    <PackageReference Include="cef.runtime.linux-x64" Condition="'$(WWUIPlatform)' == 'Linux' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'X64'" />
-    <PackageReference Include="cef.runtime.osx-arm64" Condition="'$(WWUIPlatform)' == 'MacOS' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'" />
-    <PackageReference Include="cef.runtime.osx-x64" Condition="'$(WWUIPlatform)' == 'MacOS' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'X64'" />
+    <PackageReference PrivateAssets="runtime;native" Include="cef.runtime.linux-arm64" 
+					  Condition="'$(WWUIPlatform)' == 'Linux' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'" />
+    <PackageReference PrivateAssets="runtime;native" Include="cef.runtime.linux-x64" 
+					  Condition="'$(WWUIPlatform)' == 'Linux' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'X64'" />
+    <PackageReference PrivateAssets="runtime;native" Include="cef.runtime.osx-arm64" 
+					  Condition="'$(WWUIPlatform)' == 'MacOS' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'" />
+    <PackageReference PrivateAssets="runtime;native" Include="cef.runtime.osx-x64" 
+					  Condition="'$(WWUIPlatform)' == 'MacOS' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'X64'" />
+	<PackageReference PrivateAssets="runtime;native" ExcludeAssets="runtime;native"
+					  Include="chromiumembeddedframework.runtime.win-arm64" 
+					  Condition="'$(WWUIPlatform)' == 'Windows' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'Arm64'" />
+	<PackageReference PrivateAssets="runtime;native" ExcludeAssets="runtime;native"
+					  Include="chromiumembeddedframework.runtime.win-x64" 
+	                  Condition="'$(WWUIPlatform)' == 'Windows' And $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) == 'X64'" />
+	<PackageReference PrivateAssets="runtime;native" ExcludeAssets="runtime;native"
+					  Include="chromiumembeddedframework.runtime" 
+					  Condition="'$(WWUIPlatform)' == 'Windows'" />
   </ItemGroup>
 
-  <!-- ProjectReference vendored CefGlue 工程（依赖链正确传播到 app deps.json）。
-       BaseCefBrowser.cs 是 partial（CefGlue.Common 排除它，平台工程链接后提供 Address 实现，见 BaseCefBrowser.Address.cs）——
-       链接进本工程，CefWindow 继承它并实现抽象方法（CreateControl/OSR）。 -->
   <ItemGroup>
     <ProjectReference Include="..\..\third-party\CefGlue\CefGlue\CefGlue.csproj" />
     <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.Common\CefGlue.Common.csproj" />
     <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.Common.Shared\CefGlue.Common.Shared.csproj" />
     <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.BrowserProcess.Core\CefGlue.BrowserProcess.Core.csproj" />
+    <ProjectReference Include="..\WebWindowUI.CefSubProcess\WebWindowUI.CefSubProcess.csproj" />
     <Compile Include="..\..\third-party\CefGlue\CefGlue.Common\BaseCefBrowser.cs" Link="CefGlue\BaseCefBrowser.cs" />
   </ItemGroup>
 
@@ -43,12 +45,6 @@
 
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows'">
     <ProjectReference Include="..\..\Natives\WebWindowUI.Natives.Windows\WebWindowUI.Natives.Windows.csproj" />
-  </ItemGroup>
-
-  <!-- Windows：CEF 151 二进制（libcef.dll + 资源 + locales + chrome_elf 等）作为 Content 传播到 app 输出
-       （Content 带 CopyToOutputDirectory → 本工程输出 + 经引用链传到消费方 bin）。 -->
-  <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows'">
-    <Content Include="$(CefRuntimeDir)\**\*.*" Link="%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -24,4 +24,5 @@
     <InternalsVisibleTo Include="WebWindowUI.Platforms.Linux" />
     <InternalsVisibleTo Include="WebWindowUI.Platforms.MacOS" />
   </ItemGroup>
+
 </Project>
