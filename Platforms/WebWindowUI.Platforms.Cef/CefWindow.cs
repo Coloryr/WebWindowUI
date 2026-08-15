@@ -4,15 +4,16 @@ using WebWindowUI.Natives.Windows;
 using Xilium.CefGlue;
 using Xilium.CefGlue.Common;
 using Xilium.CefGlue.Common.Events;
-using Xilium.CefGlue.Common.Platform;
+using Xilium.CefGlue.Common.Helpers.Logger;
 
 namespace WebWindowUI.Platforms.Cef;
 
 /// <summary>
-/// CEF 平台窗口：BaseCefBrowser 承载于裸 Win32 顶层窗口（Win32CefControl 隐藏宿主 + 重挂载），
-/// 可创建多个实例。浏览器关闭（仅主浏览器）销毁顶层窗口。
+/// CEF 平台窗口：直连 CefGlue.Common 内部 CommonBrowserAdapter（IVT 授权；不再经
+/// BaseCefBrowser 扩展点——消除 vendored 源码同步负担），浏览器承载于裸 Win32 顶层窗口
+/// （Win32CefControl 隐藏宿主 + 重挂载），可创建多个实例。浏览器关闭（仅主浏览器）销毁顶层窗口。
 /// </summary>
-public sealed class CefWindow : BaseCefBrowser, IWindowBackend
+public sealed class CefWindow : IWindowBackend
 {
     /// <summary>
     /// 承载浏览器控件的 Win32 顶层窗口。
@@ -25,9 +26,14 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
     private readonly WebWindowOptions _options;
 
     /// <summary>
-    /// 平台控件（隐藏宿主 + 重挂载；基类构造时经 CreateControl 创建）。
+    /// 平台控件（隐藏宿主 + 重挂载）。
     /// </summary>
-    private Win32CefControl? _control;
+    private readonly Win32CefControl _control;
+
+    /// <summary>
+    /// CefGlue.Common 浏览器适配器（浏览器创建/导航/JS/事件）。
+    /// </summary>
+    private readonly CommonBrowserAdapter _adapter;
 
     /// <summary>
     /// 主浏览器实例（浏览器初始化时记录；BrowserClosed 过滤 DevTools 等弹窗用）。
@@ -60,60 +66,42 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
     public event Action<byte[]>? MessageReceived;
 
     /// <summary>
-    /// 构造窗口：建 Win32 顶层窗口 + BaseCefBrowser（隐藏宿主创建浏览器），设置初始 URL 与尺寸。
+    /// 构造窗口：建 Win32 顶层窗口 + 浏览器适配器（隐藏宿主创建浏览器），设置初始 URL 与尺寸。
     /// </summary>
     /// <param name="options">窗口选项。</param>
-    public CefWindow(WebWindowOptions options) : base()
+    public CefWindow(WebWindowOptions options)
     {
         _options = options;
+
+        // CEF 初始化（首个窗口触发；BaseCefBrowser 原在构造时 Load，现显式调用）。
+        if (!CefRuntimeLoader.IsLoaded)
+        {
+            CefRuntimeLoader.Load();
+        }
+
         _nativeWindow = new Win32NativeWindow(options);
         _nativeWindow.Resize += OnNativeResize;
 
-        BrowserInitialized += OnBrowserInitialized;
-        BrowserClosed += OnBrowserClosed;
-        LoadEnd += OnLoadEnd;
-
-        Address = WebWindowResource.GetWindowIndexUrl(options.WindowPath);
-
-        var size = _nativeWindow.GetSize();
-        _control!.SetTarget(_nativeWindow.WindowHandle, size.Width, size.Height);
-    }
-
-    /// <summary>
-    /// 创建承载浏览器的控件（基类构造时调用；本窗口持有实例）。
-    /// </summary>
-    /// <returns>控件。</returns>
-    internal override IControl CreateControl()
-    {
         _control = new Win32CefControl();
-        return _control;
+        _adapter = new CommonBrowserAdapter(this, nameof(CefWindow), _control, new NullLogger(nameof(CefWindow)));
+        _adapter.Initialized += OnBrowserInitialized;
+        _adapter.BrowserClosed += OnBrowserClosed;
+        _adapter.LoadEnd += OnLoadEnd;
+
+        // 初始 URL（适配器内部 marshal 到 CEF UI 线程，浏览器初始化后导航）。
+        _adapter.Address = WebWindowResource.GetWindowIndexUrl(options.WindowPath);
+
+        // 设置目标窗口与初始尺寸：触发 SizeChanged → 适配器创建浏览器（异步）。
+        var size = _nativeWindow.GetSize();
+        _control.SetTarget(_nativeWindow.WindowHandle, size.Width, size.Height);
     }
-
-    /// <summary>
-    /// OSR 弹窗宿主（不支持，抛异常）。
-    /// </summary>
-    /// <returns>弹窗宿主。</returns>
-    internal override IOffScreenPopupHost CreatePopupHost() => throw new NotSupportedException("OSR 渲染不支持");
-
-    /// <summary>
-    /// OSR 控件宿主（不支持，抛异常）。
-    /// </summary>
-    /// <returns>控件宿主。</returns>
-    internal override IOffScreenControlHost CreateOffScreenControlHost() => throw new NotSupportedException("OSR 渲染不支持");
-
-    /// <summary>
-    /// OSR 键盘处理器（不支持，抛异常）。
-    /// </summary>
-    /// <param name="control">控件。</param>
-    /// <returns>键盘处理器。</returns>
-    public override IOffScreenKeyboardHandler CreateOffScreenKeyboardHandler(object control) => throw new NotSupportedException("OSR 渲染不支持");
 
     /// <summary>
     /// 浏览器初始化完成（CEF UI 线程回调）：记录主浏览器并登记 id → 窗口映射。
     /// </summary>
     private void OnBrowserInitialized()
     {
-        var browser = UnderlyingBrowser;
+        var browser = _adapter.Browser;
         if (browser != null)
         {
             _mainBrowser = browser;
@@ -186,11 +174,11 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
         if (_closed)
             return;
         _closed = true;
-        if (IsBrowserInitialized)
+        if (_adapter.IsInitialized)
         {
             try
             {
-                base.CloseBrowser(true);
+                _adapter.CloseBrowser(true);
             }
             catch
             {
@@ -251,7 +239,7 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
             if (_closed)
                 return;
             var js = "window.wwuiReceive(" + JsStringLiteral.Quote(WebView2StringCodec.Encode(message)) + ")";
-            CefPlatform.PostToCefUiThread(() => ExecuteJavaScript(js));
+            CefPlatform.PostToCefUiThread(() => _adapter.ExecuteJavaScript(js, "about:blank", 1));
         }
         catch
         {
@@ -270,7 +258,7 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
             throw new InvalidOperationException("窗口已关闭。");
         try
         {
-            return EvaluateJavaScript<string>(script);
+            return _adapter.EvaluateJavaScript<string>(script, "about:blank", 1);
         }
         catch
         {

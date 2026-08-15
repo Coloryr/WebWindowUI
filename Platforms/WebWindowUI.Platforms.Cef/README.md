@@ -14,12 +14,11 @@
 | 文件 | 内容 |
 |------|------|
 | `CefPlatform.cs` | `CefPlatform : IWebWindowPlatform`：`Init(string[] args)` 先 `CefSubProcess.Run(args, true)` 分发子进程（同 exe 模型，应用 Main 只调 `WebWindowUIPlatform.Init(args)`）→ `CefRuntimeLoader.Initialize(settings, customSchemes:[app, appdata])`（延迟到首个 BaseCefBrowser 构造时 Load）→ `_message.InitMessageLoop()`。保留 `_browsers` 浏览器 id → 窗口映射、`RunOnCefUiThread`/`PostToCefUiThread`（ActionCefTask）、`RunMessageLoop`、对话框。**`CreateWindow` 经 `_message.RunOnUiThread` marshal 到主线程创建**（Win32 窗口必须由主线程创建，见 durable 坑）。BrowserCefApp 处理 scheme 注册与子进程参数 |
-| `CefWindow.cs` | `CefWindow : Xilium.CefGlue.Common.BaseCefBrowser, IWindowBackend`：链接 `BaseCefBrowser.cs` partial + `BaseCefBrowser.Address.cs`（Address 实现）；**抽象成员在具体子类实现**（`CreateControl()` → `Win32CefControl`，OSR 方法抛 NotSupported）。`BrowserInitialized` → 记录主浏览器并注册 id 映射；`BrowserClosed` → **仅主浏览器**（初始化时捕获的 `_mainBrowser`，非 UnderlyingBrowser——销毁后已被适配器置空）销毁顶层窗口；`LoadEnd`（主帧）→ `NavigationCompleted` |
+| `CefWindow.cs` | `CefWindow : IWindowBackend`：**直连 CefGlue.Common 内部 `CommonBrowserAdapter`**（IVT 授权；不再经 BaseCefBrowser 扩展点——消除 vendored 源码同步负担，上游内部 API 变更在编译期暴露）。构造时 `CefRuntimeLoader.Load()` → Win32 顶层窗口 → `Win32CefControl` → 适配器（订阅 `Initialized`/`BrowserClosed`/`LoadEnd`）→ 初始 URL → 尺寸。`BrowserClosed` → **仅主浏览器**（初始化时捕获的 `_mainBrowser`）销毁顶层窗口 |
 | `Win32CefControl.cs` | `IControl` 实现：**隐藏宿主 + 重挂载**——`GetHostViewHandle` 返回隐藏宿主窗口，`InitializeRender` 把浏览器 HWND 重挂载进目标可见窗口（`Win32BrowserHost.Reparent`）并铺满客户区。上下文菜单/光标/工具提示最小实现 |
-| `BaseCefBrowser.Address.cs` | CefGlue.Common 排除 BaseCefBrowser.cs（partial），平台工程链接后提供 Address partial 实现（命名空间必须与链接文件一致 `Xilium.CefGlue.Common`） |
 | `AppSchemeHandlerFactory.cs` | `CefSchemeHandlerFactory` + `CefResourceHandler`：GET 服务 wwwroot 资源，POST `__wwui` 解码 JS 回传字节按浏览器 id 分派回窗口 |
 
-**给上游 CefGlue.Common 的改动**（`E:\temp_code\CefGlue`，**改完须重新打包** `dotnet pack -c Debug -o Nuget\output` 并清 `%USERPROFILE%\.nuget\packages\cefglue.next.*` 缓存）：`InternalsVisibleTo("WebWindowUI.Platforms.Cef")`；`CommonBrowserAdapter` 加 `BrowserClosed` 事件（`Action<CefBrowser>`，HandleBrowserDestroyed 触发）+ `CloseBrowser(bool)`；`BaseCefBrowser` 暴露 `BrowserClosed` 事件 + `CloseBrowser(bool)`（BaseCefBrowser.cs 的改动同时要同步到本工程的 vendored 副本）。**DevTools 关闭也触发 BrowserClosed（所有浏览器）——CefWindow.OnBrowserClosed 必须只对主浏览器销毁窗口**，否则关 DevTools 会把主窗口一起关掉（用户实测程序崩溃/卡死）。
+**给上游 CefGlue.Common 的改动**（`E:\temp_code\CefGlue`，**改完须重新打包** `dotnet pack -c Debug -o Nuget\output` 并清 `%USERPROFILE%\.nuget\packages\cefglue.next.*` 缓存）：`InternalsVisibleTo("WebWindowUI.Platforms.Cef")`（平台直连内部 `CommonBrowserAdapter`/`IControl`）；`CommonBrowserAdapter` 加 `BrowserClosed` 事件（`Action<CefBrowser>`，HandleBrowserDestroyed 触发）+ `CloseBrowser(bool)`。**DevTools 关闭也触发 BrowserClosed（所有浏览器）——CefWindow.OnBrowserClosed 必须只对主浏览器销毁窗口**，否则关 DevTools 会把主窗口一起关掉（用户实测程序崩溃/卡死）。
 
 ## 关键设计
 
