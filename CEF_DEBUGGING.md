@@ -1,109 +1,59 @@
 # CEF 平台调试任务
 
-> 记录 2026-08-14 的 CEF 平台调试工作,供在新计算机继续。
-> **不要信任本仓库 README/CLAUDE.md 里的旧 CEF 记录**(用户多次强调记录有误,以本文档 + 实际日志为准)。
+> 记录 2026-08-14 的 CEF 平台调试工作，供在新计算机继续。
+> **不要信任本仓库 README/CLAUDE.md 里的旧 CEF 记录**（用户多次强调记录有误，以本文档 + 实际日志为准）。
 
 ## 任务目标
 
-修复 WebWindowUI CEF 平台的两个崩溃(都是 `STATUS_STACK_BUFFER_OVERRUN` / `0xC0000409` fastfail):
+修复 WebWindowUI CEF 平台的崩溃（`STATUS_STACK_BUFFER_OVERRUN` / `0xC0000409` fastfail）。
+**当前主阻塞**：页面 renderer 加载 chrome://gpu 后 ~1s，renderer 进程 `0xC0000409 @ libcef.dll+0x42240be` 确定性崩溃（9 次全同偏移）。
+对照基准：`E:\temp_code\CefGlue\CefGlue.Demo.Avalonia`（同 CEF 150.0.11 + 同 CefGlue + 同 chrome://gpu + 窗口模式，**不崩**）。
+目标顺序：先让 chrome://gpu 通过 → 再把 `CefWindow.Address` 换回项目 URL（`WebWindowResource.GetWindowIndexUrl(options.WindowPath)`）。渲染结果问用户，不用截图。
 
-1. **launcher 崩溃**:`protobuf.Root.fromJSON(descriptor)` 解析模型描述符时,V8 fastfail,页面显示错误页。
-2. **DevTools 窗口崩溃/即开即关**:F12 开 DevTools 时,DevTools 前端(V8)崩溃,窗口闪退。
+## 已确认的关键事实（勿再推翻）
 
-## 已确认的关键事实
+- **`0xC0000409`(STATUS_STACK_BUFFER_OVERRUN) = `__fastfail`，程序自查自裁**（未必是字面栈溢出）。本崩溃是 **V8 CHECK 失败**：崩溃寄存器 ~10 个全被毒化成 `0xBEEFE5AD`（= V8 失败路径 `SetAllRegistersToPoisonValue` 签名），fastfail 码 **57（0x39）**（不在标准 Windows FAST_FAIL 表，V8/Chromium 专属）。
+- **崩溃在 renderer 进程，不是 browser**。判别法：minidump 线程分析——崩溃 dump 无任何线程 pump Win32 消息循环（无 user32.dll 栈帧），全 ntdll/libcef 等待线程 → renderer。**模块集判别法不可靠**：same-exe 模式下 renderer 也把 WebWindowUI.Core/Backend/Mvvm/Platforms.Cef 全加载（.NET 加载入口程序集引用链），据此误判过 BROWSER。browser 进程（最后一次运行 PID 40332）存活 ≥9 分钟未崩；只有 GPU 进程在实验移除 SwiftShader flags 时崩（`ContextResult::kFatalFailure: Failed to create shared context for virtualization`，`exit_code=-2147483645`，browser 自动重初始化）。
+- **崩溃栈全在 libcef**，0x4224xxxx 区有递归簇（0x4226157 ≥6 次、0x4225ddc/0x422593f 重复）→ 同一热函数循环/递归里的 CHECK。
+- **已排除 6 变量**（各配置下全部仍复现）：
+  1. StackDebug/RenderTrace 文件锁（只让 browser 崩 0xe0434352，移除后 browser 稳定）。
+  2. SwiftShader GL flags（`--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist`，有/无都崩）。
+  3. `NoSandbox`（CefGlue 传 `IntPtr.Zero` sandbox_info → Chromium 自动加 `--no-sandbox`，两边 renderer 都有，无差异）。
+  4. Custom schemes app/appdata（含 `IsDisplayIsolated`；移除也崩）。
+  5. `--start-stack-profiler`（Chromium 自加，页面 renderer 两边都没有）。
+  6. 隐藏宿主 + SetParent 重挂载（直接嵌可见窗口也崩）。
+- **托管 renderer 代码是 Demo 子集**：`third-party/CefGlue/CefGlue.BrowserProcess.Core/Handlers/RenderProcessHandler.cs` 与上游 diff 仅 4 处二分注释——`_javascriptToNativeDispatcher`/`_frameDelivery`/`_sharedFrameDelivery` 未实例化、`_inputChannel.Install(context)` 注释掉，`_javascriptExecutionEngine` 激活。Demo 全部激活且不崩 → 托管 renderer 差异排除（工作集的子集不可能是崩溃源）。
+- **与 Demo 完全对齐的部分**（非差异）：CEF 二进制同源（NuGet `chromiumembeddedframework.runtime.win-x64` 150.0.11，`C:\temp\cef150\runtime-bin`）；CefGlue 同源码（vendored `third-party/CefGlue` == `E:\temp_code\CefGlue` 上游；`CefGlue/Interop/version.g.cs` 确认 `CEF_VERSION="150.0.11+gb887805+chromium-150.0.7871.115"`，与二进制匹配，**无版本错配**）；CefSettings 几乎相同（RootCachePath+Verbose+LogFile，`WindowlessRenderingEnabled` 均 false 窗口模式，同 `CefRuntimeLoader` 强制 `UncaughtExceptionStackSize=100` + Windows `MultiThreadedMessageLoop=true`）；URL 同 chrome://gpu；same-exe 子进程（`CefSubProcess.Run(args,true)`，Program.cs 首行，--type= 存在则走 ExecuteProcess 不返回）。
+- Demo 每次启动也崩 1 次但码是 `0xe0434352`（它自己的 StackDebug 文件锁 bug，dump `Xilium.CefGlue.Demo.Avalonia.exe.19676.dmp`），页面 renderer 存活，与我们无关。
 
-- **`0xC0000409`(STATUS_STACK_BUFFER_OVERRUN)是 CEF 150/151 的 V8 fastfail**(libcef.dll 里 CHECK 失败)。WebView2(新版 Chromium)无此问题。
-- **触发点**:
-  - protobufjs 描述符解析(`protobuf.Root.fromJSON`),描述符含递归 ModelValue(ModelValue→ModelValueList/ModelValueMap→ModelValue)+ 引用它的模型/Update 类型。
-  - DevTools 前端(devtools:// 重 JS)。
-- **已验证的规避**:
-  - `base + LauncherModel + LauncherModelUpdate`(Launcher 不引用 ModelValue)解析**不崩**。
-  - 打破 ModelValue 递归(非递归 ModelValue + About + Update)解析**不崩**。
-- **无效的尝试**(都实测无效):
-  - CEF 150 vs 151(都崩;CEF 151 升级没修,偏移从 0x42240be 变 0x44c0bbe)。
-  - `--disable-gpu`、`--use-gl=disabled`(用户明确:不是 GPU 问题,不再动 GPU)。
-  - 自定义 scheme / data: 页面 / chrome://gpu(都崩;scheme 不是元凶)。
-  - 隐藏宿主 + 重挂载 / 完整注册类隐藏窗口(DevTools 时好时坏)。
-  - 对齐 Avalonia 窗口样式(WS_EX_NOREDIRECTIONBITMAP 破坏渲染,已回退)。
-  - 对齐 Avalonia CefSettings(无效)。
-- **Avalonia demo(CEF 150)的 DevTools 稳定**(用户确认,反复 F12 不闪退)。精确差异未定位,可能是 CefGlue.Common + Avalonia 原生宿主的深层交互。
+## 崩溃 dump 分析（minidump，无 cdb/windbg，用 Python skelsec-minidump）
 
-## 已完成的重构(在仓库中)
+- dump 在 `%LOCALAPPDATA%\CrashDumps\WebWindowUI.Sample.exe.<pid>.dmp`（9 个，mtime 23:11–23:38 各实验），全 renderer。
+- skelsec API：`from minidump.minidumpfile import MinidumpFile; mf = MinidumpFile.parse(path)`；异常 `mf.exception.exception_records[0].ExceptionRecord`（`ExceptionCode_raw`/`ExceptionAddress`/`ExceptionInformation`）；模块 `m.baseaddress/endaddress/name`（name 可能 bytes utf-16-le）；线程 `t.ThreadId/t.ContextObject`（`.Rip/.Rsp/.Rbp`）；内存段 `s.inrange(addr)` + `s.read(addr,8,mf.file_handle)`（`mf.file_handle` 必传）。
+- 脚本：`C:\tmp\classify_dumps.py`（模块分类——**勿再用它判 browser/renderer**）、`C:\tmp\thread_analysis.py`（线程栈判别，正确法）。
+- 崩溃详情（dump 45616）：`ExceptionAddress=0x7ff94a8b40be = libcef.dll+0x42240be`；`ExceptionInformation=[57, 栈地址, 0x4000xxxx]`；Rip=Rsp 区全 `0xBEEFE5AD`（寄存器毒化）。
 
-1. **Vendored CefGlue**:`third-party/CefGlue/`(CefGlue / CefGlue.Common / CefGlue.Common.Shared / CefGlue.BrowserProcess.Core),针对 CEF 151 用 `upgrade-cef.ps1` 重生成(也含 CefGlue.Interop.Gen 生成器)。
-2. **浏览器托管层换成 CefGlue.Common 自带实现**:
-   - `CefWindow : Xilium.CefGlue.Common.BaseCefBrowser`(链接 `BaseCefBrowser.cs` partial + `BaseCefBrowser.Address.cs` 提供 Address 实现)。
-   - `Win32CefControl : IControl`(**隐藏宿主 + SetParent 重挂载**,对齐 Avalonia:`GetHostViewHandle` 返回隐藏窗口,`InitializeRender` 重挂载进可见窗口)。Natives.Windows 新增公开 `Win32BrowserHost`(CreateHiddenHost/Reparent)。
-   - `CefPlatform` 用 `CefRuntimeLoader.Initialize`(schemes 经 CustomScheme)。
-   - **给 vendored CefGlue.Common 的改动**:`InternalsVisibleTo("WebWindowUI.Platforms.Cef")` + `CommonBrowserAdapter` 加 `BrowserClosed` 事件/`CloseBrowser` + `BaseCefBrowser` 暴露。**DevTools 关闭也触发 BrowserClosed——CefWindow.OnBrowserClosed 必须只对主浏览器(`ReferenceEquals(browser, UnderlyingBrowser)`)销毁窗口**。
-3. **Windows 运行时**:手动下载 CEF 151 二进制,`CefRuntimeDir`(当前 `C:\temp\cef150\runtime-bin`)经 Content 传播到 app 输出。NuGet 的 `chromiumembeddedframework.runtime` / `CefGlue.Next` 止步 150。
+## 下一步
 
-## 当前代码状态(需要还原的临时改动)
+1. **capstone 反汇编 libcef.dll 定位 CHECK 消息**（capstone 5.0.7 已装）：
+   - `C:/temp/cef150/runtime-bin/libcef.dll`（275658240 B）偏移 0x42240be 处应见 `int 29h`（__fastfail，码在 ECX=0x39 前置）。
+   - 回看 ~2KB 找 V8 CHECK 序列：`mov ecx,0x39` + RIP 相对 `lea rdx,[rip+msg]` 加载断言字符串 → 按 PE 节表 RVA→文件偏移读 .rdata 的 CHECK 文本，即可命名确切失败点（比符号更直接）。
+2. **renderer 命令行逐字段对比**（当前最小配置 vs Demo）：重跑抓 `--type=renderer` 命令行找残余 switch 差异（此前对比"几乎一致"，需当前配置重确认）。
+3. 拿到 CHECK 名后修根因 → 恢复下方"当前代码状态"的原始配置 → chrome://gpu 通过 → 换项目 URL。
+4. 收尾：还原 RenderProcessHandler 二分注释、清理 `Platforms/WebWindowUI.CefSubProcess` 临时工程、更新本文档 + 记忆。
 
-- `CefWindow.cs`:`Address` 被临时设为 data: URL(或 chrome://gpu via Task.Run)。**需还原为 `WebWindowResource.GetWindowIndexUrl(options.WindowPath)`**。
-- `CefPlatform.cs`:`--use-gl=disabled` flag 可能残留(用户说无效,可移除)。
+## 当前代码状态（实验剥离态，须恢复）
 
-## 操作流程(新计算机)
+- `CefPlatform.cs` Init()：无 `NoSandbox`、无 SwiftShader flags、无 custom schemes（`CefRuntimeLoader.Initialize(settings)`）。**原始配置**：`NoSandbox=true` + flags `enable-unsafe-swiftshader`/`ignore-gpu-blocklist`/`use-gl=angle`/`use-angle=swiftshader` + customSchemes app/appdata（各 `IsDisplayIsolated=true`；flags 理由：VM 无硬件 GPU，D3D11 ANGLE 建上下文必崩）。
+- `Win32CefControl.cs`：Attach 只 `Resize+=NotifySize`；GetHostViewHandle 返回可见窗口；InitializeRender 空。**原始配置**：`Attach` 建 `Win32BrowserHost.CreateHiddenHost()` 隐藏宿主；`GetHostViewHandle` 返回隐藏宿主；`InitializeRender` 经 `WebWindowPlatform.Current.RunOnUiThread(... Win32BrowserHost.Reparent(browserHandle, native.WindowHandle, rc.Width, rc.Height) ...)`（对齐 CefGlue.Avalonia，隐藏宿主保证 DevTools 弹窗独立顶层窗口）。
+- `CefWindow.cs` line 74-76：`Address = "chrome://gpu"`（原行 `Address = WebWindowResource.GetWindowIndexUrl(options.WindowPath)` 注释着）。
+- `RenderProcessHandler.cs`：4 处二分注释（见上），须还原。
+- `Platforms/WebWindowUI.CefSubProcess/`：临时 same-exe 子进程工程，完成后退删。
 
-### 1. 仓库与依赖
+## 环境事实（新计算机/续调试要用）
 
-```bash
-# clone 仓库(含 third-party/CefGlue)
-# 下载 CEF 151 发行版(需 include/ + Release/ + Resources/ + cmake/)
-#   https://cef-builds.spotifycdn.com/cef_binary_151.3.17%2Bgf059e67%2Bchromium-151.0.7922.138_windows64_minimal.tar.bz2
-# 解压到 C:\temp\cef151\cef_binary_...
-# 合并:cp -r Resources/* Release/  (icudtl.dat/*.pak/locales 放 libcef.dll 旁)
-# 建运行时目录 C:\temp\cef150\runtime-bin(从 chromiumembeddedframework.runtime.win-x64 150.0.11 包提取:
-#   ~/.nuget/packages/chromiumembeddedframework.runtime.win-x64/150.0.11/runtimes/win-x64/native/* + locales)
-```
-
-### 2. 构建 Sample(CEF 平台)
-
-```bash
-# 若用 CEF 150(推荐,已重生成 vendored 到 150):
-#   cd third-party/CefGlue && powershell -File upgrade-cef.ps1 "150.0.11+gb887805+chromium-150.0.7871.115"
-#   (需先复制 upgrade-cef.ps1 + CefGlue.Interop.Gen 到 third-party/CefGlue)
-dotnet build Sample/WebWindowUI.Sample/WebWindowUI.Sample.csproj -c Debug
-```
-
-### 3. 运行 + 测试
-
-```bash
-cd Sample/WebWindowUI.Sample/bin/Debug/net10.0 && ./WebWindowUI.Sample.exe
-# 观察:主窗口渲染? F12 DevTools?
-# 日志:C:\Users\<user>\Desktop\logs\cef_debug.log
-# 崩溃:Windows 事件日志(Application, Id=1000)
-```
-
-### 4. 官方 C 语言示例(验证 CEF 本身,确认 DevTools 是否在这台机器崩)
-
-**源码从 GitHub 下载(不存仓库)**。
-
-```bash
-# 从 GitHub 下载官方 C API 示例源码(纯 C):
-#   https://github.com/chromiumembedded/cef/tree/master/tests/cefsimple_capi
-#   (文件:cefsimple_win.c simple_app.c simple_browser_list.c simple_display_handler.c
-#    simple_handler.c simple_handler_win.c simple_life_span_handler.c simple_load_handler.c
-#    simple_views.c simple_views.h simple_utils.h ref_counted.h resource.h)
-# 示例:
-#   BASE="https://raw.githubusercontent.com/chromiumembedded/cef/master/tests/cefsimple_capi"
-#   curl -sL --fail "$BASE/cefsimple_win.c" -o cefsimple_win.c   # ... 等
-# 放入 CEF 发行版的 tests/cefsimple_capi/
-# 用 clang-cl 编译(lld-link 链接):
-#   MSYS2_ARG_CONV_EXCL='*' clang-cl /std:c11 -DUNICODE -D_UNICODE -DCEF_API_VERSION=15101 \
-#     -I<CEF> -I<CEF>/include /c *.c
-#   lld-link /out:cefsimple_capi.exe *.obj <CEF>/Release/libcef.lib \
-#     /libpath:<UCRT> /libpath:<VC> /libpath:<SDK> \
-#     ucrt.lib vcruntime.lib msvcrt.lib kernel32.lib user32.lib ... \
-#     /subsystem:windows /entry:wWinMain /machine:x64
-#   cp -r <CEF>/Release/* <CEF>/Resources/* .   # 拷运行时
-# 运行,按 F12 开 DevTools。若官方示例 DevTools 正常 → CefGlue 集成问题;若也崩 → CEF/VM 本身。
-# 注意:Git Bash 会转译 / 开头的参数,必须设 MSYS2_ARG_CONV_EXCL='*'。
-# 注意:MSVC 不支持 C11 atomics(编译报 __STDC_NO_ATOMICS__),必须用 clang-cl。
-```
-
-## 待办(下一步)
-
-1. **修复 launcher protobufjs 崩溃**:改描述符规避(每模型独立 descriptor 或打破 ModelValue 递归)——已验证不崩。可先做个实验验证。
-2. **DevTools**:进程内窗口不稳定,可靠方案 = **远程调试**(`--remote-debugging-port=9333` + 外部 Chrome `chrome://inspect`)。
-3. 若官方 C 示例在这台机器 DevTools 正常,则继续对比 CefGlue 集成差异;若也崩,则 CEF 150/151 在这台 VM 上 DevTools 无法用,放弃进程内 DevTools。
+- CEF 日志 `C:\Users\40206\Desktop\logs\cef_debug.log`（每次启动截断；时间戳 `MMdd/HHmmss.mmm` **无冒号**，grep 别用带冒号模式）。
+- 崩溃 PID 从 WER `AppSessionGuid` 十六进制取（如 0xC384=50052），`$pid` 是 PowerShell 只读内置变量不能用来取。
+- 验证纪律：跑完必须 `cmd //c "taskkill /IM WebWindowUI.Sample.exe /F"`；绝不动 Windows SearchHost 的 msedgewebview2.exe；bash `&` 启动的进程宿主 shell 一结束就死，用 Start-Process。
+- 构建：`dotnet build Sample/WebWindowUI.Sample/WebWindowUI.Sample.csproj -c Debug`；运行 `cd Sample/WebWindowUI.Sample/bin/Debug/net10.0 && ./WebWindowUI.Sample.exe`。
+- 无 cdb/windbg；Python 3.13.7 + winget 可用（备选 winget 装 WinDbg）。

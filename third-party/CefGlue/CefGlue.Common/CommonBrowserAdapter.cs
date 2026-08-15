@@ -114,12 +114,6 @@ namespace Xilium.CefGlue.Common
         public event LoadErrorEventHandler LoadError;
 
         public event Action Initialized;
-
-        /// <summary>
-        /// 主浏览器销毁（on_before_close）——WebWindowUI 平台用于销毁宿主顶层窗口。
-        /// </summary>
-        public event Action<CefBrowser>? BrowserClosed;
-
         public event AddressChangedEventHandler AddressChanged;
         public event TitleChangedEventHandler TitleChanged;
         public event ConsoleMessageEventHandler ConsoleMessage;
@@ -159,13 +153,6 @@ namespace Xilium.CefGlue.Common
         protected bool IsBrowserCreated { get; private set; }
 
         public bool IsInitialized => _browser != null;
-
-        /// <summary>
-        /// 关闭浏览器（WebWindowUI 平台窗口关闭用；force=false 让 CEF 跑 beforeunload 等）。
-        /// </summary>
-        /// <param name="force">是否强制立即关闭。</param>
-        public void CloseBrowser(bool force)
-            => _browser?.GetHost().CloseBrowser(force);
 
         public bool IsLoading => _browser?.IsLoading ?? false;
 
@@ -549,7 +536,6 @@ namespace Xilium.CefGlue.Common
             WithErrorHandling((nameof(ICefBrowserHost.HandleBrowserDestroyed)), () =>
             {
                 _objectMethodDispatcher = null;
-                BrowserClosed?.Invoke(browser);
             });
         }
 

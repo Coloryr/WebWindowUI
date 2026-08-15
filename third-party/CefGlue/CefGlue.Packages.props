@@ -1,4 +1,20 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project>
-    <!-- Vendored CefGlue：不引用 CEF 运行时 NuGet 包，CEF 151 二进制由 WebWindowUI.Platforms.Cef 的 Content 复制提供。 -->
+
+
+    <ItemGroup>
+        <!-- Windows -->
+        <PackageReference PrivateAssets="runtime;native" ExcludeAssets="runtime;native" Include="chromiumembeddedframework.runtime.win-x64"/>
+        <PackageReference PrivateAssets="runtime;native" ExcludeAssets="runtime;native" Include="chromiumembeddedframework.runtime.win-arm64" />
+        <PackageReference PrivateAssets="runtime;native" ExcludeAssets="runtime;native" Include="chromiumembeddedframework.runtime" />
+
+        <!-- Linux -->
+        <PackageReference PrivateAssets="runtime;native" Include="cef.runtime.linux-x64" />
+        <PackageReference PrivateAssets="runtime;native" Include="cef.runtime.linux-arm64" />
+
+        <!-- macOS -->
+        <PackageReference PrivateAssets="runtime;native" Include="cef.runtime.osx-x64" />
+        <PackageReference PrivateAssets="runtime;native" Include="cef.runtime.osx-arm64" />
+    </ItemGroup>
+
 </Project>

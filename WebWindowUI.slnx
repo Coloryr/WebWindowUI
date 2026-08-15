@@ -10,7 +10,6 @@
     <Project Path="Natives/WebWindowUI.Natives.Windows/WebWindowUI.Natives.Windows.csproj" />
   </Folder>
   <Folder Name="/Platforms/">
-    <Project Path="Platforms/WebWindowUI.CefSubProcess/WebWindowUI.CefSubProcess.csproj" />
     <Project Path="Platforms/WebWindowUI.Platforms.Cef/WebWindowUI.Platforms.Cef.csproj" />
     <Project Path="Platforms/WebWindowUI.Platforms.Linux/WebWindowUI.Platforms.Linux.csproj" />
     <Project Path="Platforms/WebWindowUI.Platforms.MacOS/WebWindowUI.Platforms.MacOS.csproj" />
@@ -21,7 +20,6 @@
     <Project Path="Generator/WebWindowUI.Generator/WebWindowUI.Generator.csproj" />
   </Folder>
   <Folder Name="/Sample/">
-    <Project Path="Sample/WebWindowUI.Sample.Backend/WebWindowUI.Sample.Backend.csproj" />
     <Project Path="Sample/WebWindowUI.Sample.Frontend/WebWindowUI.Sample.Frontend.csproj" />
     <Project Path="Sample/WebWindowUI.Sample/WebWindowUI.Sample.csproj" />
   </Folder>
@@ -42,7 +40,9 @@
     <File Path="WebWindowUI.Platform.props" />
     <File Path="WebWindowUI.targets" />
   </Folder>
-  <Folder Name="/third-party/" />
+  <Folder Name="/third-party/">
+    <Project Path="Sample/WebWindowUI.Sample.Backend/WebWindowUI.Sample.Backend.csproj" />
+  </Folder>
   <Folder Name="/third-party/CefGlue/">
     <Project Path="third-party/CefGlue/CefGlue.BrowserProcess.Core/CefGlue.BrowserProcess.Core.csproj" />
     <Project Path="third-party/CefGlue/CefGlue.Common.Shared/CefGlue.Common.Shared.csproj" />
@@ -57,4 +57,5 @@
     <File Path="third-party/CefGlue/Directory.Build.targets" />
     <File Path="third-party/CefGlue/Directory.Packages.props" />
   </Folder>
+  <Project Path="CefDemo/CefDemo.csproj" />
 </Solution>

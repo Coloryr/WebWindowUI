@@ -104,18 +104,7 @@ namespace Xilium.CefGlue.Common
         /// Event fired when the browser is initialized.
         /// </summary>
         public event Action BrowserInitialized { add => _adapter.Initialized += value; remove => _adapter.Initialized -= value; }
-
-        /// <summary>
-        /// 主浏览器销毁（on_before_close）——WebWindowUI 平台用于销毁宿主顶层窗口。
-        /// </summary>
-        public event Action<CefBrowser>? BrowserClosed { add => _adapter.BrowserClosed += value; remove => _adapter.BrowserClosed -= value; }
-
-        /// <summary>
-        /// 关闭浏览器（force=false 让 CEF 跑 beforeunload 等）。WebWindowUI 平台窗口关闭用。
-        /// </summary>
-        /// <param name="force">是否强制立即关闭。</param>
-        public void CloseBrowser(bool force = false) => _adapter.CloseBrowser(force);
-
+        
         /// <summary>
         /// Event fired when the browser starts loading a frame.
         /// </summary>

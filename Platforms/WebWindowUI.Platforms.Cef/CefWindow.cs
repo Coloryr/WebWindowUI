@@ -1,34 +1,32 @@
+using System.Runtime.InteropServices;
+using CefSharp;
+using CefSharp.WinForms;
 using WebWindowUI.Core;
 using WebWindowUI.Core.Protocol;
 using WebWindowUI.Natives.Windows;
-using Xilium.CefGlue;
-using Xilium.CefGlue.Common;
-using Xilium.CefGlue.Common.Platform;
 
 namespace WebWindowUI.Platforms.Cef;
 
 /// <summary>
-/// CEF 平台窗口：承载 Chromium 的裸 Win32 顶层窗口（CEF 子浏览器窗口为子控件），可创建多个实例。
-/// 镜像 <c>WindowsWindow</c>，渲染内核换 CEF。**浏览器托管层直接用 CefGlue.Common 的
-/// <see cref="BaseCefBrowser"/>**（不再自己镜像 CommonBrowserAdapter/CommonCefClient），宿主控件
-/// 由 <see cref="Win32CefControl"/> 适配裸 Win32 窗口。
+/// CEF 平台窗口：ChromiumWebBrowser（CefSharp）承载于裸 Win32 顶层窗口，可创建多个实例。
+/// 浏览器控件 Handle 经 SetParent 重挂载进顶层窗口客户区并铺满。
 /// </summary>
-public sealed class CefWindow : BaseCefBrowser, IWindowBackend
+public sealed class CefWindow : IWindowBackend
 {
     /// <summary>
-    /// 承载浏览器子窗口的 Win32 顶层窗口。
+    /// 承载浏览器控件的 Win32 顶层窗口。
     /// </summary>
     private readonly INativeWindow _nativeWindow;
 
     /// <summary>
-    /// 窗口选项（scheme / resolver）。
+    /// 窗口选项。
     /// </summary>
     private readonly WebWindowOptions _options;
 
     /// <summary>
-    /// 宿主控件（浏览器挂载点）；基类 ctor 经 CreateControl 创建，Show 时触发尺寸创建浏览器。
+    /// CefSharp 浏览器控件。
     /// </summary>
-    private Win32CefControl? _control;
+    private readonly ChromiumWebBrowser _browser;
 
     /// <summary>
     /// 是否已关闭（Close 调用后置位）。
@@ -46,79 +44,94 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
     public event Action? NavigationCompleted;
 
     /// <summary>
-    /// 页面 JS 经 fetch POST（appdata://__wwui）回传的消息（protobuf 字节，scheme 处理器还原后投递）。
+    /// 页面 JS 经 fetch POST（app://__wwui）回传的消息（protobuf 字节，scheme 处理器还原后投递）。
     /// </summary>
     public event Action<byte[]>? MessageReceived;
 
     /// <summary>
-    /// 构造窗口：建 Win32 顶层窗口并交给基类（CefGlue.Common.BaseCefBrowser），订阅浏览器生命周期事件。
+    /// 构造窗口：建 Win32 顶层窗口 + CefSharp 浏览器控件，控件重挂载进客户区。
     /// </summary>
     /// <param name="options">窗口选项。</param>
     public CefWindow(WebWindowOptions options)
-        : this(options, new Win32NativeWindow(options))
-    {
-    }
-
-    /// <summary>
-    /// 私有构造：把 Win32 顶层窗口适配成宿主控件交给基类，保存原生窗口引用。
-    /// </summary>
-    /// <param name="options">窗口选项。</param>
-    /// <param name="nativeWindow">已创建的 Win32 顶层窗口。</param>
-    private CefWindow(WebWindowOptions options, Win32NativeWindow nativeWindow)
-        : base()
     {
         _options = options;
-        _nativeWindow = nativeWindow;
-        _control!.Attach(nativeWindow); // 基类 ctor 已经 CreateControl 建空壳，这里绑定原生窗口
+        _nativeWindow = new Win32NativeWindow(options);
+        _nativeWindow.Resize += OnNativeResize;
 
-        //Address = WebWindowResource.GetWindowIndexUrl(options.WindowPath);
+        // CefSharp 浏览器控件：初始 URL 为 app:// 页面；控件句柄创建后重挂载进顶层窗口。
+        _browser = new ChromiumWebBrowser(WebWindowResource.GetWindowIndexUrl(options.WindowPath))
+        {
+            Dock = DockStyle.Fill,
+        };
+        _browser.LoadingStateChanged += OnLoadingStateChanged;
+        _browser.IsBrowserInitializedChanged += OnBrowserInitializedChanged;
 
-        Address = "chrome://gpu";
-
-        BrowserInitialized += OnBrowserInitialized;
-        BrowserClosed += OnBrowserClosed;
-        LoadEnd += (_, _) => NavigationCompleted?.Invoke();
+        // 强制创建控件句柄（WinForms 控件句柄惰性创建），随后 SetParent 进原生窗口。
+        var handle = _browser.Handle;
+        _ = handle;
     }
 
     /// <summary>
-    /// 创建窗口模式宿主控件（CefGlue.Common 要求；基类 ctor 调用，派生字段未初始化，
-    /// 故此处建空壳、派生 ctor 里 Attach 原生窗口）。
+    /// 浏览器初始化完成（CEF UI 线程回调）：登记浏览器 id → 窗口映射并重挂载控件。
     /// </summary>
-    /// <returns>宿主控件。</returns>
-    internal override IControl CreateControl()
+    /// <param name="sender">控件。</param>
+    /// <param name="args">参数。</param>
+    private void OnBrowserInitializedChanged(object? sender, EventArgs args)
     {
-        _control = new Win32CefControl();
-        return _control;
+        if (_browser.IsBrowserInitialized && _browser.GetBrowser() is { } browser)
+        {
+            CefPlatform.RegisterBrowser(browser.Identifier, this);
+        }
+        CefPlatform.RunOnUiThread(ReparentIntoNativeWindow);
     }
 
     /// <summary>
-    /// OSR 宿主（本平台窗口模式，不支持）。
+    /// 重挂载浏览器控件句柄进顶层窗口客户区（UI 线程）。
     /// </summary>
-    /// <returns>抛 NotSupportedException。</returns>
-    internal override IOffScreenControlHost CreateOffScreenControlHost() => throw new NotSupportedException("OSR 不支持");
+    private void ReparentIntoNativeWindow()
+    {
+        if (_closed)
+            return;
+        var hwnd = _browser.Handle;
+        if (hwnd == IntPtr.Zero)
+            return;
+        if (SetParent(hwnd, _nativeWindow.WindowHandle) == IntPtr.Zero)
+            return;
+        var rc = _nativeWindow.GetSize();
+        MoveWindow(hwnd, 0, 0, rc.Width, rc.Height, true);
+    }
 
     /// <summary>
-    /// OSR 弹窗宿主（本平台窗口模式，不支持）。
+    /// 窗口尺寸变化：铺满浏览器控件。
     /// </summary>
-    /// <returns>抛 NotSupportedException。</returns>
-    internal override IOffScreenPopupHost CreatePopupHost() => throw new NotSupportedException("OSR 不支持");
+    private void OnNativeResize()
+    {
+        if (_browser.IsDisposed)
+            return;
+        var rc = _nativeWindow.GetSize();
+        MoveWindow(_browser.Handle, 0, 0, rc.Width, rc.Height, true);
+    }
 
     /// <summary>
-    /// OSR 键盘处理器（本平台窗口模式，不支持）。
+    /// 加载状态变化：主帧加载完成触发导航完成事件。
     /// </summary>
-    /// <param name="control">控件对象。</param>
-    /// <returns>抛 NotSupportedException。</returns>
-    public override IOffScreenKeyboardHandler CreateOffScreenKeyboardHandler(object control) => throw new NotSupportedException("OSR 不支持");
+    /// <param name="sender">控件。</param>
+    /// <param name="args">参数。</param>
+    private void OnLoadingStateChanged(object? sender, LoadingStateChangedEventArgs args)
+    {
+        if (!args.IsLoading && !_closed)
+        {
+            NavigationCompleted?.Invoke();
+        }
+    }
 
     /// <summary>
-    /// 显示窗口并创建 CEF 浏览器（CEF 子窗口铺满客户区）。无头模式只建浏览器、窗口永不显示。
+    /// 显示窗口（浏览器控件已挂载，随顶层窗口一起可见）。
     /// </summary>
     public void Show()
     {
         _nativeWindow.Show();
-        var rc = _nativeWindow.GetSize();
-        RenderTrace.Log($"Show hwnd=0x{_nativeWindow.WindowHandle:x} client={rc.Width}x{rc.Height}");
-        _control?.NotifySize(); // 触发尺寸 → CefGlue.Common 首次尺寸创建浏览器
+        CefPlatform.RunOnUiThread(ReparentIntoNativeWindow);
     }
 
     /// <summary>
@@ -130,16 +143,26 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
     }
 
     /// <summary>
-    /// 关闭窗口。关闭最后一个窗口后程序自动退出。
-    /// 走 CEF 正常关闭（CloseBrowser → on_before_close → BrowserClosed → 销毁顶层窗口）。
+    /// 关闭窗口：先销毁浏览器再销毁顶层窗口。关闭最后一个窗口后程序自动退出。
     /// </summary>
     public void Close()
     {
         if (_closed)
             return;
         _closed = true;
-        CloseBrowser(); // 基类（CefGlue.Common）新增：marshal 到 CEF UI 线程
-        RunOnUiThread(_nativeWindow.Close);
+        try
+        {
+            _browser.Dispose(); // CefSharp：销毁控件即关闭浏览器
+        }
+        catch
+        {
+            // 浏览器已销毁时忽略
+        }
+        RunOnUiThread(() =>
+        {
+            _nativeWindow.Close();
+            Closed?.Invoke();
+        });
     }
 
     /// <summary>
@@ -160,7 +183,7 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
     }
 
     /// <summary>
-    /// 设置窗口图标（标题栏 + 任务栏）。替换旧图标时释放旧的句柄。
+    /// 设置窗口图标（标题栏 + 任务栏）。
     /// </summary>
     /// <param name="icon">图标。</param>
     public void SetIcon(WindowIcon icon)
@@ -169,7 +192,7 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
     }
 
     /// <summary>
-    /// 把动作 marshal 到原生 UI 线程（主线程）同步执行（Win32 窗口 API 要求主线程）。
+    /// 把动作 marshal 到原生 UI 线程（主线程）同步执行。
     /// </summary>
     /// <param name="action">要执行的动作。</param>
     private void RunOnUiThread(Action action)
@@ -177,8 +200,6 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
 
     /// <summary>
     /// 向页面 JS 发送一条消息：protobuf 字节转 NUL 转义串后嵌进 <c>window.wwuiReceive("...")</c> 注入。
-    /// 属性变更可发生在任意线程（如 System.Threading.Timer 回调），执行 marshal 交给适配器（CEF UI 线程）。
-    /// 窗口已关闭时静默忽略。
     /// </summary>
     /// <param name="message">protobuf 字节。</param>
     public void PostMessage(byte[] message)
@@ -188,7 +209,7 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
             if (_closed)
                 return;
             var js = "window.wwuiReceive(" + JsStringLiteral.Quote(WebView2StringCodec.Encode(message)) + ")";
-            ExecuteJavaScript(js, string.Empty, 0); // 基类 marshal 到 CEF UI 线程
+            _browser.ExecuteScriptAsync(js);
         }
         catch
         {
@@ -197,53 +218,34 @@ public sealed class CefWindow : BaseCefBrowser, IWindowBackend
     }
 
     /// <summary>
-    /// 在页面里执行一段 JavaScript 并返回结果（与 WebView2/Linux 对齐；best-effort）。
-    /// CEF 的 ExecuteJavaScript 无结果回调，返回值固定为空串；执行 marshal 交给适配器（CEF UI 线程）。
+    /// 在页面里执行一段 JavaScript 并返回结果（best-effort；失败回退空串）。
     /// </summary>
     /// <param name="script">要执行的 JS 脚本。</param>
-    /// <returns>执行结果（JSON 编码字符串；CEF 下固定空串）。</returns>
+    /// <returns>执行结果（JSON 编码字符串）。</returns>
     public Task<string> ExecuteScriptAsync(string script)
     {
-        // 与 Windows 的 InvalidOperationException("WebView2 尚未初始化完成。") 对齐：窗口已关闭时明确报错
         if (_closed)
             throw new InvalidOperationException("窗口已关闭。");
-        ExecuteJavaScript(script, string.Empty, 0); // 基类 marshal 到 CEF UI 线程
-        return Task.FromResult("");
-    }
-
-    /// <summary>
-    /// scheme 处理器在 IO 线程收到 JS 回传、marshal 到 CEF UI 线程后调用本方法。回调在 CEF UI 线程。
-    /// </summary>
-    /// <param name="payload">protobuf 字节。</param>
-    internal void OnMessageFromWeb(byte[] payload) => MessageReceived?.Invoke(payload);
-
-    /// <summary>
-    /// 基类 BrowserInitialized（on_after_created，CEF UI 线程回调）：注册 scheme 映射（DevTools 自动打开见下）。
-    /// </summary>
-    private void OnBrowserInitialized()
-    {
-        if (UnderlyingBrowser is { } browser)
+        try
         {
-            CefPlatform.RegisterBrowser(browser, this); // scheme 处理器按浏览器 id 分派回本窗口
-            RenderTrace.Log($"BrowserInitialized browser=0x{browser.GetHost().GetWindowHandle():x} id={browser.Identifier}");
+            var response = _browser.EvaluateScriptAsync(script).Result;
+            return Task.FromResult(response.Success ? response.Result?.ToString() ?? string.Empty : string.Empty);
+        }
+        catch
+        {
+            return Task.FromResult(string.Empty);
         }
     }
 
     /// <summary>
-    /// 基类 BrowserClosed（on_before_close，CEF UI 线程回调）：仅主浏览器关闭时摘除映射并销毁宿主顶层窗口
-    /// （→ WM_DESTROY → 末窗 PostQuitMessage）。DevTools 等附加浏览器关闭不影响主窗口。
+    /// scheme 处理器收到 JS 回传、解码后调用本方法。回调在 CEF IO/UI 线程。
     /// </summary>
-    /// <param name="browser">正在关闭的浏览器。</param>
-    private void OnBrowserClosed(CefBrowser browser)
-    {
-        if (!ReferenceEquals(browser, UnderlyingBrowser))
-            return; // DevTools 等附加浏览器关闭，不影响主窗口
-        CefPlatform.UnregisterBrowser(browser);
-        RunOnUiThread(() =>
-        {
-            if (!_closed)
-                _nativeWindow.Close(); // CEF 子窗口已销毁，顶层窗口随浏览器一起消失
-            Closed?.Invoke();
-        });
-    }
+    /// <param name="payload">protobuf 字节。</param>
+    internal void OnMessageFromWeb(byte[] payload) => MessageReceived?.Invoke(payload);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
+
+    [DllImport("user32.dll")]
+    private static extern bool MoveWindow(IntPtr hWnd, int x, int y, int nWidth, int nHeight, bool bRepaint);
 }
