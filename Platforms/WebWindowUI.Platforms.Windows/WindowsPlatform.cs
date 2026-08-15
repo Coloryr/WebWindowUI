@@ -24,6 +24,14 @@ public sealed class WindowsPlatform : IWebWindowPlatform
     }
 
     /// <summary>
+    /// 平台初始化（IWebWindowPlatform 契约）：构造时已完成（消息循环 + WebView2 环境），空实现。
+    /// </summary>
+    /// <param name="args">命令行参数（本平台不使用）。</param>
+    public void Init(string[] args)
+    {
+    }
+
+    /// <summary>
     /// 把动作 marshal 到 UI 线程同步执行：UI 线程直接运行；非 UI 线程经
     /// <see cref="MessageLoopSynchronizationContext.Send"/>（回 UI 线程并阻塞等待）。
     /// Win32 窗口 API（DestroyWindow/SetForegroundWindow/SetWindowTextW/SendMessage）都要求 UI 线程。

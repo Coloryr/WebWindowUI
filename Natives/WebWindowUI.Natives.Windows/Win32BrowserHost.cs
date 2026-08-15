@@ -71,4 +71,20 @@ public static class Win32BrowserHost
         Win32.MoveWindow(child, 0, 0, width, height, true);
         return oldParent;
     }
+
+    /// <summary>
+    /// 调整子窗口尺寸并铺满其客户区（不改变父窗口）。
+    /// </summary>
+    /// <param name="child">子窗口句柄。</param>
+    /// <param name="width">铺满宽度。</param>
+    /// <param name="height">铺满高度。</param>
+    public static void Resize(IntPtr child, int width, int height)
+        => Win32.MoveWindow(child, 0, 0, width, height, true);
+
+    /// <summary>
+    /// 销毁隐藏宿主（或任意由本辅助类创建的窗口）。
+    /// </summary>
+    /// <param name="window">窗口句柄。</param>
+    public static void Destroy(IntPtr window)
+        => Win32.DestroyWindow(window);
 }

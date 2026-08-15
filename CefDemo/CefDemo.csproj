@@ -1,27 +1,16 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType Condition="'$(Configuration)' == 'Debug'">Exe</OutputType>
-    <OutputType Condition="'$(Configuration)' == 'Release'">WinExe</OutputType>
+    <OutputType>WinExe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+	  <ApplicationManifest>app.manifest</ApplicationManifest>
     <IsPackable>false</IsPackable>
-    <UseCEF>true</UseCEF>
-    <!-- CEF 151 运行时目录（手动下载，见 Platforms/WebWindowUI.Platforms.Cef/README.md） -->
-    <CefRuntimeDir Condition="'$(WWUIPlatform)' == 'Windows'">C:\temp\cef151\runtime-bin</CefRuntimeDir>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- vendored CefGlue（自研绑定，CefGlue.Interop.Gen 按 CEF 151 头文件生成 Interop，托管层自写） -->
-    <ProjectReference Include="..\third-party\CefGlue\CefGlue\CefGlue.csproj" />
+    <ProjectReference Include="..\..\..\temp_code\CefGlue\CefGlue\CefGlue.csproj" />
+    <ProjectReference Include="..\..\..\temp_code\CefGlue\CefGlue.BrowserProcess.Core\CefGlue.BrowserProcess.Core.csproj" />
   </ItemGroup>
-
-  <!-- 部署 CEF 151 运行时：libcef.dll + 资源 + locales 复制到输出根 -->
-  <Target Name="DeployCefRuntime" AfterTargets="Build" Condition="'$(UseCEF)' == 'true' And '$(WWUIPlatform)' == 'Windows'">
-    <ItemGroup>
-      <CefRuntimeFiles Include="$(CefRuntimeDir)\**\*.*" />
-    </ItemGroup>
-    <Copy SourceFiles="@(CefRuntimeFiles)" DestinationFiles="@(CefRuntimeFiles->'$(TargetDir)%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
-  </Target>
 
 </Project>

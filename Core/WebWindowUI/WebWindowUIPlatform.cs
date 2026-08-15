@@ -16,9 +16,9 @@ public static class WebWindowUIPlatform
         WebWindowPlatform.Register(platform);
     }
 
-    public static void Init()
+    public static void Init(string[] args)
     {
-        WebWindowPlatform.Current.Init();
+        WebWindowPlatform.Current.Init(args);
     }
 
     /// <summary>

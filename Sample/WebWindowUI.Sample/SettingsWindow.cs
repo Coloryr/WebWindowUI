@@ -1,4 +1,4 @@
-﻿using WebWindowUI.Core;
+using WebWindowUI.Core;
 
 namespace WebWindowUI.Sample;
 
@@ -19,7 +19,6 @@ internal sealed class SettingsWindow : WebWindow
         SettingsModel model = new();
         Model = model;
 
-        // 演示 .NET → 前端跨线程推送：定时器在线程池线程回调，平台层 marshal 回 UI 线程再发消息
         _timer = new Timer(_ =>
         {
             model.LastBackup = DateTime.Now;

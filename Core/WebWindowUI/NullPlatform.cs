@@ -25,7 +25,7 @@ public class NullPlatform : IWebWindowPlatform
         throw new NotImplementedException();
     }
 
-    public void Init()
+    public void Init(string[] args)
     {
         throw new NotImplementedException();
     }

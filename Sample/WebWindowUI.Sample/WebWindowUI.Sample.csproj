@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -7,6 +7,7 @@
 	<UseCEF>true</UseCEF>
     <OutputType Condition="'$(Configuration)' == 'Debug'">Exe</OutputType>
     <OutputType Condition="'$(Configuration)' == 'Release'">WinExe</OutputType>
+    <ApplicationManifest Condition="'$(WWUIPlatform)' == 'Windows'">app.manifest</ApplicationManifest>
     <ApplicationId Condition="'$(WWUIPlatform)' == 'MacOS'">com.webwindowui.sample</ApplicationId>
   </PropertyGroup>
 
@@ -15,12 +16,4 @@
     <ProjectReference Include="..\WebWindowUI.Sample.Frontend\WebWindowUI.Sample.Frontend.csproj" />
     <ProjectReference Include="..\..\Core\WebWindowUI\WebWindowUI.csproj" />
   </ItemGroup>
-
-  <!-- chromiumembeddedframework.runtime.win-x64 包自带部署 target：合并 runtimes\win-x64\native\（核心 dll）
-       与 CEF\win-x64\（含 220 个 locales）到输出根。NuGet 自带部署的 runtimes\...\native\locales 是空的，
-       不拷 CEF\win-x64\ 则 CEF 初始化 locale_file_path.empty() 崩溃。 -->
-  <Target Name="DeployCefRuntime" AfterTargets="Build" Condition="'$(UseCEF)' == 'true' And '$(WWUIPlatform)' == 'Windows'">
-    <CallTarget Targets="CefRedist64CopyResources" />
-  </Target>
-
 </Project>

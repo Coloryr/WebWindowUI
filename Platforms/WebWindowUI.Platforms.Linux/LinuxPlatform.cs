@@ -32,6 +32,14 @@ public sealed class LinuxPlatform : IWebWindowPlatform
     }
 
     /// <summary>
+    /// 平台初始化（IWebWindowPlatform 契约）：构造时已完成（GTK/WebKit + scheme），空实现。
+    /// </summary>
+    /// <param name="args">命令行参数（本平台不使用）。</param>
+    public void Init(string[] args)
+    {
+    }
+
+    /// <summary>
     /// 创建窗口后端。
     /// </summary>
     /// <param name="options">窗口选项。</param>

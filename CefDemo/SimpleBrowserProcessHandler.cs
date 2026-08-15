@@ -26,10 +26,10 @@ internal sealed class SimpleBrowserProcessHandler : CefBrowserProcessHandler
         // 创建客户端处理器（设全局单例，GetDefaultClient 取回）。
         _client = SimpleClient.Create(useAlloyStyle);
 
-        // 取 URL（--url）或默认。
+        // 取 URL（--url）或默认 chrome://gpu（GPU 诊断页，验证图形加速状态）。
         var url = commandLine.GetSwitchValue("url");
         if (string.IsNullOrEmpty(url))
-            url = "https://www.google.com";
+            url = "chrome://gpu";
 
         // 运行时风格：默认 Default；--use-alloy-style 为 Alloy。
         var runtimeStyle = useAlloyStyle ? CefRuntimeStyle.Alloy : CefRuntimeStyle.Default;

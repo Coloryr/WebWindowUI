@@ -1,21 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <PackageId>WebWindowUI.Platforms.Cef</PackageId>
-    <Description>WebWindowUI CEF 平台实现（CefSharp 绑定）</Description>
-    <PackageTags>webwindowui;cef;chromium;cefsharp</PackageTags>
+    <Description>WebWindowUI CEF 平台实现（CefGlue.Next NuGet 包，CEF 150）</Description>
+    <PackageTags>webwindowui;cef;chromium;cefglue</PackageTags>
     <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
     <PlatformTarget>x64</PlatformTarget>
-    <NoWarn>NU1701</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- CefSharp：浏览器托管层（ChromiumWebBrowser + BrowserSubprocess）。150.0.110 为 net462-only，经兼容引用运行于 net10.0-windows -->
-    <PackageReference Include="CefSharp.WinForms" Version="150.0.110" />
-    <PackageReference Include="CefSharp.Common" Version="150.0.110" />
+	<PackageReference Include="CefGlue.Next.BrowserProcess.Core" />
+    <PackageReference Include="CefGlue.Next.Core" />
+    <PackageReference Include="CefGlue.Next.Common" />
+    <PackageReference Include="CefGlue.Next.Common.Shared" />
   </ItemGroup>
 
   <ItemGroup>

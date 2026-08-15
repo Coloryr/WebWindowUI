@@ -8,7 +8,7 @@ public interface IWebWindowPlatform
     /// <summary>
     /// 初始化
     /// </summary>
-    void Init();
+    void Init(string[] args);
     /// <summary>
     /// 创建一个尚未显示的窗口后端。
     /// </summary>

@@ -20,6 +20,7 @@
     <Project Path="Generator/WebWindowUI.Generator/WebWindowUI.Generator.csproj" />
   </Folder>
   <Folder Name="/Sample/">
+    <Project Path="Sample/WebWindowUI.Sample.Backend/WebWindowUI.Sample.Backend.csproj" />
     <Project Path="Sample/WebWindowUI.Sample.Frontend/WebWindowUI.Sample.Frontend.csproj" />
     <Project Path="Sample/WebWindowUI.Sample/WebWindowUI.Sample.csproj" />
   </Folder>
@@ -40,22 +41,4 @@
     <File Path="WebWindowUI.Platform.props" />
     <File Path="WebWindowUI.targets" />
   </Folder>
-  <Folder Name="/third-party/">
-    <Project Path="Sample/WebWindowUI.Sample.Backend/WebWindowUI.Sample.Backend.csproj" />
-  </Folder>
-  <Folder Name="/third-party/CefGlue/">
-    <Project Path="third-party/CefGlue/CefGlue.BrowserProcess.Core/CefGlue.BrowserProcess.Core.csproj" />
-    <Project Path="third-party/CefGlue/CefGlue.Common.Shared/CefGlue.Common.Shared.csproj" />
-    <Project Path="third-party/CefGlue/CefGlue.Common/CefGlue.Common.csproj" />
-    <Project Path="third-party/CefGlue/CefGlue/CefGlue.csproj" />
-  </Folder>
-  <Folder Name="/third-party/CefGlue/Files/">
-    <File Path="third-party/CefGlue/cef-version.json" />
-    <File Path="third-party/CefGlue/CefGlue.Packages.props" />
-    <File Path="third-party/CefGlue/CefVersion.props" />
-    <File Path="third-party/CefGlue/Directory.Build.props" />
-    <File Path="third-party/CefGlue/Directory.Build.targets" />
-    <File Path="third-party/CefGlue/Directory.Packages.props" />
-  </Folder>
-  <Project Path="CefDemo/CefDemo.csproj" />
 </Solution>

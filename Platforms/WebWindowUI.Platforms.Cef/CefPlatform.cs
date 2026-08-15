@@ -1,16 +1,17 @@
 using System.Collections.Concurrent;
-using System.Text;
-using CefSharp;
-using CefSharp.WinForms;
 using WebWindowUI.Core;
 using WebWindowUI.Natives.Windows;
+using Xilium.CefGlue;
+using Xilium.CefGlue.BrowserProcess;
+using Xilium.CefGlue.Common;
+using Xilium.CefGlue.Common.Shared;
 
 namespace WebWindowUI.Platforms.Cef;
 
 /// <summary>
-/// CEF 平台实现（Windows）：浏览器托管层用 CefSharp（ChromiumWebBrowser + CefSharp.BrowserSubprocess），
-/// 承载于裸 Win32 顶层窗口（ChromiumWebBrowser 控件 SetParent 重挂载进客户区）。初始化走 Cef.Initialize，
-/// 自定义 scheme（app/appdata）经 CefCustomSchemes + 处理器工厂注册。
+/// CEF 平台实现（Windows）：浏览器托管层用上游 CefGlue.Common（BaseCefBrowser + Win32CefControl
+/// 隐藏宿主重挂载），初始化走 CefRuntimeLoader（子进程分发 CefSubProcess 由应用 Main 负责），
+/// 自定义 scheme（app/appdata）经 CustomScheme 注册。
 /// </summary>
 public sealed class CefPlatform : IWebWindowPlatform
 {
@@ -30,15 +31,18 @@ public sealed class CefPlatform : IWebWindowPlatform
     private static bool _initialized;
 
     /// <summary>
-    /// 是否已调过 Cef.Shutdown（防 ProcessExit 与 RunMessageLoop 双关）。
+    /// 是否已调过 CefRuntime.Shutdown（防 ProcessExit 与 RunMessageLoop 双关）。
     /// </summary>
     private static bool _shutdownDone;
 
     /// <summary>
-    /// 初始化 CEF 运行时（Cef.Initialize + Win32 消息循环）。须在 UI 线程调用一次。
+    /// 初始化 CEF 运行时（CefRuntimeLoader.Initialize 延迟到首个 BaseCefBrowser 构造时 Load）。
+    /// 须在 UI 线程调用一次。
     /// </summary>
-    public void Init()
+    public void Init(string[] args)
     {
+        CefSubProcess.Run(args, true);
+
         if (_initialized)
             return;
         _initialized = true;
@@ -49,38 +53,20 @@ public sealed class CefPlatform : IWebWindowPlatform
         var settings = new CefSettings
         {
             RootCachePath = cachePath,
-            LogSeverity = LogSeverity.Verbose,
+            NoSandbox = true,
+            LogSeverity = CefLogSeverity.Verbose,
             LogFile = Path.Combine(cachePath, "cef.log"),
-            BrowserSubprocessPath = Path.Combine(AppContext.BaseDirectory, "CefSharp.BrowserSubprocess.exe"),
         };
-        settings.CefCommandLineArgs["no-sandbox"] = "1";
 
         // 自定义 scheme：app（页面资源）+ appdata（数据路由），同一工厂处理 GET 资源与 POST 消息。
         var factory = new AppSchemeHandlerFactory();
-        settings.CefCustomSchemes.Add(new CefCustomScheme
-        {
-            SchemeName = WebWindowResource.Scheme,
-            SchemeHandlerFactory = factory,
-            IsSecure = true,
-            IsCorsEnabled = true,
-            IsFetchEnabled = true,
-            IsLocal = true,
-            IsDisplayIsolated = true,
-        });
-        settings.CefCustomSchemes.Add(new CefCustomScheme
-        {
-            SchemeName = WebWindowResource.SchemeData,
-            SchemeHandlerFactory = factory,
-            IsSecure = true,
-            IsCorsEnabled = true,
-            IsFetchEnabled = true,
-            IsLocal = true,
-            IsDisplayIsolated = true,
-        });
+        CustomScheme[] schemes =
+        [
+            new CustomScheme { SchemeName = WebWindowResource.Scheme, SchemeHandlerFactory = factory },
+            new CustomScheme { SchemeName = WebWindowResource.SchemeData, SchemeHandlerFactory = factory },
+        ];
 
-        Cef.Initialize(settings, performDependencyCheck: true, browserProcessHandler: null);
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => Shutdown();
-
+        CefRuntimeLoader.Initialize(settings, customSchemes: schemes);
         _message.InitMessageLoop();
     }
 
@@ -92,8 +78,10 @@ public sealed class CefPlatform : IWebWindowPlatform
         if (_shutdownDone)
             return;
         _shutdownDone = true;
-        if (Cef.IsInitialized)
-            Cef.Shutdown();
+        if (CefRuntime.IsInitialized)
+        {
+            CefRuntime.Shutdown();
+        }
     }
 
     /// <summary>
@@ -121,36 +109,49 @@ public sealed class CefPlatform : IWebWindowPlatform
         => _browsers.TryGetValue(browserId, out window!);
 
     /// <summary>
-    /// 把动作 marshal 到 CEF UI 线程执行。
+    /// 把动作 marshal 到 CEF UI 线程同步执行。
     /// </summary>
     /// <param name="action">要执行的动作。</param>
     internal static void RunOnCefUiThread(Action action)
     {
-        if (Cef.CurrentlyOnThread(CefThreadIds.TID_UI))
+        if (CefRuntime.CurrentlyOn(CefThreadId.UI))
         {
             action();
             return;
         }
         using var done = new ManualResetEventSlim();
         Exception? error = null;
-        Cef.UIThreadTaskFactory.StartNew(() =>
+        CefRuntime.PostTask(CefThreadId.UI, new ActionCefTask(() =>
         {
             try { action(); }
             catch (Exception ex) { error = ex; }
             finally { done.Set(); }
-        });
+        }));
         done.Wait();
         if (error is not null)
             throw error;
     }
 
     /// <summary>
-    /// 创建 CEF 窗口。
+    /// 把动作投递到 CEF UI 线程异步执行（fire-and-forget）。
+    /// </summary>
+    /// <param name="action">要执行的动作。</param>
+    internal static void PostToCefUiThread(Action action)
+        => CefRuntime.PostTask(CefThreadId.UI, new ActionCefTask(action));
+
+    /// <summary>
+    /// 创建 CEF 窗口。Win32 窗口必须由 UI（主）线程创建：命令路径（scheme POST）在
+    /// CEF IO 线程，直接建窗会把 HWND 绑到 IO 线程消息队列 → 主线程 SetWindowTextW 等
+    /// SendMessage 跨线程等待 → 双窗口互锁死锁。非 UI 线程 marshal 到主线程同步创建。
     /// </summary>
     /// <param name="options">窗口选项。</param>
     /// <returns>窗口后端。</returns>
     public IWindowBackend CreateWindow(WebWindowOptions options)
-        => new CefWindow(options);
+    {
+        CefWindow? window = null;
+        _message.RunOnUiThread(() => window = new CefWindow(options));
+        return window!;
+    }
 
     /// <summary>
     /// 运行主消息循环（末窗关闭后返回），随后同线程关闭 CEF 运行时。
@@ -205,4 +206,26 @@ public sealed class CefPlatform : IWebWindowPlatform
     /// <returns>选择的保存路径；取消为 null。</returns>
     public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
         => Win32Native.SaveFileDialog(title, filter, defaultFileName, defaultExt);
+}
+
+/// <summary>
+/// CefTask 包装 Action（CEF UI 线程任务）。
+/// </summary>
+internal sealed class ActionCefTask : CefTask
+{
+    /// <summary>
+    /// 要执行的动作。
+    /// </summary>
+    private readonly Action _action;
+
+    /// <summary>
+    /// 构造任务。
+    /// </summary>
+    /// <param name="action">要执行的动作。</param>
+    public ActionCefTask(Action action) => _action = action;
+
+    /// <summary>
+    /// 执行动作。
+    /// </summary>
+    protected override void Execute() => _action();
 }
