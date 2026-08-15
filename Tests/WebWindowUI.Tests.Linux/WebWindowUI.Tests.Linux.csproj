@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <IsTestProject Condition="'$(WWUIPlatform)' == 'Linux'">true</IsTestProject>
+    <!-- Test SDK 包会把空 IsTestProject 默认置 true：非目标平台必须显式 false，否则跨主机误跑 -->
+    <IsTestProject Condition="'$(WWUIPlatform)' != 'Linux'">false</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>

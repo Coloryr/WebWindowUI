@@ -13,7 +13,7 @@
 
 | 文件 | 内容 |
 |------|------|
-| `CefPlatform.cs` | `CefPlatform : IWebWindowPlatform`：`Init(string[] args)` 先 `CefSubProcess.Run(args, true)` 分发子进程（同 exe 模型，应用 Main 只调 `WebWindowUIPlatform.Init(args)`）→ `CefRuntimeLoader.Initialize(settings, customSchemes:[app, appdata])`（延迟到首个 BaseCefBrowser 构造时 Load）→ `_message.InitMessageLoop()`。保留 `_browsers` 浏览器 id → 窗口映射、`RunOnCefUiThread`/`PostToCefUiThread`（ActionCefTask）、`RunMessageLoop`、对话框。BrowserCefApp 处理 scheme 注册与子进程参数 |
+| `CefPlatform.cs` | `CefPlatform : IWebWindowPlatform`：`Init(string[] args)` 先 `CefSubProcess.Run(args, true)` 分发子进程（同 exe 模型，应用 Main 只调 `WebWindowUIPlatform.Init(args)`）→ `CefRuntimeLoader.Initialize(settings, customSchemes:[app, appdata])`（延迟到首个 BaseCefBrowser 构造时 Load）→ `_message.InitMessageLoop()`。保留 `_browsers` 浏览器 id → 窗口映射、`RunOnCefUiThread`/`PostToCefUiThread`（ActionCefTask）、`RunMessageLoop`、对话框。**`CreateWindow` 经 `_message.RunOnUiThread` marshal 到主线程创建**（Win32 窗口必须由主线程创建，见 durable 坑）。BrowserCefApp 处理 scheme 注册与子进程参数 |
 | `CefWindow.cs` | `CefWindow : Xilium.CefGlue.Common.BaseCefBrowser, IWindowBackend`：链接 `BaseCefBrowser.cs` partial + `BaseCefBrowser.Address.cs`（Address 实现）；**抽象成员在具体子类实现**（`CreateControl()` → `Win32CefControl`，OSR 方法抛 NotSupported）。`BrowserInitialized` → 记录主浏览器并注册 id 映射；`BrowserClosed` → **仅主浏览器**（初始化时捕获的 `_mainBrowser`，非 UnderlyingBrowser——销毁后已被适配器置空）销毁顶层窗口；`LoadEnd`（主帧）→ `NavigationCompleted` |
 | `Win32CefControl.cs` | `IControl` 实现：**隐藏宿主 + 重挂载**——`GetHostViewHandle` 返回隐藏宿主窗口，`InitializeRender` 把浏览器 HWND 重挂载进目标可见窗口（`Win32BrowserHost.Reparent`）并铺满客户区。上下文菜单/光标/工具提示最小实现 |
 | `BaseCefBrowser.Address.cs` | CefGlue.Common 排除 BaseCefBrowser.cs（partial），平台工程链接后提供 Address partial 实现（命名空间必须与链接文件一致 `Xilium.CefGlue.Common`） |
@@ -24,9 +24,9 @@
 ## 关键设计
 
 - **隐藏宿主 + 重挂载（对齐 CefGlue.Avalonia，DevTools 行为的关键）**：`GetHostViewHandle` 返回隐藏宿主窗口（`Win32BrowserHost.CreateHiddenHost`，Natives.Windows 新增公开类），浏览器先作为隐藏窗口子窗口创建；`InitializeRender` 时 `Win32BrowserHost.Reparent`（SetParent+MoveWindow）重挂载进可见顶层窗口。浏览器直接作为可见窗口子控件时，`SetAsPopup(GetWindowHandle())` 的 DevTools 弹窗会顶替内容/即开即关。
-- **初始化走 CefRuntimeLoader**：自定义 scheme（app/appdata）经 `CustomScheme` 传入，处理器工厂（`ResourceSchemeHandlerFactory`/`MessageSchemeHandlerFactory`）由 loader 注册。
+- **初始化走 CefRuntimeLoader**：自定义 scheme（app/appdata）经 `CustomScheme` 传入（`AppSchemeHandlerFactory` 处理 GET 资源 + POST 回传），由 loader 注册。
 - **MTML=true（CEF UI 线程独立）**：CefGlue.Common 内部 marshal 浏览器操作；`CefWindow` 原生窗口操作走主线程（`Win32MessageLoop.RunOnUiThread`）。
-- **DevTools 关闭不影响主窗口**：`BrowserClosed` 对 DevTools 浏览器也触发，`OnBrowserClosed` 用 `ReferenceEquals(browser, UnderlyingBrowser)` 过滤。
+- **DevTools 关闭不影响主窗口**：`BrowserClosed` 对 DevTools 浏览器也触发，`OnBrowserClosed` 用**初始化时捕获的 `_mainBrowser`**（非 `UnderlyingBrowser`——销毁后已被适配器置空）过滤。
 
 ## durable 坑
 

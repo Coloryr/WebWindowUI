@@ -17,7 +17,7 @@ C# 后端 + WebView 渲染 + Vue 前端 的跨平台桌面应用框架。
 - **MVVM 命令**：后端 `[RelayCommand]` 方法 → 生成前端命令方法，`CanExecute` 门控。
 - **强类型 typed repeated**：`List<已知模型>` 双向绑定，前端得到强类型 TS 模型（序数键 / 命名键自动转换）。
 - **多窗口共享模型广播**：同一模型实例绑多个窗口，属性变化全广播、远程回写排除源窗口。
-- **跨平台**：Windows=WebView2 / Linux=WebKit2GTK（GTK3）/ macOS=WKWebView。
+- **跨平台**：Windows=WebView2 / Linux=WebKit2GTK（GTK3）/ macOS=WKWebView，另可选 **CEF（Chromium）**渲染内核（CefGlue.Next + CEF 150）。
 - **单文件发布**：`dotnet publish` 出单个 exe（原生库内嵌 + PDB 内嵌 + 压缩）。
 
 ## 快速开始
@@ -130,10 +130,13 @@ dotnet publish Demos/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery
 | 平台 | 渲染 | 状态 |
 |------|------|------|
 | Windows | WebView2（Microsoft.Web.WebView2） | ✅ 已验证 |
+| Windows (CEF) | CEF 150（CefGlue.Next NuGet 包，Chromium 内核；`UseCEF=true` 切换） | ✅ 已验证（chrome://gpu 全硬件加速 + F12 DevTools） |
 | Linux | WebKit2GTK 4.1 / GTK3（手写 P/Invoke） | 实现完成，运行时待验证 |
 | macOS | WKWebView | ✅ 已验证（net10.0-macos + macos workload） |
 
-平台由 `WebWindowUI.Platform.props` 的 `$(WWUIPlatform)` 统一选择（TFM + 编译符号）。平台限制：`SetIcon` no-op（macOS 窗口图标属 App Bundle）；跨平台 E2E 测试目前覆盖 Windows/Linux（macOS 测试工程待补）。
+平台由 `WebWindowUI.Platform.props` 的 `$(WWUIPlatform)` 统一选择（TFM + 编译符号）；CEF 平台由应用工程 `UseCEF=true` 切换（Windows 上替代 WebView2）。平台限制：`SetIcon` no-op（macOS 窗口图标属 App Bundle）；跨平台 E2E 测试目前覆盖 Windows/Linux（macOS 测试工程待补）。
+
+> **CEF 平台注意**：应用工程必须嵌 `app.manifest`（`requestedExecutionLevel asInvoker` + `supportedOS` Win7/8/8.1/10 GUID）——缺应用清单时 chrome://gpu 渲染进程确定性 0xC0000409 崩溃（详见 `Platforms/WebWindowUI.Platforms.Cef/README.md`）。CEF 150 运行时由 `CefGlue.Next.Common` 包依赖链自动部署（chromiumembeddedframework.runtime.win-x64 150.0.11）。
 
 ### macOS 构建要求
 
@@ -153,17 +156,15 @@ dotnet build MyApp/MyApp.csproj -c Debug -p:WWUIPlatform=MacOS
 ## 仓库结构
 
 ```
-WebWindowUI/                  # 核心库 + WebResourceResolver + WebWindow
-WebWindowUI.Backend/          # 后端角色标记包（含 analyzers 源生成器）
-WebWindowUI.Frontend/         # 前端角色标记包
-WebWindowUI.Generator/        # console 生成器（落盘 descriptor/TS）
-WebWindowUI.Generator.SourceGen/  # Roslyn 源生成器（写回/proto）
-WebWindowUI.Templates/        # dotnet new 模板包
-WebWindowUI.Tests.Protocol/   # 协议/单元测试（模型、生成器、协议，纯逻辑跨平台）
-WebWindowUI.Tests.Windows/    # Windows WebView2 平台 E2E（19 场景 + STA 消息泵）
-WebWindowUI.Tests.Linux/      # Linux WebKit 平台 E2E（19 场景 + GTK 消息泵）
-Sample/                       # 样例（每窗口一功能）
+Core/                         # 核心库：WebWindowUI（入口聚合+平台引导）/ WebWindowUI.Core / 角色标记包
+Platforms/                    # 平台实现：Windows（WebView2）/ Linux（WebKitGTK）/ MacOS（WKWebView）/ Cef（CEF 150）
+Natives/                      # 原生共享层：Windows（Win32 P/Invoke）/ Linux（GTK3）
+Generator/                    # 生成器：console（descriptor/TS）+ Roslyn 源生成器（写回/proto）
+Templates/                    # dotnet new 模板包
+Tests/                        # 协议 / Windows / Linux / macOS 测试工程
+Sample/                       # 样例（每窗口一功能：main/todos/resources/multi/nested/nested-list/settings/about）
 Demos/                        # 功能 Demo：Todo / SharedNotes / Monitor / ImageGallery
+CefDemo/                      # CEF 直连测试应用（验证 chrome://gpu 全硬件加速 + F12）
 ```
 
 ## 测试
@@ -178,4 +179,5 @@ dotnet test  WebWindowUI.slnx -c Debug   # 129 通过：协议 111 + 平台 18�
 - .NET 10 SDK
 - Node.js / npm（前端 vite 构建，rolldown 内核 vite 8）
 - Windows：WebView2 Runtime（Win11 自带）；Linux：`libwebkit2gtk-4.1-0`（Ubuntu，WebKit2GTK 4.1 / GTK3）；macOS：`dotnet workload install macos` + Xcode（Apple SDK 依赖其编译工具链）
+- CEF 平台：`CefGlue.Next` NuGet 包（CEF 150 代，本地补丁源 `E:\temp_code\CefGlue\Nuget\output`）+ `chromiumembeddedframework.runtime.win-x64`（150.0.11，包链自动部署运行时）
 - NuGet：protobuf-net、CommunityToolkit.Mvvm（CPM 集中版本，见 `Directory.Packages.props`）

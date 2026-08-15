@@ -62,6 +62,14 @@ public sealed class MacOSPlatform : IWebWindowPlatform
     }
 
     /// <summary>
+    /// 平台初始化（IWebWindowPlatform 契约）：构造时已完成（NSApplication + SC），空实现。
+    /// </summary>
+    /// <param name="args">命令行参数（本平台不使用）。</param>
+    public void Init(string[] args)
+    {
+    }
+
+    /// <summary>
     /// 平台名。
     /// </summary>
     public string Name => "macOS";
