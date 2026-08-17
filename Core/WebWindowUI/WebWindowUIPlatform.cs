@@ -11,7 +11,7 @@ public static class WebWindowUIPlatform
     /// 注册平台实现（构建期由注入的 PlatformBootstrap.g.cs 调用，消费方勿手写；惰性登记，幂等）。
     /// </summary>
     /// <param name="platform">平台实现。</param>
-    public static void RegisterPlatformLoader(IWebWindowPlatform platform)
+    public static void RegisterPlatformLoader(IPlatform platform)
     {
         WebWindowPlatform.Register(platform);
     }

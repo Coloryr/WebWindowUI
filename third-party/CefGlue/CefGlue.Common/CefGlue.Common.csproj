@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <Import Project="..\CefGlue.Packages.props" />
+    
+    <PropertyGroup>
+        <TargetFramework>$(DotnetVersion)</TargetFramework>
+        <AssemblyName>Xilium.CefGlue.Common</AssemblyName>
+        <RootNamespace>Xilium.CefGlue.Common</RootNamespace>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Remove="BaseCefBrowser.cs" />
+        <Compile Remove="CommonBrowserBehaviors.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="BaseCefBrowser.cs" />
+    </ItemGroup>
+
+    <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch($(DefineConstants), '(^|;)HAS_NLOG($|;)'))">
+        <PackageReference Include="NLog" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CefGlue.Common.Shared\CefGlue.Common.Shared.csproj" />
+        <ProjectReference Include="..\CefGlue\CefGlue.csproj" />
+
+        <None Include="build\CefGlue.Common.props" Pack="True" PackagePath="build\CefGlue.$(CefGluePackageNameSuffix)Common.props" />
+        <None Include="build\CefGlue.Common.targets" Pack="True" PackagePath="build\CefGlue.$(CefGluePackageNameSuffix)Common.targets" />
+        <None Include="build\CefGlue.Common.props" Pack="True" PackagePath="buildTransitive\CefGlue.$(CefGluePackageNameSuffix)Common.props" />
+        <None Include="build\CefGlue.Common.targets" Pack="True" PackagePath="buildTransitive\CefGlue.$(CefGluePackageNameSuffix)Common.targets" />
+    </ItemGroup>
+    
+</Project>

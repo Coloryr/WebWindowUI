@@ -225,7 +225,7 @@ public sealed class CefWindow : IWindowBackend
     /// 把动作 marshal 到原生 UI 线程（主线程）同步执行。
     /// </summary>
     /// <param name="action">要执行的动作。</param>
-    private void RunOnUiThread(Action action)
+    private static void RunOnUiThread(Action action)
         => WebWindowPlatform.Current.RunOnUiThread(action);
 
     /// <summary>

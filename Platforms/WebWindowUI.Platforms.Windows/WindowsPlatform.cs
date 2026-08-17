@@ -9,10 +9,12 @@ namespace WebWindowUI.Platforms.Windows;
 /// Windows 平台的实现：WebView2 + Win32 消息循环。
 /// 消息窗口、SynchronizationContext 的初始化都封装在这里，调用方无需接触 Win32。
 /// </summary>
-public sealed class WindowsPlatform : IWebWindowPlatform
+public sealed class WindowsPlatform : IPlatform
 {
     private static CoreWebView2Environment _coreWebView2Environment;
     private static readonly Win32MessageLoop _message = new();
+
+    public IPlatformDialog Dialog => Win32Dialog.Dialog;
 
     /// <summary>
     /// 初始化 Win32 消息循环并异步创建 WebView2 环境。
@@ -157,36 +159,4 @@ public sealed class WindowsPlatform : IWebWindowPlatform
     {
         _message.MessageLoop();
     }
-
-    /// <summary>
-    /// 显示系统消息框。
-    /// </summary>
-    /// <param name="title">标题。</param>
-    /// <param name="message">内容。</param>
-    /// <param name="error">是否错误样式。</param>
-    public void ShowMessageBox(string title, string message, bool error)
-        => Win32Native.ShowMessage(title, message, error);
-
-    /// <summary>
-    /// 打开文件对话框。
-    /// </summary>
-    /// <param name="title">标题。</param>
-    /// <param name="filter">过滤器。</param>
-    /// <param name="initialDirectory">初始目录。</param>
-    /// <param name="fileMustExist">是否要求文件存在。</param>
-    /// <param name="allowMultiSelect">是否允许多选。</param>
-    /// <returns>选中的文件路径。</returns>
-    public string[]? OpenFileDialog(string title, string filter, string? initialDirectory = null, bool fileMustExist = true, bool allowMultiSelect = true)
-        => Win32Native.OpenFileDialog(title, filter, initialDirectory, fileMustExist, allowMultiSelect)?.ToArray();
-
-    /// <summary>
-    /// 保存文件对话框。
-    /// </summary>
-    /// <param name="title">标题。</param>
-    /// <param name="filter">过滤器。</param>
-    /// <param name="defaultFileName">默认文件名。</param>
-    /// <param name="defaultExt">默认扩展名。</param>
-    /// <returns>选中的文件路径。</returns>
-    public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
-        => Win32Native.SaveFileDialog(title, filter, defaultFileName, defaultExt);
 }

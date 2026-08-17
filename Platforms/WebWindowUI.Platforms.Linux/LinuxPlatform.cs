@@ -7,7 +7,7 @@ namespace WebWindowUI.Platforms.Linux;
 /// Linux 平台实现：GTK3 宿主 + libwebkit2gtk-4.1（GTK3 端口，WebKit/GTK 均手写 P/Invoke）。
 /// 用 GLib.MainLoop 跑主循环（不用 Gtk.Application，避开其 D-Bus 唯一实例限制）。
 /// </summary>
-public sealed class LinuxPlatform : IWebWindowPlatform
+public sealed class LinuxPlatform : IPlatform
 {
     private static readonly Dictionary<IntPtr, LinuxWindow> _windows = [];
     private static readonly WebKit2Native.WebKitUriSchemeRequestCallback _schemeCallback = OnUriSchemeRequest;
@@ -165,34 +165,7 @@ public sealed class LinuxPlatform : IWebWindowPlatform
         => Environment.CurrentManagedThreadId == LinuxMessageLoopSynchronizationContext.UiThreadId;
 
     /// <summary>
-    /// 显示系统消息框。
+    /// 平台对话框（GTK 实现）。
     /// </summary>
-    /// <param name="title">标题。</param>
-    /// <param name="message">内容。</param>
-    /// <param name="error">是否错误样式。</param>
-    public void ShowMessageBox(string title, string message, bool error)
-        => GtkNative.ShowMessageBox(title, message);
-
-    /// <summary>
-    /// 打开文件对话框。
-    /// </summary>
-    /// <param name="title">标题。</param>
-    /// <param name="filter">过滤器。</param>
-    /// <param name="initialDirectory">初始目录。</param>
-    /// <param name="fileMustExist">是否要求文件存在。</param>
-    /// <param name="allowMultiSelect">是否允许多选。</param>
-    /// <returns>选中的文件路径。</returns>
-    public string[]? OpenFileDialog(string title, string filter, string? initialDirectory = null, bool fileMustExist = true, bool allowMultiSelect = true)
-        => GtkNative.OpenFileDialog(title, initialDirectory, allowMultiSelect);
-
-    /// <summary>
-    /// 保存文件对话框。
-    /// </summary>
-    /// <param name="title">标题。</param>
-    /// <param name="filter">过滤器。</param>
-    /// <param name="defaultFileName">默认文件名。</param>
-    /// <param name="defaultExt">默认扩展名。</param>
-    /// <returns>选中的文件路径。</returns>
-    public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
-        => GtkNative.SaveFileDialog(title, defaultFileName);
+    public IPlatformDialog Dialog => GtkDialog.Dialog;
 }

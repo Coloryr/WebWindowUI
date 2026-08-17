@@ -12,14 +12,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-	<PackageReference Include="CefGlue.Next.BrowserProcess.Core" />
-    <PackageReference Include="CefGlue.Next.Core" />
-    <PackageReference Include="CefGlue.Next.Common" />
-    <PackageReference Include="CefGlue.Next.Common.Shared" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\Core\WebWindowUI.Core\WebWindowUI.Core.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.BrowserProcess.Core\CefGlue.BrowserProcess.Core.csproj" />
+    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.Common.Shared\CefGlue.Common.Shared.csproj" />
+    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.Common\CefGlue.Common.csproj" />
+    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue\CefGlue.csproj" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows'">

@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+    <PropertyGroup>
+        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+        <CefRuntimePackageVersion Condition="'$(CefRuntimePackageVersion)' == ''">$(CefVersion)</CefRuntimePackageVersion>
+    </PropertyGroup>
+    <ItemGroup>
+        <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Diagnostics" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Themes.Simple" Version="$(AvaloniaVersion)" />
+
+        <PackageVersion Include="ReactiveUI.Avalonia" Version="11.4.13" />
+      
+        <PackageVersion Include="Dotnet.Bundle" Version="0.9.13" />
+        <PackageVersion Include="System.Reactive.Linq" Version="6.1.0" />
+        <PackageVersion Include="System.Runtime.Loader" Version="4.3.0" />
+
+        <PackageVersion Include="chromiumembeddedframework.runtime" Version="$(CefVersion)" />
+        <PackageVersion Include="chromiumembeddedframework.runtime.win-x64" Version="$(CefVersion)" />
+        <PackageVersion Include="chromiumembeddedframework.runtime.win-arm64" Version="$(CefVersion)" />
+
+        <PackageVersion Include="cef.runtime.linux-x64" Version="$(CefRuntimePackageVersion)" />
+        <PackageVersion Include="cef.runtime.linux-arm64" Version="$(CefRuntimePackageVersion)" />
+        
+        <PackageVersion Include="cef.runtime.osx-x64" Version="$(CefRuntimePackageVersion)" />
+        <PackageVersion Include="cef.runtime.osx-arm64" Version="$(CefRuntimePackageVersion)" />
+
+        <PackageVersion Include="nunit" Version="3.12.0" />
+        <PackageVersion Include="NUnit3TestAdapter" Version="3.17.0" />
+        <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.4.0" />
+        <PackageVersion Include="Moq" Version="4.10.1" />
+    </ItemGroup>
+
+    <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch($(DefineConstants), '(^|;)HAS_NLOG($|;)'))">
+        <PackageVersion Include="NLog" Version="4.6.2" />
+    </ItemGroup>
+</Project>

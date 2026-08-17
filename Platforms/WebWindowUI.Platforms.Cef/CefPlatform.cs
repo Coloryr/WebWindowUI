@@ -13,7 +13,7 @@ namespace WebWindowUI.Platforms.Cef;
 /// 隐藏宿主重挂载），初始化走 CefRuntimeLoader（子进程分发 CefSubProcess 由应用 Main 负责），
 /// 自定义 scheme（app/appdata）经 CustomScheme 注册。
 /// </summary>
-public sealed class CefPlatform : IWebWindowPlatform
+public sealed class CefPlatform : IPlatform
 {
     /// <summary>
     /// Win32 消息循环（隐藏消息窗口调度，供跨线程 marshal 回 UI 线程）。
@@ -34,6 +34,8 @@ public sealed class CefPlatform : IWebWindowPlatform
     /// 是否已调过 CefRuntime.Shutdown（防 ProcessExit 与 RunMessageLoop 双关）。
     /// </summary>
     private static bool _shutdownDone;
+
+    public IPlatformDialog Dialog => NativePlatform.Dialog;
 
     /// <summary>
     /// 初始化 CEF 运行时（CefRuntimeLoader.Initialize 延迟到首个 BaseCefBrowser 构造时 Load）。
@@ -174,38 +176,6 @@ public sealed class CefPlatform : IWebWindowPlatform
     /// </summary>
     /// <returns>是否在主线程。</returns>
     public bool IsUiThread() => _message.IsUiThread();
-
-    /// <summary>
-    /// 系统消息框。
-    /// </summary>
-    /// <param name="title">标题。</param>
-    /// <param name="message">内容。</param>
-    /// <param name="error">是否错误样式。</param>
-    public void ShowMessageBox(string title, string message, bool error)
-        => Win32Native.ShowMessage(title, message, error);
-
-    /// <summary>
-    /// 文件打开对话框；取消返回 null。
-    /// </summary>
-    /// <param name="title">对话框标题。</param>
-    /// <param name="filter">文件过滤器。</param>
-    /// <param name="initialDirectory">初始目录；null 用默认。</param>
-    /// <param name="fileMustExist">是否要求文件存在。</param>
-    /// <param name="allowMultiSelect">是否允许多选。</param>
-    /// <returns>选中的文件路径；取消为 null。</returns>
-    public string[]? OpenFileDialog(string title, string filter, string? initialDirectory = null, bool fileMustExist = true, bool allowMultiSelect = true)
-        => Win32Native.OpenFileDialog(title, filter, initialDirectory, fileMustExist, allowMultiSelect)?.ToArray();
-
-    /// <summary>
-    /// 文件保存对话框；取消返回 null。
-    /// </summary>
-    /// <param name="title">对话框标题。</param>
-    /// <param name="filter">文件过滤器。</param>
-    /// <param name="defaultFileName">默认文件名。</param>
-    /// <param name="defaultExt">默认扩展名。</param>
-    /// <returns>选择的保存路径；取消为 null。</returns>
-    public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
-        => Win32Native.SaveFileDialog(title, filter, defaultFileName, defaultExt);
 }
 
 /// <summary>

@@ -22,6 +22,6 @@ public static class WebWindowLog
     {
         Console.WriteLine($"[WebWindowUI] {message}");
 
-        WebWindowPlatform.Current.ShowMessageBox("", message, true);
+        WebWindowPlatform.Current.Dialog.ShowMessageBox("", message, true);
     }
 }

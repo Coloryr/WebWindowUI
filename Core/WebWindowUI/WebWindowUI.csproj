@@ -53,7 +53,7 @@
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows' And '$(WWUI_PlatformRef)' == 'true' And '$(UseCEF)' != 'true'">
     <PackageReference Include="WebWindowUI.Platforms.Windows" />
   </ItemGroup>
-  <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows' And '$(WWUI_PlatformRef)' == 'true' And '$(UseCEF)' == 'true'">
+  <ItemGroup Condition="'$(UseCEF)' == 'true' And '$(WWUI_PlatformRef)' == 'true'">
     <PackageReference Include="WebWindowUI.Platforms.Cef" />
   </ItemGroup>
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Linux' And '$(WWUI_PlatformRef)' == 'true'">

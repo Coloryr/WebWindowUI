@@ -41,4 +41,11 @@
     <File Path="WebWindowUI.Platform.props" />
     <File Path="WebWindowUI.targets" />
   </Folder>
+  <Folder Name="/third-party/" />
+  <Folder Name="/third-party/CefGlue/">
+    <Project Path="third-party/CefGlue/CefGlue.BrowserProcess.Core/CefGlue.BrowserProcess.Core.csproj" />
+    <Project Path="third-party/CefGlue/CefGlue.Common.Shared/CefGlue.Common.Shared.csproj" />
+    <Project Path="third-party/CefGlue/CefGlue.Common/CefGlue.Common.csproj" />
+    <Project Path="third-party/CefGlue/CefGlue/CefGlue.csproj" />
+  </Folder>
 </Solution>
