@@ -5,7 +5,7 @@ namespace WebWindowUI.Core.Protocol;
 /// <summary>
 /// WebView2 字符串通道字节编解码：0x00 → "\0"、0x5C → "\\"、其余 1:1（该通道在首个 NUL 截断）；前端桥同算法。
 /// </summary>
-internal static class WebView2StringCodec
+internal static class StringCodec
 {
     /// <summary>
     /// 字节 → 不含 NUL 的 Latin-1 字符串。

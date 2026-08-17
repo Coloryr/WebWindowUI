@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
-using WebWindowUI.Core;
+using WebWindowUI.Core.Platform;
 using WebWindowUI.Natives.Windows;
 
 namespace WebWindowUI.Platforms.Cef;

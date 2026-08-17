@@ -22,9 +22,9 @@ public class ModelProtoTests
     {
         var bytes = Enumerable.Range(0, 256).Select(i => (byte)i).ToArray();
 
-        var s = WebView2StringCodec.Encode(bytes);
+        var s = StringCodec.Encode(bytes);
 
-        Assert.Equal(bytes, WebView2StringCodec.Decode(s));
+        Assert.Equal(bytes, StringCodec.Decode(s));
     }
 
     [Fact]
@@ -32,10 +32,10 @@ public class ModelProtoTests
     {
         byte[] bytes = { 0x00, 0x00, 0x00, 0x01, 0x00 }; // NUL 密集（protobuf 常见）
 
-        var s = WebView2StringCodec.Encode(bytes);
+        var s = StringCodec.Encode(bytes);
 
         Assert.DoesNotContain('\0', s); // WebView2 字符串通道在 NUL 处截断，绝不允许出现
-        Assert.Equal(bytes, WebView2StringCodec.Decode(s));
+        Assert.Equal(bytes, StringCodec.Decode(s));
     }
 
     [Fact]
@@ -43,9 +43,9 @@ public class ModelProtoTests
     {
         byte[] bytes = { 0x5C, 0x5C, 0x41, 0x5C }; // 转义符自身（0x5C）必须成对转义
 
-        var s = WebView2StringCodec.Encode(bytes);
+        var s = StringCodec.Encode(bytes);
 
-        Assert.Equal(bytes, WebView2StringCodec.Decode(s));
+        Assert.Equal(bytes, StringCodec.Decode(s));
     }
 
     // ---- WebMessage 信封往返 ----

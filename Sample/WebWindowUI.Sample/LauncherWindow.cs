@@ -1,30 +1,37 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using WebWindowUI.Core;
 
 namespace WebWindowUI.Sample;
 
 /// <summary>
-/// 入口（启动器）窗口（前端 src/window/launcher/）：演示「前端按钮 → .NET 命令（MVVM Command）」。
+/// 入口（启动器）窗口控制器：经 <see cref="WebWindowPlatform.Current.CreateWindow"/> 建窗
+/// （前端 src/window/launcher/），演示「前端按钮 → .NET 命令（MVVM Command）」。
 /// 命令/回写两种通道最终都调 Open(path) 开窗，已打开的窗口去重激活、关闭后移除记录。
 /// </summary>
-internal sealed class LauncherWindow : WebWindow
+internal sealed class LauncherWindow
 {
     private readonly Dictionary<string, WebWindow[]> _open = [];
     private readonly LauncherModel _model;
 
-    public LauncherWindow() : base(new WebWindowOptions("launcher")
-    {
-        Title = "WebWindowUI 示例入口",
-        Width = 760,
-        Height = 640
-    })
+    /// <summary>
+    /// 框架窗口（构造即创建；Show 由宿主负责）。
+    /// </summary>
+    public WebWindow Window { get; }
+
+    public LauncherWindow()
     {
         _model = new LauncherModel();
-        Model = _model;
+        Window = WebWindowPlatform.Current.CreateWindow(new WebWindowOptions("launcher")
+        {
+            Title = "WebWindowUI 示例入口",
+            Width = 760,
+            Height = 640
+        });
+        Window.Model = _model;
 
         _model.PropertyChanged += OnModelRequestChanged; // 回写通道：Request 变 → 开窗
         _model.OpenRequested += OnOpenRequested;         // 命令通道：ModelInvoke → 开窗
-        Closed += () =>
+        Window.Closed += (_, _) =>
         {
             _model.PropertyChanged -= OnModelRequestChanged;
             _model.OpenRequested -= OnOpenRequested;
@@ -61,14 +68,14 @@ internal sealed class LauncherWindow : WebWindow
 
         WebWindow[] created = path switch
         {
-            "main" => [new MainWindow()],
-            "todos" => [new TodosWindow()],
-            "resources" => [new ResourcesWindow()],
+            "main" => [new MainWindow().Window],
+            "todos" => [new TodosWindow().Window],
+            "resources" => [new ResourcesWindow().Window],
             "multi" => CreateMultiGroup(),
-            "settings" => [new SettingsWindow()],
-            "about" => [new AboutWindow()],
-            "nested" => [new NestedWindow()],
-            "nested-list" => [new NestedListWindow()],
+            "settings" => [new SettingsWindow().Window],
+            "about" => [new AboutWindow().Window],
+            "nested" => [new NestedWindow().Window],
+            "nested-list" => [new NestedListWindow().Window],
             _ => [],
         };
         if (created.Length == 0)
@@ -83,7 +90,7 @@ internal sealed class LauncherWindow : WebWindow
                     window.SetIcon(WindowIcon.FromStream(iconStream));
             }
             window.Show();
-            window.Closed += () => _open.Remove(path);
+            window.Closed += (_, _) => _open.Remove(path);
         }
     }
 
@@ -95,9 +102,9 @@ internal sealed class LauncherWindow : WebWindow
         MultiWindowModel shared = new("共享实例");
         return
         [
-            new MultiWindow(shared, "共享窗口 A（主，定时驱动）", ownTimer: true),
-            new MultiWindow(shared, "共享窗口 B（同一模型）", ownTimer: false),
-            new MultiWindow(new MultiWindowModel("独立实例"), "独立实例窗口", ownTimer: true),
+            new MultiWindow(shared, "共享窗口 A（主，定时驱动）", ownTimer: true).Window,
+            new MultiWindow(shared, "共享窗口 B（同一模型）", ownTimer: false).Window,
+            new MultiWindow(new MultiWindowModel("独立实例"), "独立实例窗口", ownTimer: true).Window,
         ];
     }
 }

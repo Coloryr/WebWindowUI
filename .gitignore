@@ -9,3 +9,4 @@ artifacts/
 **/src/models/
 package-lock.json
 /third-party/CefGlue/Nuget
+/third-party/CefGlue/packages

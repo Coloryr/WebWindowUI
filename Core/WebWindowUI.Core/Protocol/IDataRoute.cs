@@ -1,4 +1,4 @@
-namespace WebWindowUI.Core;
+namespace WebWindowUI.Core.Protocol;
 
 /// <summary>
 /// 数据路由：把 DataScheme（默认 <c>appbin://</c>）下的一个子路径前缀映射为二进制资源。

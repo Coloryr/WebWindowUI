@@ -10,15 +10,15 @@
 
 | 类型 | 职责 |
 |------|------|
-| `WebWindow` | 窗口抽象：`WebWindowOptions` 配置（窗口路径/标题/无头/尺寸）、`Model` 绑定、`Show/Close/Activate/ExecuteScriptAsync`、`NavigationCompleted` 事件。构造即连平台（`WebWindowPlatform.Current`） |
+| `WebWindow` | **全抽象窗口契约**（平台窗口继承实现，消费方不继承）：`WebWindowOptions`（窗口路径/标题/无头/尺寸）、`Model` 绑定、13 个窗口状态属性（SystemDecorations/WindowState/Position/Size/MinSize/MaxSize/ShowInTaskbar/CanResize/CanMinimize/CanMaximize/IsDialog/IsActive/Screens）、`Show/ShowDialog/Hide/Close/Activate/SetIcon`、`Loaded/Closed/Closing/Resize/Move/Active/WindowStateChange/SystemDecorationsChange` 事件 |
 | `WebWindowModel` | 模型基类：属性/集合变化订阅 → 增量推送；`TrySetProperty` / `TryInvokeCommand` / `BuildSnapshotEnvelope`；`ModelInstanceId`（进程内唯一，帧级寻址） |
 | `ModelProtocol` | protobuf 协议：`ModelValue` 值树、`WebMessage` 信封、`ToModelValue/ConvertFromModelValue`、POCO 转换器注册表 |
 | `WebResourceResolver` | wwwroot 两来源读取：**先查程序集嵌入资源再回退磁盘**（Debug 磁盘、Release 内嵌），首页地址推导、图标 |
-| `WebWindowPlatform` | 平台**注册表**：`Current` 返回已注册实现，平台程序集 `[ModuleInitializer]` 调 `internal Register` 写入（AOT 安全，无 `Assembly.Load`） |
+| `WebWindowPlatform` | 平台**注册表**（纯）：`Current` 返回已注册 `IPlatform`（未注册抛 `PlatformNotSupportedException`），`Register(impl)` 首个生效；`Current.CreateWindow(options)` 是建窗唯一入口 |
 | `ObservableDictionary<TK,TV>` | 原地增删自动抛 `CollectionChanged` → 框架整属性重推前端的字典 |
-| `INativeWindow` / `IMessageLoop` / `IWindowBackend` / `IDataRoute` | 平台实现接口：原生窗口生命周期 / 消息循环抽象 / 平台后端 / 自定义数据路由 |
+| `INativeWindow` | **原生窗口契约（只含窗口平台相关，不含 WebView 内容）**：HWND 生命周期（Show/Hide/Close/Activate/SetTitle/SetIcon/GetSize）+ 窗口状态属性（Position/Size/MinSize/MaxSize/ShowInTaskbar/CanResize/CanMinimize/CanMaximize/IsDialog/IsActive/Screens）+ 事件（Destory/Resize/Move/Active/WindowStateChange/SystemDecorationsChange） |
 
-协议相关见 `Protocol/`（`ModelProtocol.cs` 定义信封，`JsStringLiteral` / `WebView2StringCodec` 处理字符串通道）。
+协议相关见 `Protocol/`（`ModelProtocol.cs` 定义信封，`JsStringLiteral` / `StringCodec` 处理字符串通道）。
 
 ## 关键设计
 
@@ -42,7 +42,7 @@ public partial class MainWindowModel : WebWindowModel
 开窗口：
 
 ```csharp
-var win = new WebWindow(new WebWindowOptions("main") { Title = "主窗口" });
+var win = WebWindowPlatform.Current.CreateWindow(new WebWindowOptions("main") { Title = "主窗口" });
 win.Model = model;
 win.Show();
 ```

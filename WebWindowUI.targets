@@ -516,7 +516,7 @@
       <_WWUI_DispatchLine Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'Windows'">WebWindowUI.Platforms.Windows.WindowsPlatform</_WWUI_DispatchLine>
       <_WWUI_DispatchLine Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'Linux'">WebWindowUI.Platforms.Linux.LinuxPlatform</_WWUI_DispatchLine>
       <_WWUI_DispatchLine Condition="'$(UseCEF)' != 'true' And '$(WWUIPlatform)' == 'MacOS'">WebWindowUI.Platforms.MacOS.MacOSPlatform</_WWUI_DispatchLine>
-      <_WWUI_DispatchLine Condition="'$(_WWUI_DispatchLine)' == ''">WebWindowUI.NullPlatform</_WWUI_DispatchLine>
+      <_WWUI_DispatchLine Condition="'$(_WWUI_DispatchLine)' == ''">WebWindowUI.Core.Platform.NullPlatform</_WWUI_DispatchLine>
       <_WWUI_BootstrapContent>namespace WebWindowUI%3B%0A%0Ainternal static class __WebWindowUIPlatformBootstrap%0A{%0A    [global%3A%3ASystem.Runtime.CompilerServices.ModuleInitializer]%0A    internal static void Register()%0A    {%0A        global%3A%3AWebWindowUI.WebWindowUIPlatform.RegisterPlatformLoader(new $(_WWUI_DispatchLine)())%3B%0A    }%0A}%0A</_WWUI_BootstrapContent>
     </PropertyGroup>
     <WriteLinesToFile File="$(IntermediateOutputPath)PlatformBootstrap.g.cs" Overwrite="true"

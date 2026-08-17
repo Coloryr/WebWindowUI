@@ -1,4 +1,4 @@
-﻿namespace WebWindowUI.Core;
+﻿namespace WebWindowUI.Core.Platform;
 
 /// <summary>
 /// 平台消息循环抽象：平台窗口层经它投递 UI 线程任务并运行消息泵。

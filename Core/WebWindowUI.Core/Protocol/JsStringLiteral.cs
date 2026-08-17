@@ -5,7 +5,7 @@ namespace WebWindowUI.Core.Protocol;
 /// <summary>
 /// 把字符串放进 JS 字符串字面量（供 eval 注入 <c>window.wwuiReceive("...")</c> 用）。
 /// 转义反斜杠、双引号、换行/回车/制表符，其余控制字符转 <c>\uXXXX</c>。
-/// 输入是 <see cref="WebView2StringCodec.Encode"/> 的转义码串，这里再转一层 JS 字面量转义，eval 后还原回原值。
+/// 输入是 <see cref="StringCodec.Encode"/> 的转义码串，这里再转一层 JS 字面量转义，eval 后还原回原值。
 /// </summary>
 internal static class JsStringLiteral
 {

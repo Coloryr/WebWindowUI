@@ -14,8 +14,8 @@
 |------|------|
 | `WebKit2Native.cs` | libwebkit2gtk-4.1.so.0 + libjavascriptcoregtk-4.1.so.0 + gobject/glib/gio + **libsoup 构造 scheme 响应头**（soup2/soup3 按 WebKitGTK 实际链接版本运行时探测） |
 | `WebKit2Events.cs` | GObject 信号到 C# 事件的桥 |
-| `LinuxWindow.cs` | `LinuxWindow : IWindowBackend`：WebKit2GTK WebView + scheme 响应（app:// appbin://） |
-| `LinuxPlatform.cs` | `LinuxPlatform : IWebWindowPlatform`：注册 + GTK 主循环集成 |
+| `LinuxWindow.cs` | `LinuxWindow : WebWindow`：WebKit2GTK WebView + scheme 响应（app:// appbin://）；窗口状态面经 `LinuxNativeWindow`（`INativeWindow`）实现 |
+| `LinuxPlatform.cs` | `LinuxPlatform : IPlatform`：注册 + GTK 主循环集成；`CreateWindow(options)` 返回 `LinuxWindow` |
 | `LinuxMessageLoopSynchronizationContext.cs` | 绑定 GTK 主循环的 `SynchronizationContext` |
 | `GlobalUsings.cs` | 全局 using + 歧义消解（`Gio.Action`/`JavaScriptCore.Exception`） |
 

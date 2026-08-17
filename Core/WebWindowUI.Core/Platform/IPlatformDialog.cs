@@ -1,11 +1,29 @@
-﻿namespace WebWindowUI.Core;
+﻿namespace WebWindowUI.Core.Platform;
 
+/// <summary>
+/// 选择参数
+/// </summary>
 public record SelectDialogOption
 { 
+    /// <summary>
+    /// 显示标题
+    /// </summary>
     public string Title { get; set; }
+    /// <summary>
+    /// 过滤
+    /// </summary>
     public string Filter { get; set; }
+    /// <summary>
+    /// 初始路径
+    /// </summary>
     public string? InitialDirectory { get; set; }
+    /// <summary>
+    /// 是否只能选中存在的
+    /// </summary>
     public bool SelectMustExist { get; set; }
+    /// <summary>
+    /// 是否允许多选
+    /// </summary>
     public bool AllowMultiSelect { get; set; }
 }
 
@@ -22,23 +40,21 @@ public interface IPlatformDialog
     /// <summary>
     /// 打开系统文件选择对话框。
     /// </summary>
-    /// <param name="title">对话框标题。</param>
-    /// <param name="filter">过滤器（Windows 格式 "描述\0*.ext\0"；Linux 暂忽略）。</param>
-    /// <param name="initialDirectory">初始目录，可为 null。</param>
-    /// <param name="fileMustExist">是否只能选择已存在的文件。</param>
-    /// <param name="allowMultiSelect">是否允许多选。</param>
-    /// <returns>选中的文件完整路径数组；用户取消返回 null。</returns>
+    /// <param name="option"></param>
+    /// <returns>选中的文件，取消为Null</returns>
     List<string>? OpenFileDialog(SelectDialogOption option);
 
+    /// <summary>
+    /// 打开系统文件夹选择对话框
+    /// </summary>
+    /// <param name="option"></param>
+    /// <returns>选中的路径，取消为Null</returns>
     List<string>? OpenFolderDialog(SelectDialogOption option);
 
     /// <summary>
     /// 打开系统保存对话框。
     /// </summary>
-    /// <param name="title">对话框标题。</param>
-    /// <param name="filter">过滤器（Windows 格式；Linux 暂忽略）。</param>
-    /// <param name="defaultFileName">文件名编辑框初值，可为 null。</param>
-    /// <param name="defaultExt">默认扩展名（不带点），可为 null。</param>
-    /// <returns>选中的文件完整路径；用户取消返回 null。</returns>
+    /// <param name="option"></param>
+    /// <returns>选中的文件，取消为Null</returns>
     string? SaveFileDialog(SelectDialogOption option);
 }

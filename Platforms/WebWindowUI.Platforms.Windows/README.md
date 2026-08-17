@@ -12,13 +12,13 @@
 
 | 文件 | 内容 |
 |------|------|
-| `WindowsPlatform.cs` | `WindowsPlatform : IWebWindowPlatform`：`[ModuleInitializer]`（`PlatformRegistration.cs` 同款 CA2255）经 `internal Register` 注册进 `WebWindowPlatform`；初始化 Win32 消息循环 + 异步创建 WebView2 环境；`RunOnUiThread`/`IsUiThread` 走 `Win32MessageLoop` |
-| `WindowsWindow.cs` | `WindowsWindow : IWindowBackend`：WebView2 宿主窗口（WebResourceResolver 求首页 + 桥双向 + `ExecuteScriptAsync`） |
+| `WindowsPlatform.cs` | `WindowsPlatform : IPlatform`：初始化 Win32 消息循环 + 异步创建 WebView2 环境；`RunOnUiThread`/`IsUiThread` 走 `Win32MessageLoop`；`CreateWindow(options)` 返回 `WindowsWindow`。**无** `[ModuleInitializer]`——注册由应用侧 bootstrap（`WebWindowUIPlatform.Init`）或测试泵显式 `WebWindowPlatform.Register` 完成 |
+| `WindowsWindow.cs` | `WindowsWindow : WebWindow`：WebView2 宿主窗口（WebResourceResolver 求首页 + 桥双向 + `ExecuteScriptAsync`）；13 个窗口状态属性/生命周期经 `Win32NativeWindow`（`INativeWindow`）真实现 |
 
 ## 关键设计
 
 - **公开 API 消费 Natives**：消息循环/窗口生命周期一律走 `Win32MessageLoop`/`INativeWindow`（`Win32NativeWindow`），不直接引用 internal 的 `Win32`/`MessageLoopSynchronizationContext`。
-- **平台注册**：程序集 `[ModuleInitializer]` 调 `internal Register` 写 `WebWindowPlatform` 静态字段（无静态字段初始化器 → 无 cctor，无类型初始化死锁）。加载由应用侧 `WebWindowUIPlatform.Init()` 触发（惰性委托 + `typeof` 静态引用，AOT 安全，见入口包 README）。
+- **平台注册**：本平台**无** `[ModuleInitializer]`——由应用侧 bootstrap（`WebWindowUIPlatform.Init` 经 targets 注入的 `PlatformBootstrap.g.cs` 惰性登记加载委托，`typeof` 触发加载后 `Register` 首个生效）或测试泵显式 `WebWindowPlatform.Register(new WindowsPlatform())` 注册。避免双构造死锁。
 - **桥 JS**：`resolveChannel()` 自适应 `chrome.webview`（Windows）→ `window.webkit.messageHandlers.wwui`（WebKit）。
 
 ## 打包

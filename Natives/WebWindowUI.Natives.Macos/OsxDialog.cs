@@ -1,17 +1,16 @@
-using UniformTypeIdentifiers;
-using WebWindowUI.Core;
+using WebWindowUI.Core.Platform;
 
-namespace WebWindowUI.Platforms.MacOS;
+namespace WebWindowUI.Natives.Macos;
 
 /// <summary>
 /// macOS 对话框实现（NSAlert / NSOpenPanel / NSSavePanel）。
 /// </summary>
-public class MacOSDialog : IPlatformDialog
+public class OsxDialog : IPlatformDialog
 {
     /// <summary>
     /// 单例。
     /// </summary>
-    public static readonly MacOSDialog Dialog = new();
+    public static readonly OsxDialog Dialog = new();
 
     /// <summary>
     /// 系统弹窗（NSAlert，主线程调用）。
@@ -34,21 +33,17 @@ public class MacOSDialog : IPlatformDialog
     /// 文件选择对话框（NSOpenPanel）。返回 null = 取消。
     /// filter 为 Windows 格式，macOS 暂不支持（忽略）。
     /// </summary>
-    /// <param name="title">标题。</param>
-    /// <param name="filter">过滤器（不支持，忽略）。</param>
-    /// <param name="initialDirectory">初始目录。</param>
-    /// <param name="fileMustExist">是否要求文件存在（不支持，忽略）。</param>
-    /// <param name="allowMultiSelect">是否允许多选。</param>
+    /// <param name="option">对话框选项。</param>
     /// <returns>选中的文件路径；取消为 null。</returns>
-    public List<string>? OpenFileDialog(string title, string filter, string? initialDirectory = null, bool fileMustExist = true, bool allowMultiSelect = true)
+    public List<string>? OpenFileDialog(SelectDialogOption option)
     {
         var panel = NSOpenPanel.OpenPanel;
-        panel.Title = title;
+        panel.Title = option.Title;
         panel.CanChooseFiles = true;
         panel.CanChooseDirectories = false;
-        panel.AllowsMultipleSelection = allowMultiSelect;
-        if (initialDirectory is not null)
-            panel.DirectoryUrl = NSUrl.FromFilename(initialDirectory);
+        panel.AllowsMultipleSelection = option.AllowMultiSelect;
+        if (option.InitialDirectory is not null)
+            panel.DirectoryUrl = NSUrl.FromFilename(option.InitialDirectory);
         if (panel.RunModal() != 1) // NSModalResponseOK = 1
             return null;
         var urls = panel.Urls;
@@ -59,22 +54,34 @@ public class MacOSDialog : IPlatformDialog
     }
 
     /// <summary>
+    /// 目录选择对话框（NSOpenPanel，仅目录）。返回 null = 取消。
+    /// </summary>
+    /// <param name="option">对话框选项。</param>
+    /// <returns>选中的目录路径；取消为 null。</returns>
+    public List<string>? OpenFolderDialog(SelectDialogOption option)
+    {
+        var panel = NSOpenPanel.OpenPanel;
+        panel.Title = option.Title;
+        panel.CanChooseFiles = false;
+        panel.CanChooseDirectories = true;
+        panel.AllowsMultipleSelection = false;
+        if (option.InitialDirectory is not null)
+            panel.DirectoryUrl = NSUrl.FromFilename(option.InitialDirectory);
+        if (panel.RunModal() != 1) // NSModalResponseOK = 1
+            return null;
+        return [panel.Url?.Path!];
+    }
+
+    /// <summary>
     /// 保存对话框（NSSavePanel）。返回 null = 取消。
     /// filter 为 Windows 格式，macOS 暂不支持（忽略）。
     /// </summary>
-    /// <param name="title">标题。</param>
-    /// <param name="filter">过滤器（不支持，忽略）。</param>
-    /// <param name="defaultFileName">默认文件名。</param>
-    /// <param name="defaultExt">默认扩展名。</param>
+    /// <param name="option">对话框选项。</param>
     /// <returns>选择的保存路径；取消为 null。</returns>
-    public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
+    public string? SaveFileDialog(SelectDialogOption option)
     {
         var panel = NSSavePanel.SavePanel;
-        panel.Title = title;
-        if (defaultFileName is not null)
-            panel.NameFieldStringValue = defaultFileName;
-        if (defaultExt is not null)
-            panel.AllowedContentTypes = new[] { UTType.CreateFromExtension(defaultExt)! };
+        panel.Title = option.Title;
         if (panel.RunModal() != 1) // NSModalResponseOK = 1
             return null;
         return panel.Url?.Path;

@@ -13,7 +13,7 @@ internal static class Program
         WebWindowResource.RegisterCustomRoute("bin", new DataProvider());
 
         LauncherWindow launcher = new();
-        launcher.Show();
+        launcher.Window.Show();
 
         WebWindowUIPlatform.Run();
     }

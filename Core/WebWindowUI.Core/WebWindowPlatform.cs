@@ -1,3 +1,5 @@
+using WebWindowUI.Core.Platform;
+
 namespace WebWindowUI.Core;
 
 /// <summary>
@@ -6,15 +8,14 @@ namespace WebWindowUI.Core;
 public static class WebWindowPlatform
 {
     /// <summary>
-    /// 当前平台的 WebView 实现；未注册时抛异常（测试泵据此兜底注册）。
-    /// </summary>
-    public static IPlatform Current
-        => _current ?? throw new PlatformNotSupportedException("平台未注册：请先调用 WebWindowUIPlatform.Init(args)（或由测试泵注册）。");
-
-    /// <summary>
     /// 已注册的平台实现。
     /// </summary>
     private static IPlatform? _current;
+
+    /// <summary>
+    /// 当前平台的 WebView 实现；未注册时抛异常。
+    /// </summary>
+    public static IPlatform Current => _current ?? new NullPlatform();
 
     /// <summary>
     /// 注册窗口平台（**首个注册生效**，后续注册忽略——防 Sample bootstrap 的 CEF 平台

@@ -1,4 +1,5 @@
 using WebWindowUI.Core;
+using WebWindowUI.Core.Platform;
 using WebWindowUI.Natives.Linux;
 
 namespace WebWindowUI.Platforms.Linux;
@@ -40,11 +41,11 @@ public sealed class LinuxPlatform : IPlatform
     }
 
     /// <summary>
-    /// 创建窗口后端。
+    /// 创建平台窗口（尚未显示）。
     /// </summary>
     /// <param name="options">窗口选项。</param>
-    /// <returns>窗口后端。</returns>
-    public IWindowBackend CreateWindow(WebWindowOptions options)
+    /// <returns>平台窗口。</returns>
+    public WebWindow CreateWindow(WebWindowOptions options)
         => LinuxWindow.Create(options);
 
     /// <summary>
@@ -116,7 +117,7 @@ public sealed class LinuxPlatform : IPlatform
             {
                 var bytes = new byte[stream.Length];
                 stream.ReadExactly(bytes);
-                WebKit2Native.FinishSchemeRequest(request, bytes, mimeType!, ResourceHeaders.CacheControl(relative!));
+                WebKit2Native.FinishSchemeRequest(request, bytes, mimeType!, WebWindowResource.CacheControl(relative!));
                 stream.Dispose();
                 return;
             }
@@ -168,4 +169,9 @@ public sealed class LinuxPlatform : IPlatform
     /// 平台对话框（GTK 实现）。
     /// </summary>
     public IPlatformDialog Dialog => GtkDialog.Dialog;
+
+    /// <summary>
+    /// 平台剪贴板（GTK 实现）。
+    /// </summary>
+    public IClipboard Clipboard => LinuxClipboard.Clipboard;
 }

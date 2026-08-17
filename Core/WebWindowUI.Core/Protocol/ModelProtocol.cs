@@ -552,7 +552,7 @@ public static class ModelProtocol
             var objs = new List<object?>();
             foreach (var item in list.Items)
             {
-                if (!TryFromModelValue(item, typeof(object), out object? r))
+                if (!TryFromModelValue(item, out object? r))
                     return false;
                 objs.Add(r);
             }
@@ -639,7 +639,7 @@ public static class ModelProtocol
             var dict = new Dictionary<string, object?>();
             foreach (var kv in EnumerateMapEntries(map))
             {
-                if (!TryFromModelValue(kv.Value, typeof(object), out object? r))
+                if (!TryFromModelValue(kv.Value, out object? r))
                     return false;
                 dict[kv.Key] = r;
             }

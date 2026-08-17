@@ -61,11 +61,10 @@ internal sealed class StaThreadPump
 
     /// <summary>
     /// 确保泵已初始化完成（消息窗口 + SynchronizationContext 已绑定泵线程）。
+    /// 泵线程死时其初始化错误会经 _initError 抛出（不能提前 return——那会把「泵没起来」伪装成挂起）。
     /// </summary>
     private void WaitReady()
     {
-        if (_ready.IsSet)
-            return;
         if (!_ready.Wait(10_000))
             throw new TimeoutException("STA 泵初始化超时", _initError);
         if (_initError is not null)

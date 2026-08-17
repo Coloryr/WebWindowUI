@@ -1,6 +1,7 @@
 using Microsoft.Web.WebView2.Core;
 using System.Text;
 using WebWindowUI.Core;
+using WebWindowUI.Core.Platform;
 using WebWindowUI.Natives.Windows;
 
 namespace WebWindowUI.Platforms.Windows;
@@ -15,6 +16,11 @@ public sealed class WindowsPlatform : IPlatform
     private static readonly Win32MessageLoop _message = new();
 
     public IPlatformDialog Dialog => Win32Dialog.Dialog;
+
+    /// <summary>
+    /// 平台剪贴板（Win32 实现）。
+    /// </summary>
+    public IClipboard Clipboard => Win32Clipboard.Instance;
 
     /// <summary>
     /// 初始化 Win32 消息循环并异步创建 WebView2 环境。
@@ -113,8 +119,8 @@ public sealed class WindowsPlatform : IPlatform
             {
                 string headers =
                     $"Content-Type: {mimeType}\r\n" +
-                    $"Cache-Control: {ResourceHeaders.CacheControl(relative!)}\r\n" +
-                    $"{ResourceHeaders.AccessControlAllowOrigin}\r\n" +
+                    $"Cache-Control: {WebWindowResource.CacheControl(relative!)}\r\n" +
+                    $"{WebWindowResource.AccessControlAllowOrigin}\r\n" +
                     $"\r\n";
 
                 args.Response = _coreWebView2Environment.CreateWebResourceResponse(
@@ -138,16 +144,22 @@ public sealed class WindowsPlatform : IPlatform
             "Not Found",
             $"Content-Type: text/plain\r\n" +
             $"Cache-Control: no-store\r\n" +
-            $"{ResourceHeaders.AccessControlAllowOrigin}" +
+            $"{WebWindowResource.AccessControlAllowOrigin}" +
             $"\r\n");
     }
 
     /// <summary>
-    /// 创建窗口后端。
+    /// 运行模态消息循环直到窗口关闭（ShowDialog 用；Win32 内部不可被平台层直引，经此处暴露）。
+    /// </summary>
+    /// <param name="isDone">窗口是否已关闭。</param>
+    internal static void RunModalLoop(Func<bool> isDone) => _message.RunModalLoop(isDone);
+
+    /// <summary>
+    /// 创建平台窗口（尚未显示）。
     /// </summary>
     /// <param name="options">窗口选项。</param>
-    /// <returns>窗口后端。</returns>
-    public IWindowBackend CreateWindow(WebWindowOptions options)
+    /// <returns>平台窗口。</returns>
+    public WebWindow CreateWindow(WebWindowOptions options)
     {
         return new WindowsWindow(options);
     }

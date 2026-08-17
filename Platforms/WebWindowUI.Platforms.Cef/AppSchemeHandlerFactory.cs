@@ -83,7 +83,7 @@ internal sealed class AppResourceHandler : CefResourceHandler
             // CEF 不识别带 charset 的 MIME（按纯文本显示源码），`;` 剥离。勿设 CefResponse.Charset。
             _mime = mimeType!.Split(';', 2)[0].Trim();
             _status = 200;
-            _cacheControl = ResourceHeaders.CacheControl(relative!);
+            _cacheControl = WebWindowResource.CacheControl(relative!);
         }
         else
         {
@@ -118,7 +118,7 @@ internal sealed class AppResourceHandler : CefResourceHandler
                 {
                     // fetch 把 JS 字符串按 UTF-8 编码成 body 字节，先解码回 NUL 转义串，再还原成 protobuf 字节
                     var escaped = Encoding.UTF8.GetString([.. merged]);
-                    payload = WebView2StringCodec.Decode(escaped);
+                    payload = StringCodec.Decode(escaped);
                 }
             }
         }

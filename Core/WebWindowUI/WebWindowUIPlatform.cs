@@ -1,4 +1,5 @@
 using WebWindowUI.Core;
+using WebWindowUI.Core.Platform;
 
 namespace WebWindowUI;
 

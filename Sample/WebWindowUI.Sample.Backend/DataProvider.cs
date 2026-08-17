@@ -1,4 +1,4 @@
-using WebWindowUI.Core;
+using WebWindowUI.Core.Protocol;
 
 namespace WebWindowUI.Sample;
 

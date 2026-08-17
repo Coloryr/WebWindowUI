@@ -1,10 +1,16 @@
 using System.Runtime.InteropServices;
-using WebWindowUI.Core;
+using WebWindowUI.Core.Platform;
 
 namespace WebWindowUI.Natives.Windows;
 
+/// <summary>
+/// Win32 对话框实现（消息框/文件选择/目录选择/保存）。
+/// </summary>
 public class Win32Dialog : IPlatformDialog
 {
+    /// <summary>
+    /// 单例。
+    /// </summary>
     public static readonly Win32Dialog Dialog = new();
 
     /// <summary>
@@ -22,31 +28,23 @@ public class Win32Dialog : IPlatformDialog
     /// 打开系统文件选择对话框（OFN_EXPLORER）。
     /// 返回 null = 用户取消；否则为选中的文件完整路径列表（可能为空列表）。
     /// </summary>
-    /// <param name="title">对话框标题。</param>
-    /// <param name="filter">过滤器，如 "所有文件 (*.*)\0*.*\0文本文件 (*.txt)\0*.txt\0"（末尾 \0 由封送器补成双 NUL）。</param>
-    /// <param name="initialDirectory">基础路径（初始目录，null = 系统默认）。</param>
-    /// <param name="fileMustExist">是否为文件：true = 只能选已存在的文件（OFN_FILEMUSTEXIST）。</param>
-    /// <param name="allowMultiSelect">是否允许多选（OFN_ALLOWMULTISELECT）。</param>
-    public List<string>? OpenFileDialog(
-        string title,
-        string filter,
-        string? initialDirectory = null,
-        bool fileMustExist = true,
-        bool allowMultiSelect = true)
+    /// <param name="option">对话框选项。</param>
+    /// <returns>选中的文件路径；取消为 null。</returns>
+    public List<string>? OpenFileDialog(SelectDialogOption option)
     {
         uint flags = Win32.OFN_EXPLORER | Win32.OFN_PATHMUSTEXIST;
-        if (fileMustExist)
+        if (option.SelectMustExist)
             flags |= Win32.OFN_FILEMUSTEXIST;
-        if (allowMultiSelect)
+        if (option.AllowMultiSelect)
             flags |= Win32.OFN_ALLOWMULTISELECT;
 
         var ofn = new Win32.OPENFILENAME
         {
             lStructSize = Marshal.SizeOf<Win32.OPENFILENAME>(),
-            lpstrTitle = title,
-            lpstrFilter = filter,
-            lpstrInitialDir = initialDirectory,
-            nMaxFile = allowMultiSelect ? Win32.OFN_MULTISELECT_BUFFER : Win32.OFN_SINGLE_SELECT_BUFFER,
+            lpstrTitle = option.Title,
+            lpstrFilter = option.Filter,
+            lpstrInitialDir = option.InitialDirectory,
+            nMaxFile = option.AllowMultiSelect ? Win32.OFN_MULTISELECT_BUFFER : Win32.OFN_SINGLE_SELECT_BUFFER,
             Flags = (int)flags,
         };
 
@@ -69,23 +67,57 @@ public class Win32Dialog : IPlatformDialog
     }
 
     /// <summary>
+    /// 打开系统文件夹选择对话框（SHBrowseForFolderW，BIF_NEWDIALOGSTYLE）。
+    /// 返回 null = 用户取消；否则为选中的目录完整路径。
+    /// </summary>
+    /// <param name="option">对话框选项（AllowMultiSelect 忽略——系统对话框单选）。</param>
+    /// <returns>选中的目录路径；取消为 null。</returns>
+    public List<string>? OpenFolderDialog(SelectDialogOption option)
+    {
+        var bi = new Win32.BROWSEINFOW
+        {
+            lpszTitle = option.Title,
+            ulFlags = Win32.BIF_RETURNONLYFSDIRS | Win32.BIF_NEWDIALOGSTYLE,
+        };
+        IntPtr pidl = Win32.SHBrowseForFolderW(ref bi);
+        if (pidl == IntPtr.Zero)
+            return null; // 用户取消
+
+        try
+        {
+            IntPtr pathBuffer = Marshal.AllocHGlobal(Win32.OFN_SINGLE_SELECT_BUFFER * sizeof(char));
+            try
+            {
+                if (!Win32.SHGetPathFromIDListW(pidl, pathBuffer))
+                    return null;
+                return [Marshal.PtrToStringUni(pathBuffer)!];
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(pathBuffer);
+            }
+        }
+        finally
+        {
+            Win32.CoTaskMemFree(pidl);
+        }
+    }
+
+    /// <summary>
     /// 打开系统保存对话框（OFN_OVERWRITEPROMPT）。单选。
     /// 返回 null = 用户取消；否则为选中的文件完整路径。
     /// </summary>
-    /// <param name="title">对话框标题。</param>
-    /// <param name="filter">过滤器，格式同 <see cref="OpenFileDialog"/>。</param>
-    /// <param name="defaultFileName">文件名编辑框初值（可为 null）。</param>
-    /// <param name="defaultExt">用户未输入扩展名时自动补的扩展名（不带点，可为 null）。</param>
-    public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
+    /// <param name="option">对话框选项（默认文件名不在选项里，从 Filter 提取首个扩展名作 defExt）。</param>
+    /// <returns>选中的文件路径；取消为 null。</returns>
+    public string? SaveFileDialog(SelectDialogOption option)
     {
         var ofn = new Win32.OPENFILENAME
         {
             lStructSize = Marshal.SizeOf<Win32.OPENFILENAME>(),
-            lpstrTitle = title,
-            lpstrFilter = filter,
-            lpstrFile = defaultFileName,
-            nMaxFile = 260,
-            lpstrDefExt = defaultExt,
+            lpstrTitle = option.Title,
+            lpstrFilter = option.Filter,
+            nMaxFile = Win32.OFN_SINGLE_SELECT_BUFFER,
+            lpstrDefExt = ExtractDefaultExt(option.Filter),
             Flags = (int)(Win32.OFN_OVERWRITEPROMPT | Win32.OFN_HIDEREADONLY | Win32.OFN_PATHMUSTEXIST),
         };
 
@@ -94,5 +126,26 @@ public class Win32Dialog : IPlatformDialog
 
         // 单选返回普通 NUL 结尾路径（无 OFN_ALLOWMULTISELECT，无内嵌 NUL）
         return ofn.lpstrFile;
+    }
+
+    /// <summary>
+    /// 从过滤器（"描述\0*.ext\0"）提取首个扩展名（不带点），供保存对话框自动补扩展名。
+    /// </summary>
+    /// <param name="filter">Windows 格式过滤器。</param>
+    /// <returns>扩展名；无则 null。</returns>
+    private static string? ExtractDefaultExt(string? filter)
+    {
+        if (string.IsNullOrEmpty(filter))
+            return null;
+        foreach (var pattern in filter.Split('\0'))
+        {
+            var star = pattern.IndexOf('*');
+            if (star < 0)
+                continue;
+            var ext = pattern[(star + 1)..].TrimStart('.');
+            if (ext.Length > 0 && !ext.Contains('*') && !ext.Contains('?'))
+                return ext;
+        }
+        return null;
     }
 }

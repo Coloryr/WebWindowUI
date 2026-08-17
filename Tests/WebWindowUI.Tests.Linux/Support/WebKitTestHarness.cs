@@ -5,24 +5,61 @@ using WebWindowUI.Sample;
 namespace WebWindowUI.Tests.Linux.Support;
 
 /// <summary>
-/// 测试用窗口宿主：真实 libwebkit2gtk-4.1 + 真实构建产物 wwwroot（经 ProjectReference 传递复制到测试 bin）。
-/// 无头模式（<see cref="WebWindowOptions.Headless"/>）：GTK 窗口永不 show，但导航/DOM/JS/消息通道照常，
+/// 测试用窗口控制器：经 <see cref="WebWindowPlatform.Current.CreateWindow"/> 建窗（真实 libwebkit2gtk-4.1 +
+/// 真实构建产物 wwwroot，经 ProjectReference 传递复制到测试 bin）。无头模式
+/// （<see cref="WebWindowOptions.Headless"/>）：GTK 窗口永不 show，但导航/DOM/JS/消息通道照常，
 /// 测试全程不出现在屏幕与任务栏。
 /// </summary>
-internal sealed class TestWindow(string windowPath, string title) 
-    : WebWindow(new WebWindowOptions(windowPath) 
-    {
-        Title = title,
-        Width = 720,
-        Headless = true,
-        Height = 480
-    })
+internal sealed class TestWindow
 {
+    /// <summary>
+    /// 框架窗口（构造即创建；Model 绑定与 Show 由宿主负责）。
+    /// </summary>
+    public WebWindow Window { get; }
+
+    /// <summary>
+    /// 窗口数据模型（转发框架窗口）。
+    /// </summary>
+    public WebWindowModel? Model { get => Window.Model; set => Window.Model = value; }
+
+    /// <summary>
+    /// 页面加载完成（转发框架窗口 Loaded）。
+    /// </summary>
+    public event EventHandler? Loaded;
+
+    public TestWindow(string windowPath, string title)
+    {
+        Window = WebWindowPlatform.Current.CreateWindow(new WebWindowOptions(windowPath)
+        {
+            Title = title,
+            Width = 720,
+            Headless = true,
+            Height = 480
+        });
+        Window.Loaded += (_, _) => Loaded?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// 显示窗口（无头模式只加载页面）。
+    /// </summary>
+    public void Show() => Window.Show();
+
+    /// <summary>
+    /// 关闭窗口。
+    /// </summary>
+    public void Close() => Window.Close(null);
+
+    /// <summary>
+    /// 在页面里执行 JS 并返回 JSON 结果。
+    /// </summary>
+    /// <param name="script">要执行的 JS。</param>
+    /// <returns>JS 执行结果（JSON 字符串）。</returns>
+    public Task<string> ExecuteScriptAsync(string script) => Window.ExecuteScriptAsync(script);
 }
 
 /// <summary>
 /// 真 WebKitGTK 端到端测试宿主（对应 WebView2TestHarness）。流程：模型挂到窗口 → Show() → 等
-/// NavigationCompleted → 等页面桥接（window.__model）就绪 → 执行测试体；全部在 GtkPump 泵线程内跑。
+/// Loaded → 等页面桥接（window.__model）就绪 → 执行测试体；全部在 GtkPump 泵线程内跑。
 /// </summary>
 internal static class WebKitTestHarness
 {
@@ -40,7 +77,7 @@ internal static class WebKitTestHarness
                 win.Model = model; // 必须在 Show() 前设置，快照才含初始值
 
                 var nav = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                win.NavigationCompleted += () => nav.TrySetResult(true);
+                win.Loaded += (_, _) => nav.TrySetResult(true);
 
                 win.Show(); // 无头：只加载页面，窗口永不显示
                 await nav.Task.WaitAsync(t);
@@ -84,8 +121,8 @@ internal static class WebKitTestHarness
 
                 var navA = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 var navB = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                winA.NavigationCompleted += () => navA.TrySetResult(true);
-                winB.NavigationCompleted += () => navB.TrySetResult(true);
+                winA.Loaded += (_, _) => navA.TrySetResult(true);
+                winB.Loaded += (_, _) => navB.TrySetResult(true);
 
                 winA.Show(); // 无头：只加载页面，窗口永不显示
                 await navA.Task.WaitAsync(t);

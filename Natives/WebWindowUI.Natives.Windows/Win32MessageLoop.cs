@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Runtime.InteropServices;
-using WebWindowUI.Core;
+using WebWindowUI.Core.Platform;
 
 namespace WebWindowUI.Natives.Windows;
 
@@ -93,6 +93,21 @@ public class Win32MessageLoop : IMessageLoop
     public void MessageLoop()
     {
         Win32.MessageLoop();
+    }
+
+    /// <summary>
+    /// 运行模态消息循环：泵消息直到 <paramref name="isDone"/> 返回 true 或收到 WM_QUIT（模态对话框专用）。
+    /// </summary>
+    /// <param name="isDone">窗口是否已关闭（每轮消息后检查）。</param>
+    public void RunModalLoop(Func<bool> isDone)
+    {
+        while (!isDone())
+        {
+            if (Win32.GetMessageW(out Win32.MSG msg, IntPtr.Zero, 0, 0) == 0)
+                break; // WM_QUIT
+            Win32.TranslateMessage(ref msg);
+            Win32.DispatchMessageW(ref msg);
+        }
     }
 
     /// <summary>

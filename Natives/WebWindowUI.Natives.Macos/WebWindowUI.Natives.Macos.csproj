@@ -7,15 +7,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
-    <PackageId>WebWindowUI.Platforms.MacOS</PackageId>
-    <Description>WebWindowUI macOS 平台实现：NSWindow + WKWebView。由核心包 WebWindowUI 按平台自动引入。</Description>
-    <PackageTags>webwindowui;wkwebview;macos</PackageTags>
+    <PackageId>WebWindowUI.Natives.Macos</PackageId>
+    <Description>WebWindowUI macOS 原生层（对话框等，镜像 Natives.Windows/Linux）。</Description>
+    <PackageTags>webwindowui;macos</PackageTags>
     <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
-  </PropertyGroup>
-
-  <PropertyGroup>
-    <DefineConstants>$(DefineConstants);MACOS</DefineConstants>
-    <NoWarn>$(NoWarn);CA2255</NoWarn>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(_WWUI_IsMacHost)' != 'true'">
@@ -23,7 +18,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Natives\WebWindowUI.Natives.Macos\WebWindowUI.Natives.Macos.csproj" />
-    <ProjectReference Include="..\..\Core\WebWindowUI.Core\WebWindowUI.Core.csproj" PrivateAssets="all" />
+    <ProjectReference Include="..\..\Core\WebWindowUI.Core\WebWindowUI.Core.csproj" />
   </ItemGroup>
 </Project>

@@ -74,6 +74,9 @@ internal static partial class Win32
     public const int OFN_MULTISELECT_BUFFER = 32768;
     public const int OFN_SINGLE_SELECT_BUFFER = 4096;
 
+    public const uint BIF_RETURNONLYFSDIRS = 0x00000001;
+    public const uint BIF_NEWDIALOGSTYLE = 0x00000040;
+
     private const int HWND_MESSAGE = -3;
 
     private static IntPtr _marshalHwnd;
@@ -434,6 +437,78 @@ internal static partial class Win32
         public int FlagsEx;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct BROWSEINFOW
+    {
+        public IntPtr hwndOwner;
+        public IntPtr pidlRoot;
+        public string? pszDisplayName;   // out 缓冲：返回选中项显示名（传 null 则不需要）
+        public string? lpszTitle;        // 对话框标题
+        public uint ulFlags;
+        public IntPtr lpfn;              // 回调（可为 IntPtr.Zero）
+        public IntPtr lParam;
+        public int iImage;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct DROPFILES
+    {
+        public int pFiles;   // 文件列表偏移（通常 20）
+        public int pt_x;
+        public int pt_y;
+        public int fNC;
+        public int fWide;    // 非 0 = UTF-16 路径列表
+    }
+
+    [CustomMarshaller(typeof(BROWSEINFOW), MarshalMode.Default, typeof(BrowseInfoMarshaller))]
+    internal static class BrowseInfoMarshaller
+    {
+        /// <summary>
+        /// 原生布局（tagBROWSEINFOW），字段序与 BROWSEINFOW 一致，字符串为 LPWSTR。
+        /// </summary>
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct Native
+        {
+            public IntPtr hwndOwner;
+            public IntPtr pidlRoot;
+            public IntPtr pszDisplayName;
+            public IntPtr lpszTitle;
+            public uint ulFlags;
+            public IntPtr lpfn;
+            public IntPtr lParam;
+            public int iImage;
+        }
+
+        public static Native ConvertToUnmanaged(BROWSEINFOW managed) => new()
+        {
+            hwndOwner = managed.hwndOwner,
+            pidlRoot = managed.pidlRoot,
+            pszDisplayName = IntPtr.Zero, // 不需要显示名
+            lpszTitle = managed.lpszTitle is null ? IntPtr.Zero : Marshal.StringToCoTaskMemUni(managed.lpszTitle),
+            ulFlags = managed.ulFlags,
+            lpfn = managed.lpfn,
+            lParam = managed.lParam,
+            iImage = managed.iImage,
+        };
+
+        public static BROWSEINFOW ConvertToManaged(Native unmanaged) => new()
+        {
+            hwndOwner = unmanaged.hwndOwner,
+            pidlRoot = unmanaged.pidlRoot,
+            lpszTitle = unmanaged.lpszTitle == IntPtr.Zero ? null : Marshal.PtrToStringUni(unmanaged.lpszTitle),
+            ulFlags = unmanaged.ulFlags,
+            lpfn = unmanaged.lpfn,
+            lParam = unmanaged.lParam,
+            iImage = unmanaged.iImage,
+        };
+
+        /// <summary>
+        /// 释放 ConvertToUnmanaged 分配的字符串（lpszTitle）；句柄/回调字段不动。
+        /// </summary>
+        public static void Free(Native unmanaged)
+            => Marshal.FreeCoTaskMem(unmanaged.lpszTitle);
+    }
+
     // ------------------------------------------------------------------
     // P/Invoke
     // ------------------------------------------------------------------
@@ -445,6 +520,67 @@ internal static partial class Win32
     [LibraryImport("comdlg32.dll", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetSaveFileNameW([MarshalUsing(typeof(OpenFileNameMarshaller))] ref OPENFILENAME lpofn);
+
+    [LibraryImport("shell32.dll")]
+    public static partial IntPtr SHBrowseForFolderW([MarshalUsing(typeof(BrowseInfoMarshaller))] ref BROWSEINFOW lpbi);
+
+    [LibraryImport("shell32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SHGetPathFromIDListW(IntPtr pidl, IntPtr pszPath);
+
+    [LibraryImport("ole32.dll")]
+    public static partial void CoTaskMemFree(IntPtr pv);
+
+    // ---- 剪贴板（user32/kernel32）----
+    public const uint CF_TEXT = 1;
+    public const uint CF_BITMAP = 2;
+    public const uint CF_DIB = 8;
+    public const uint CF_UNICODETEXT = 13;
+    public const uint CF_HDROP = 15;
+
+    public const uint GMEM_MOVEABLE = 0x0002;
+    public const uint GMEM_ZEROINIT = 0x0040;
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool OpenClipboard(IntPtr hWndNewOwner);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool EmptyClipboard();
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial IntPtr SetClipboardData(uint uFormat, IntPtr hMem);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    public static partial IntPtr GetClipboardData(uint uFormat);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool CloseClipboard();
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsClipboardFormatAvailable(uint format);
+
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    public static partial uint RegisterClipboardFormatW(string lpszFormat);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial IntPtr GlobalAlloc(uint uFlags, nuint dwBytes);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial IntPtr GlobalLock(IntPtr hMem);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GlobalUnlock(IntPtr hMem);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial IntPtr GlobalFree(IntPtr hMem);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    public static partial nuint GlobalSize(IntPtr hMem);
 
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.I4)]
@@ -538,4 +674,102 @@ internal static partial class Win32
 
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16)]
     public static partial IntPtr LoadIconW(IntPtr hInstance, int lpIconName);
+
+    // ---- 窗口状态（样式位/消息/显示命令，供 Win32NativeWindow 窗口状态面）----
+    public const int GWL_STYLE = -16;
+    public const int GWL_EXSTYLE = -20;
+
+    public const int WS_OVERLAPPED = 0x00000000;
+    public const int WS_CAPTION = 0x00C00000;
+    public const int WS_SYSMENU = 0x00080000;
+    public const int WS_THICKFRAME = 0x00040000;
+    public const int WS_MINIMIZEBOX = 0x00020000;
+    public const int WS_MAXIMIZEBOX = 0x00010000;
+    public const int WS_MINIMIZE = 0x20000000;
+    public const int WS_MAXIMIZE = 0x01000000;
+    public const int WS_VISIBLE = 0x10000000;
+
+    public const uint WS_EX_TOOLWINDOW = 0x00000080;
+    public const uint WS_EX_DLGMODALFRAME = 0x00000001;
+
+    public const int SW_MINIMIZE = 6;
+    public const int SW_MAXIMIZE = 3;
+
+    public const uint SWP_NOSIZE = 0x0001;
+    public const uint SWP_NOMOVE = 0x0002;
+    public const uint SWP_NOZORDER = 0x0004;
+    public const uint SWP_NOACTIVATE = 0x0010;
+    public const uint SWP_FRAMECHANGED = 0x0020;
+
+    public const uint WM_GETMINMAXINFO = 0x0024;
+    public const uint WM_MOVE = 0x0003;
+    public const uint WM_ACTIVATE = 0x0006;
+
+    public const int SIZE_RESTORED = 0;
+    public const int SIZE_MINIMIZED = 1;
+    public const int SIZE_MAXIMIZED = 2;
+
+    public const int WA_INACTIVE = 0;
+    public const int WA_ACTIVE = 1;
+
+    public const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
+    public const uint MONITORINFOF_PRIMARY = 0x00000001;
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MINMAXINFO
+    {
+        public POINT ptReserved;
+        public POINT ptMaxSize;
+        public POINT ptMaxPosition;
+        public POINT ptMinTrackSize;
+        public POINT ptMaxTrackSize;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
+    public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
+
+    [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
+    public static partial IntPtr GetWindowLongPtrW(IntPtr hWnd, int nIndex);
+
+    [LibraryImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
+    public static partial IntPtr SetWindowLongPtrW(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool IsZoomed(IntPtr hWnd);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool AdjustWindowRectEx(ref RECT lpRect, int dwStyle, [MarshalAs(UnmanagedType.Bool)] bool bMenu, uint dwExStyle);
+
+    [LibraryImport("user32.dll")]
+    public static partial IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
 }

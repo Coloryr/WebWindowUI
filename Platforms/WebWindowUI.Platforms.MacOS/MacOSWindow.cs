@@ -1,47 +1,59 @@
+using System.Runtime.InteropServices;
 using System.Text;
 using WebKit;
 using WebWindowUI.Core;
+using WebWindowUI.Core.Platform;
 using WebWindowUI.Core.Protocol;
+using WebWindowUI.Natives.Macos;
 
 namespace WebWindowUI.Platforms.MacOS;
 
 /// <summary>
 /// macOS 平台：NSWindow + WKWebView 的窗口，可创建多个实例。自定义 scheme（WKURLSchemeHandler）
 /// 与 script message handler 都按窗口独立注册（不像 Linux 共享默认 WebContext 需要进程级注册）。
+/// 窗口状态面经 <see cref="MacOSNativeWindow"/> 真实现；Model 双向绑定在基类契约内完成。
+/// Cocoa 只允许主线程访问，所有原生操作经 <see cref="RunOnMainThread"/> marshal。
 /// </summary>
-public sealed class MacOSWindow : IWindowBackend
+public sealed class MacOSWindow : WebWindow
 {
     private const string BridgeHandlerName = "wwui"; // 与前端桥 webwindowui-bridge 的 HANDLER_NAME 一致
 
-    private readonly NSWindow _window;
+    private readonly MacOSNativeWindow _nativeWindow;
     private readonly WKWebView _webView;
-    private readonly WebWindowOptions _options;
+    private readonly Action<byte[]> _modelPushHandler;
+    private readonly ManualResetEventSlim _closedEvent = new(false);
+    private string _title;
+    private WebWindowModel? _model;
+    private bool _isLoaded;
     private bool _closed;
 
     // 强引用保留 delegate/handler 对象——.NET 绑定不 retain ObjC 委托，被 GC 会静默失效
-    private readonly MacWindowDelegate _windowDelegate;
     private readonly MacNavigationDelegate _navigationDelegate;
     private readonly MacScriptMessageHandler _scriptMessageHandler;
     private readonly MacSchemeHandler _schemeHandler;
 
     /// <summary>
-    /// 窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。
+    /// 原生窗口（平台窗口内部使用）。
     /// </summary>
-    public event Action? Closed;
+    internal override INativeWindow NativeWindow
+    {
+        get => _nativeWindow;
+        set => throw new NotSupportedException("MacOSWindow 自建原生窗口，不支持替换。");
+    }
 
     /// <summary>
     /// 构造窗口：挂关闭/导航/消息/scheme 四类委托，建 WKWebView 并设为窗口内容。
     /// </summary>
-    /// <param name="window">原生窗口。</param>
     /// <param name="options">窗口选项。</param>
-    private MacOSWindow(NSWindow window, WebWindowOptions options)
+    internal MacOSWindow(WebWindowOptions options) : base(options)
     {
-        _options = options;
-        _window = window;
+        _title = options.Title;
+        _modelPushHandler = ModelPushed;
+        _nativeWindow = new MacOSNativeWindow(options);
+        NSWindow window = _nativeWindow.Window;
 
         // 窗口关闭（windowWillClose:）→ 通知框架关闭
-        _windowDelegate = new MacWindowDelegate(OnWindowWillClose);
-        window.Delegate = _windowDelegate;
+        _nativeWindow.Destory += OnWindowWillClose;
 
         // 自定义 scheme（app:// / appdata://）按窗口独立注册；回调走静态 WebWindowResource 分派
         _schemeHandler = new MacSchemeHandler();
@@ -50,7 +62,7 @@ public sealed class MacOSWindow : IWindowBackend
         config.SetUrlSchemeHandler(_schemeHandler, WebWindowResource.SchemeData);
 
         // JS → native 通道：页面经 window.webkit.messageHandlers.wwui.postMessage(...) 回传 NUL 转义串
-        _scriptMessageHandler = new MacScriptMessageHandler(bytes => MessageReceived?.Invoke(bytes));
+        _scriptMessageHandler = new MacScriptMessageHandler(OnBackendMessageReceived);
         config.UserContentController.AddScriptMessageHandler(_scriptMessageHandler, BridgeHandlerName);
 
         _webView = new WKWebView(CGRect.Empty, config)
@@ -61,98 +73,235 @@ public sealed class MacOSWindow : IWindowBackend
         window.ContentView = _webView;
 
         // 导航完成 → 页面就绪，推初始快照
-        _navigationDelegate = new MacNavigationDelegate(() => NavigationCompleted?.Invoke());
+        _navigationDelegate = new MacNavigationDelegate(OnNavigationFinished);
         _webView.NavigationDelegate = _navigationDelegate;
     }
 
     /// <summary>
-    /// 创建并注册一个尚未显示的窗口。
+    /// 窗口标题：get 返回跟踪字段；set 同步到标题栏（构造期基类先赋值、原生窗口尚未建，跳过原生调用）。
     /// </summary>
-    public static MacOSWindow Create(string title, WebWindowOptions options, int width, int height)
+    public override string Title
     {
-        var window = new NSWindow(
-            new CGRect(0, 0, width, height), // content rect
-            NSWindowStyle.Titled | NSWindowStyle.Closable | NSWindowStyle.Resizable | NSWindowStyle.Miniaturizable,
-            NSBackingStore.Buffered,
-            false) // defer: 立即创建原生窗口
+        get => _title;
+        set
         {
-            Title = title,
-#pragma warning disable CS0618 // ReleasedWhenClosed 属性过时（新 API ReleaseWhenClosed() 语义相反：关闭即释放，这里正是要防止它）
-            ReleasedWhenClosed = false, // 否则 Close() 后 NSObject 可能被过度释放
-#pragma warning restore CS0618
-        };
-        return new MacOSWindow(window, options);
+            _title = value;
+            if (_nativeWindow is not null)
+                RunOnMainThread(() => _nativeWindow.SetTitle(value));
+        }
     }
+
+    /// <summary>
+    /// 窗口数据模型：绑定时订阅模型推送（属性变化/集合变更→PostMessage），解绑时退订；
+    /// 页面加载完成后补发完整快照。同一实例绑多窗口 = 共享广播。
+    /// </summary>
+    public override WebWindowModel? Model
+    {
+        get => _model;
+        set
+        {
+            if (_model == value)
+                return;
+            _model?.UnsubscribePushed(_modelPushHandler);
+            _model = value;
+            _model?.SubscribePushed(_modelPushHandler);
+            if (_model is not null && _isLoaded)
+                PostMessage(_model.BuildSnapshotEnvelope());
+        }
+    }
+
+    /// <summary>
+    /// 窗口装饰样式。
+    /// </summary>
+    public override SystemDecorations SystemDecorations
+    {
+        get => GetNative(() => _nativeWindow.SystemDecorations);
+        set => RunOnMainThread(() => _nativeWindow.SystemDecorations = value);
+    }
+
+    /// <summary>
+    /// 窗口状态。
+    /// </summary>
+    public override WindowState WindowState
+    {
+        get => GetNative(() => _nativeWindow.WindowState);
+        set => RunOnMainThread(() => _nativeWindow.WindowState = value);
+    }
+
+    /// <summary>
+    /// 窗口位置。
+    /// </summary>
+    public override Point2I Position
+    {
+        get => GetNative(() => _nativeWindow.Position);
+        set => RunOnMainThread(() => _nativeWindow.Position = value);
+    }
+
+    /// <summary>
+    /// 窗口尺寸。
+    /// </summary>
+    public override Point2I Size
+    {
+        get => GetNative(() => _nativeWindow.Size);
+        set => RunOnMainThread(() => _nativeWindow.Size = value);
+    }
+
+    /// <summary>
+    /// 最小尺寸（0 = 不限）。
+    /// </summary>
+    public override Point2I MinSize
+    {
+        get => _nativeWindow.MinSize;
+        set => _nativeWindow.MinSize = value;
+    }
+
+    /// <summary>
+    /// 最大尺寸（0 = 不限）。
+    /// </summary>
+    public override Point2I MaxSize
+    {
+        get => _nativeWindow.MaxSize;
+        set => _nativeWindow.MaxSize = value;
+    }
+
+    /// <summary>
+    /// 是否显示在任务栏（Dock）：macOS 按 App 不按窗口，no-op（文档注明）。
+    /// </summary>
+    public override bool ShowInTaskbar
+    {
+        get => _nativeWindow.ShowInTaskbar;
+        set => _nativeWindow.ShowInTaskbar = value;
+    }
+
+    /// <summary>
+    /// 是否可调整大小。
+    /// </summary>
+    public override bool CanResize
+    {
+        get => _nativeWindow.CanResize;
+        set => RunOnMainThread(() => _nativeWindow.CanResize = value);
+    }
+
+    /// <summary>
+    /// 是否可最小化。
+    /// </summary>
+    public override bool CanMinimize
+    {
+        get => _nativeWindow.CanMinimize;
+        set => RunOnMainThread(() => _nativeWindow.CanMinimize = value);
+    }
+
+    /// <summary>
+    /// 是否可最大化：macOS 无独立开关，no-op（文档注明）。
+    /// </summary>
+    public override bool CanMaximize
+    {
+        get => _nativeWindow.CanMaximize;
+        set => _nativeWindow.CanMaximize = value;
+    }
+
+    /// <summary>
+    /// 是否对话框式窗口：macOS 用 NSPanel，运行时不可切换，no-op（文档注明）。
+    /// </summary>
+    public override bool IsDialog
+    {
+        get => _nativeWindow.IsDialog;
+        set => _nativeWindow.IsDialog = value;
+    }
+
+    /// <summary>
+    /// 窗口当前是否活动（由系统推导；置前台请用 <see cref="Activate"/>）。
+    /// </summary>
+    public override bool IsActive
+    {
+        get => GetNative(() => _nativeWindow.IsActive);
+        set { }
+    }
+
+    /// <summary>
+    /// 窗口所在显示器。
+    /// </summary>
+    public override Screen Screens => GetNative(() => _nativeWindow.Screens);
 
     /// <summary>
     /// 显示窗口并加载首页。Cocoa 只允许主线程访问，非主线程调用时 marshal 回主线程。
     /// 无头模式下跳过 MakeKeyAndOrderFront（窗口不出现在屏幕/Dock），但照常加载首页。
     /// </summary>
-    public void Show()
+    public override void Show(WebWindow? Parent = null)
     {
         RunOnMainThread(() =>
         {
-            if (!_options.Headless)
+            if (!Options.Headless)
             {
-                _window.MakeKeyAndOrderFront(null);
-                _window.MakeFirstResponder(_webView);
+                _nativeWindow.Show();
             }
-            var url = WebWindowResource.GetWindowIndexUrl(_options.WindowPath);
+            var url = WebWindowResource.GetWindowIndexUrl(Options.WindowPath);
             WebWindowLog.Debug($"macos show {url}");
             _webView.LoadRequest(NSUrlRequest.FromUrl(NSUrl.FromString(url)!));
         });
     }
 
     /// <summary>
+    /// 模态显示：显示窗口后阻塞调用线程直到关闭。主线程调用走裸 CFRunLoopRunInMode 泵（排干主队列，
+    /// 派发 WKWebView 事件）；后台线程直接等待（关闭由主事件循环泵触发）。对话框关闭结果经 Close(result) 传入。
+    /// </summary>
+    public override void ShowDialog(WebWindow? Parent = null)
+    {
+        Show(Parent);
+        if (Environment.CurrentManagedThreadId == MacOSMessageLoopSynchronizationContext.UiThreadId)
+        {
+            using var mode = new NSString("kCFRunLoopDefaultMode"); // 强引用保住 CFString（Handle 别名不 retain）
+            IntPtr modeHandle = mode.Handle;
+            while (!_closed)
+                CFRunLoopRunInMode(modeHandle, 0.1, false);
+        }
+        else
+        {
+            _closedEvent.Wait();
+        }
+    }
+
+    /// <summary>
     /// 隐藏窗口（不关闭、不销毁）。
     /// </summary>
-    public void Hide() => RunOnMainThread(() => _window.OrderOut(null));
+    public override void Hide() => RunOnMainThread(() => _nativeWindow.Hide());
 
     /// <summary>
     /// 关闭窗口。windowWillClose: → 通知框架关闭。
     /// </summary>
-    public void Close()
+    /// <param name="result">对话框关闭结果（当前平台未使用）。</param>
+    public override void Close(object? result)
     {
         RunOnMainThread(() =>
         {
             if (_closed)
                 return;
-            _window.Close();
+            _nativeWindow.Close();
         });
     }
 
     /// <summary>
     /// 把窗口带到前台并聚焦。进程本身不带 bundle 时无法跨 App 置前，仅激活本窗口。
     /// </summary>
-    public void Activate()
-    {
-        RunOnMainThread(() =>
-        {
-            _window.MakeKeyAndOrderFront(null);
-            _window.MakeFirstResponder(_webView);
-        });
-    }
-
-    /// <summary>
-    /// 修改窗口标题（立即同步到标题栏）。
-    /// </summary>
-    public void SetTitle(string title) => RunOnMainThread(() => _window.Title = title);
+    public override void Activate() => RunOnMainThread(_nativeWindow.Activate);
 
     /// <summary>
     /// 设置窗口图标。macOS 窗口无 per-window 图标（图标属于 App Bundle），无操作。
     /// </summary>
-    public void SetIcon(WindowIcon icon)
+    /// <param name="icon">窗口图标；null 不操作。</param>
+    public override void SetIcon(WindowIcon? icon)
     {
         // 平台限制，文档注明
     }
 
     /// <summary>
-    /// 向页面 JS 发送一条消息。protobuf 字节经 <see cref="WebView2StringCodec"/> 转成不含 NUL 的
+    /// 向页面 JS 发送一条消息。protobuf 字节经 <see cref="StringCodec"/> 转成不含 NUL 的
     /// Latin-1 字符串，再用 <see cref="JsStringLiteral.Quote"/> 嵌进 <c>window.wwuiReceive("...")</c>
     /// 经 evaluateJavaScript 注入。JS 端 wwuiReceive 还原后 protobufjs 解码。
     /// 与 Windows 一致：WKWebView 只能主线程访问，属性变更可能发生在任意线程，先投递回主线程。
     /// </summary>
-    public void PostMessage(byte[] message)
+    /// <param name="message">protobuf 字节。</param>
+    internal override void PostMessage(byte[] message)
     {
         try
         {
@@ -161,7 +310,9 @@ public sealed class MacOSWindow : IWindowBackend
                 MacOSMessageLoopSynchronizationContext.Instance.Post(_ => PostMessage(message), null);
                 return;
             }
-            var js = "window.wwuiReceive(" + JsStringLiteral.Quote(WebView2StringCodec.Encode(message)) + ")";
+            if (_closed)
+                return;
+            var js = "window.wwuiReceive(" + JsStringLiteral.Quote(StringCodec.Encode(message)) + ")";
             _ = _webView.EvaluateJavaScriptAsync(js)
                 .ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
         }
@@ -176,7 +327,9 @@ public sealed class MacOSWindow : IWindowBackend
     /// 与 <see cref="PostMessage"/> 一样：WKWebView 只能主线程访问，非主线程调用时先投递回主线程再执行。
     /// 结果用 JSON.stringify 包一层，与 WebView2 ExecuteScriptAsync 返回「结果值的 JSON 表示」对齐。
     /// </summary>
-    public async Task<string> ExecuteScriptAsync(string script)
+    /// <param name="script">要执行的 JS。</param>
+    /// <returns>JS 执行结果（JSON 字符串）。</returns>
+    internal override async Task<string> ExecuteScriptAsync(string script)
     {
         if (Environment.CurrentManagedThreadId != MacOSMessageLoopSynchronizationContext.UiThreadId)
         {
@@ -194,14 +347,16 @@ public sealed class MacOSWindow : IWindowBackend
     }
 
     /// <summary>
-    /// 页面导航完成时触发（用于在页面就绪后推送 Model 初始快照）。
+    /// 导航完成回调：页面就绪 → Loaded + 补发 Model 快照。
     /// </summary>
-    public event Action? NavigationCompleted;
-
-    /// <summary>
-    /// 页面 JS 通过 script message handler 回传的消息（protobuf 字节，由 NUL 转义串还原）。
-    /// </summary>
-    public event Action<byte[]>? MessageReceived;
+    private void OnNavigationFinished()
+    {
+        WebWindowLog.Debug("macos nav-finished");
+        _isLoaded = true;
+        RaiseLoaded();
+        if (_model is not null)
+            PostMessage(_model.BuildSnapshotEnvelope());
+    }
 
     /// <summary>
     /// 窗口关闭回调：注销窗口表；最后一个窗口关闭 → Terminate 退出主事件循环。
@@ -211,8 +366,29 @@ public sealed class MacOSWindow : IWindowBackend
         if (_closed)
             return;
         _closed = true;
-        Closed?.Invoke();
+        _model?.UnsubscribePushed(_modelPushHandler);
+        _closedEvent.Set();
+        RaiseClosed();
         MacOSPlatform.WindowClose(this); // 注销窗口表；最后一个窗口关闭 → Terminate 退出主事件循环
+    }
+
+    /// <summary>
+    /// 模型推送回调：把变化信封转发给页面。
+    /// </summary>
+    /// <param name="envelope">模型变化信封（protobuf 字节）。</param>
+    private void ModelPushed(byte[] envelope) => PostMessage(envelope);
+
+    /// <summary>
+    /// 在主线程读原生窗口状态（NSWindow 只能主线程访问）。
+    /// </summary>
+    /// <typeparam name="T">状态值类型。</typeparam>
+    /// <param name="getter">读取委托。</param>
+    /// <returns>状态值。</returns>
+    private T GetNative<T>(Func<T> getter)
+    {
+        T result = default!;
+        RunOnMainThread(() => result = getter());
+        return result;
     }
 
     /// <summary>
@@ -230,12 +406,10 @@ public sealed class MacOSWindow : IWindowBackend
     }
 
     /// <summary>
-    /// 窗口关闭回调（windowWillClose:）。
+    /// 排干主队列的嵌套 run loop（模态对话框专用；CFString mode 须强引用保 Handle）。
     /// </summary>
-    private sealed class MacWindowDelegate(Action onWillClose) : NSWindowDelegate
-    {
-        public override void WillClose(NSNotification notification) => onWillClose();
-    }
+    [DllImport("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation")]
+    private static extern nint CFRunLoopRunInMode(IntPtr mode, double seconds, bool returnAfterSourceHandled);
 
     /// <summary>
     /// 导航完成回调（webView:didFinishNavigation:）。
@@ -261,7 +435,7 @@ public sealed class MacOSWindow : IWindowBackend
             // message.Body 对字符串是桥接的 NSString（__NSCFString）；本桥传 NUL 转义的 Latin-1 串
             if (message.Body is not NSString ns || ns.Length == 0)
                 return;
-            onMessage(WebView2StringCodec.Decode(ns.ToString()));
+            onMessage(StringCodec.Decode(ns.ToString()));
         }
     }
 
@@ -288,7 +462,7 @@ public sealed class MacOSWindow : IWindowBackend
                         using var ms = new MemoryStream();
                         stream.CopyTo(ms);
                         var bytes = ms.ToArray();
-                        SendResponse(urlSchemeTask, 200, mimeType!, ResourceHeaders.CacheControl(relative!), bytes);
+                        SendResponse(urlSchemeTask, 200, mimeType!, WebWindowResource.CacheControl(relative!), bytes);
                     }
                     return;
                 }

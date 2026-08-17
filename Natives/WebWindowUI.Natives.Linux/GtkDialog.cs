@@ -1,4 +1,4 @@
-using WebWindowUI.Core;
+using WebWindowUI.Core.Platform;
 
 namespace WebWindowUI.Natives.Linux;
 
@@ -24,23 +24,24 @@ public class GtkDialog : IPlatformDialog
     /// <summary>
     /// 打开文件选择对话框。
     /// </summary>
-    /// <param name="title">标题。</param>
-    /// <param name="filter">过滤器（GTK 暂不支持，忽略）。</param>
-    /// <param name="initialDirectory">初始目录。</param>
-    /// <param name="fileMustExist">是否要求文件存在（GTK 暂不支持，忽略）。</param>
-    /// <param name="allowMultiSelect">是否允许多选。</param>
+    /// <param name="option">对话框选项（Filter/SelectMustExist 暂不支持，忽略）。</param>
     /// <returns>选中的文件路径；取消为 null。</returns>
-    public List<string>? OpenFileDialog(string title, string filter, string? initialDirectory = null, bool fileMustExist = true, bool allowMultiSelect = true)
-        => GtkNative.OpenFileDialog(title, initialDirectory, allowMultiSelect) is { } files ? [.. files] : null;
+    public List<string>? OpenFileDialog(SelectDialogOption option)
+        => GtkNative.OpenFileDialog(option.Title, option.InitialDirectory, option.AllowMultiSelect) is { } files ? [.. files] : null;
+
+    /// <summary>
+    /// 打开目录选择对话框（单选）。
+    /// </summary>
+    /// <param name="option">对话框选项（Filter/SelectMustExist/AllowMultiSelect 暂不支持，忽略）。</param>
+    /// <returns>选中的目录路径；取消为 null。</returns>
+    public List<string>? OpenFolderDialog(SelectDialogOption option)
+        => GtkNative.OpenFolderDialog(option.Title, option.InitialDirectory) is { } dir ? [dir] : null;
 
     /// <summary>
     /// 打开保存对话框。
     /// </summary>
-    /// <param name="title">标题。</param>
-    /// <param name="filter">过滤器（GTK 暂不支持，忽略）。</param>
-    /// <param name="defaultFileName">默认文件名。</param>
-    /// <param name="defaultExt">默认扩展名（GTK 暂不支持，忽略）。</param>
+    /// <param name="option">对话框选项（Filter 暂不支持，忽略）。</param>
     /// <returns>选择的保存路径；取消为 null。</returns>
-    public string? SaveFileDialog(string title, string filter, string? defaultFileName = null, string? defaultExt = null)
-        => GtkNative.SaveFileDialog(title, defaultFileName);
+    public string? SaveFileDialog(SelectDialogOption option)
+        => GtkNative.SaveFileDialog(option.Title, null);
 }

@@ -1,4 +1,6 @@
 using WebWindowUI.Core;
+using WebWindowUI.Core.Platform;
+using WebWindowUI.Natives.Macos;
 
 namespace WebWindowUI.Platforms.MacOS;
 
@@ -8,7 +10,7 @@ namespace WebWindowUI.Platforms.MacOS;
 /// 盲写状态：net10.0-macos 无法在 Windows 上编译（需 Mac + macOS workload），本实现严格对齐
 /// .NET macOS 绑定的已验证签名，编译与运行时行为需在 Mac 上最终确认（见 README 的平台说明）。
 /// </summary>
-public sealed class MacOSPlatform : IWebWindowPlatform
+public sealed class MacOSPlatform : IPlatform
 {
     /// <summary>
     /// 窗口注册表：跟踪已打开窗口，最后一个关闭时退出主事件循环（镜像 Linux 的 _windows）。
@@ -69,18 +71,13 @@ public sealed class MacOSPlatform : IWebWindowPlatform
     }
 
     /// <summary>
-    /// 平台名。
-    /// </summary>
-    public string Name => "macOS";
-
-    /// <summary>
-    /// 创建窗口后端并登记。
+    /// 创建平台窗口并登记（尚未显示）。
     /// </summary>
     /// <param name="options">窗口选项。</param>
-    /// <returns>窗口后端。</returns>
-    public IWindowBackend CreateWindow(WebWindowOptions options)
+    /// <returns>平台窗口。</returns>
+    public WebWindow CreateWindow(WebWindowOptions options)
     {
-        var window = MacOSWindow.Create(options.Title, options, options.Width, options.Height);
+        var window = new MacOSWindow(options);
         WindowOpen(window);
         return window;
     }
@@ -114,5 +111,10 @@ public sealed class MacOSPlatform : IWebWindowPlatform
     /// <summary>
     /// 平台对话框（macOS 实现）。
     /// </summary>
-    public IPlatformDialog Dialog => MacOSDialog.Dialog;
+    public IPlatformDialog Dialog => OsxDialog.Dialog;
+
+    /// <summary>
+    /// 平台剪贴板（NSPasteboard 实现）。
+    /// </summary>
+    public IClipboard Clipboard => OsxClipboard.Clipboard;
 }

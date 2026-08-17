@@ -11,7 +11,7 @@ macOS 平台包只在 **Mac 主机**（`_WWUI_IsMacHost` = OSX）编译真实 `n
 | 文件 | 内容 |
 |------|------|
 | `MacOSPlatform.cs` | 平台注册 + 进程级窗口 registry（`HashSet<MacOSWindow>`）+ 生命周期 |
-| `MacOSWindow.cs` | `MacOSWindow : IWindowBackend`：NSWindow + WKWebView 宿主 + `WKURLSchemeHandler` |
+| `MacOSWindow.cs` | `MacOSWindow : WebWindow`：NSWindow + WKWebView 宿主 + `WKURLSchemeHandler`；窗口状态面经 `MacOSNativeWindow`（`INativeWindow`）实现 |
 | `MacOSMessageLoopSynchronizationContext.cs` | 绑定主队列的 `SynchronizationContext`（`Post` 唤醒路径） |
 | `PlatformRegistration.cs` | `[ModuleInitializer]` 注册进 `WebWindowPlatform`（CA2255） |
 

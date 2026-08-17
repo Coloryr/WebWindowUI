@@ -7,7 +7,7 @@
 | 文件 | 内容 |
 |------|------|
 | `GtkNative.cs` | 裸 GTK3 P/Invoke（`libgtk-3.so.0` + 消息框/文件对话框）+ **GObject 信号桥** `ConnectSignal`/`DisconnectSignal`（`libgobject-2.0.so.0`，窗口 destroy/configure 信号） |
-| `LinuxNativeWindow.cs` | **公开** `LinuxNativeWindow : INativeWindow`（镜像 `Win32NativeWindow`）：GTK 窗口句柄 + 信号桥 + `SetChild` 挂 WebView + Show/Hide/Close/SetTitle/GetSize |
+| `LinuxNativeWindow.cs` | **公开** `LinuxNativeWindow : INativeWindow`（镜像 `Win32NativeWindow`）：GTK 窗口句柄 + 信号桥 + `SetChild` 挂 WebView + 生命周期/窗口状态属性/事件（同 `INativeWindow` 契约） |
 | `GlobalUsings.cs` | 全局 using |
 
 ## 关键设计

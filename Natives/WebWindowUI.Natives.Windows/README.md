@@ -9,7 +9,7 @@
 | `Win32.cs` | 常量 / 结构 / WndProcDelegate / P/Invoke 声明 |
 | `Win32MessageLoop.cs` | **公开** `Win32MessageLoop : IMessageLoop`：隐藏消息窗口的 WM_RUN 调度 + `InitMessageLoop`/`RunOnUiThread`/`IsUiThread`/`MessageLoop` |
 | `MessageLoopSynchronizationContext.cs` | 绑定隐藏窗口的 `SynchronizationContext`（`Post` → `PostMessageW(WM_RUN)` → 创建线程 `RunQueued`） |
-| `Win32NativeWindow.cs` | **公开** `Win32NativeWindow : INativeWindow`：HWND 生命周期（Show/Hide/Close/Activate/SetTitle/SetIcon/GetSize/`WindowHandle`） |
+| `Win32NativeWindow.cs` | **公开** `Win32NativeWindow : INativeWindow`：HWND 生命周期（Show/Hide/Close/Activate/SetTitle/SetIcon/`WindowHandle`/`Point2I GetSize()`）+ 窗口状态属性（Position/Size/MinSize/MaxSize/ShowInTaskbar/CanResize/CanMinimize/CanMaximize/IsDialog/IsActive/Screens）+ 事件（Destory/Resize/Move/Active/WindowStateChange/SystemDecorationsChange） |
 | `Win32BrowserHost.cs` | **公开** `Win32BrowserHost`：CEF 隐藏宿主 + 重挂载辅助——`CreateHiddenHost`（隐藏顶层窗口，浏览器初始父窗口）/ `Reparent`（SetParent+MoveWindow 重挂载）/ `Resize`（铺满不换父）/ `Destroy` |
 | `Win32Native.cs` | 消息框 / 文件对话框（OpenFile/SaveFile） |
 

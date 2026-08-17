@@ -1,4 +1,5 @@
 using WebWindowUI.Core;
+using WebWindowUI.Core.Platform;
 using WebWindowUI.Core.Protocol;
 using WebWindowUI.Natives.Linux;
 
@@ -8,15 +9,19 @@ namespace WebWindowUI.Platforms.Linux;
 /// Linux 平台：GTK3 窗口 + libwebkit2gtk-4.1（GTK3 端口）WebView，可创建多个实例。WebKit 与 GTK3
 /// 均为手写 P/Invoke（GirCore 无 GTK3/WebKit2-4.1 绑定）；所有 WebView 共享默认 WebContext，
 /// 自定义 scheme 每进程注册一次，请求回调按发起 WebView 指针经平台窗口表分派回对应窗口。
+/// 窗口状态面经 <see cref="INativeWindow"/> 真实现；Model 双向绑定在基类契约内完成。
 /// </summary>
-public sealed class LinuxWindow : IWindowBackend
+public sealed class LinuxWindow : WebWindow
 {
     internal const string BridgeHandlerName = "wwui"; // 与前端桥 webwindowui-bridge 的 HANDLER_NAME 一致
 
     private readonly LinuxNativeWindow _window;
     private readonly IntPtr _webView;
-    private readonly WebWindowOptions _options;
+    private readonly Action<byte[]> _modelPushHandler;
+    private string _title;
     private WebKit2SignalBridge? _signals;
+    private WebWindowModel? _model;
+    private bool _isLoaded;
     private bool _closed;
 
     /// <summary>
@@ -25,9 +30,13 @@ public sealed class LinuxWindow : IWindowBackend
     internal IntPtr WebView => _webView;
 
     /// <summary>
-    /// 窗口销毁时触发（用户关闭或 Close()）。宿主在此清理与窗口关联的状态。
+    /// 原生窗口（平台窗口内部使用）。
     /// </summary>
-    public event Action? Closed;
+    internal override INativeWindow NativeWindow
+    {
+        get => _window;
+        set => throw new NotSupportedException("LinuxWindow 自建原生窗口，不支持替换。");
+    }
 
     /// <summary>
     /// 构造并登记窗口（注册进平台窗口表）。
@@ -35,17 +44,20 @@ public sealed class LinuxWindow : IWindowBackend
     /// <param name="window">GTK 窗口壳。</param>
     /// <param name="webView">WebKitWebView 指针。</param>
     /// <param name="options">窗口选项。</param>
-    private LinuxWindow(LinuxNativeWindow window, IntPtr webView, WebWindowOptions options)
+    private LinuxWindow(LinuxNativeWindow window, IntPtr webView, WebWindowOptions options) : base(options)
     {
+        _title = options.Title;
+        _modelPushHandler = ModelPushed;
         _window = window;
         _webView = webView;
-        _options = options;
         LinuxPlatform.WindowOpen(this);
     }
 
     /// <summary>
     /// 创建并注册一个尚未显示的窗口。
     /// </summary>
+    /// <param name="options">窗口选项。</param>
+    /// <returns>平台窗口。</returns>
     public static LinuxWindow Create(WebWindowOptions options)
     {
         var w = new LinuxNativeWindow(options);
@@ -64,34 +76,197 @@ public sealed class LinuxWindow : IWindowBackend
 
         // 窗口销毁（用户关标题栏或 Close() 的 gtk_window_close → 默认处理器 destroy）→ 通知框架关闭
         w.Destory += window.OnDestroyed;
+        w.Resize += () => window.RaiseResize(window._window.Size);
+        w.Move += window.RaiseMove;
+        w.Active += window.RaiseActive;
+        w.WindowStateChange += window.RaiseWindowStateChange;
+        w.SystemDecorationsChange += window.RaiseSystemDecorationsChange;
 
         WebWindowLog.Debug($"create window '{options.Title}' (view={v})");
         return window;
     }
 
     /// <summary>
+    /// 窗口标题：get 返回跟踪字段；set 同步到标题栏（构造期基类先赋值、原生窗口尚未建，跳过原生调用）。
+    /// </summary>
+    public override string Title
+    {
+        get => _title;
+        set
+        {
+            _title = value;
+            if (_window is not null)
+                RunOnUiThread(() => _window.SetTitle(value));
+        }
+    }
+
+    /// <summary>
+    /// 窗口数据模型：绑定时订阅模型推送（属性变化/集合变更→PostMessage），解绑时退订；
+    /// 页面加载完成后补发完整快照。同一实例绑多窗口 = 共享广播。
+    /// </summary>
+    public override WebWindowModel? Model
+    {
+        get => _model;
+        set
+        {
+            if (_model == value)
+                return;
+            _model?.UnsubscribePushed(_modelPushHandler);
+            _model = value;
+            _model?.SubscribePushed(_modelPushHandler);
+            if (_model is not null && _isLoaded)
+                PostMessage(_model.BuildSnapshotEnvelope());
+        }
+    }
+
+    /// <summary>
+    /// 窗口装饰样式。
+    /// </summary>
+    public override SystemDecorations SystemDecorations
+    {
+        get => _window.SystemDecorations;
+        set => RunOnUiThread(() => _window.SystemDecorations = value);
+    }
+
+    /// <summary>
+    /// 窗口状态。
+    /// </summary>
+    public override WindowState WindowState
+    {
+        get => _window.WindowState;
+        set => RunOnUiThread(() => _window.WindowState = value);
+    }
+
+    /// <summary>
+    /// 窗口位置。
+    /// </summary>
+    public override Point2I Position
+    {
+        get => _window.Position;
+        set => RunOnUiThread(() => _window.Position = value);
+    }
+
+    /// <summary>
+    /// 窗口尺寸。
+    /// </summary>
+    public override Point2I Size
+    {
+        get => _window.Size;
+        set => RunOnUiThread(() => _window.Size = value);
+    }
+
+    /// <summary>
+    /// 最小尺寸（0 = 不限）。
+    /// </summary>
+    public override Point2I MinSize
+    {
+        get => _window.MinSize;
+        set => _window.MinSize = value;
+    }
+
+    /// <summary>
+    /// 最大尺寸（0 = 不限）。
+    /// </summary>
+    public override Point2I MaxSize
+    {
+        get => _window.MaxSize;
+        set => _window.MaxSize = value;
+    }
+
+    /// <summary>
+    /// 是否显示在任务栏。
+    /// </summary>
+    public override bool ShowInTaskbar
+    {
+        get => _window.ShowInTaskbar;
+        set => RunOnUiThread(() => _window.ShowInTaskbar = value);
+    }
+
+    /// <summary>
+    /// 是否可调整大小。
+    /// </summary>
+    public override bool CanResize
+    {
+        get => _window.CanResize;
+        set => RunOnUiThread(() => _window.CanResize = value);
+    }
+
+    /// <summary>
+    /// 是否可最小化。
+    /// </summary>
+    public override bool CanMinimize
+    {
+        get => _window.CanMinimize;
+        set => RunOnUiThread(() => _window.CanMinimize = value);
+    }
+
+    /// <summary>
+    /// 是否可最大化。
+    /// </summary>
+    public override bool CanMaximize
+    {
+        get => _window.CanMaximize;
+        set => RunOnUiThread(() => _window.CanMaximize = value);
+    }
+
+    /// <summary>
+    /// 是否对话框式窗口。
+    /// </summary>
+    public override bool IsDialog
+    {
+        get => _window.IsDialog;
+        set => RunOnUiThread(() => _window.IsDialog = value);
+    }
+
+    /// <summary>
+    /// 窗口当前是否活动（由系统推导；置前台请用 <see cref="Activate"/>）。
+    /// </summary>
+    public override bool IsActive
+    {
+        get => _window.IsActive;
+        set { }
+    }
+
+    /// <summary>
+    /// 窗口所在显示器。
+    /// </summary>
+    public override Screen Screens => _window.Screens;
+
+    /// <summary>
     /// 显示窗口并加载首页。GTK 的窗口 API 只允许在主线程访问，非主线程调用时 marshal 回主线程。
     /// 无头模式下跳过 Present()（窗口不出现在屏幕/任务栏），但照常加载首页。
     /// </summary>
-    public void Show()
+    public override void Show(WebWindow? Parent = null)
     {
         RunOnUiThread(() =>
         {
-            if (!_options.Headless)
+            if (!Options.Headless)
                 _window.Show();
-            WebKit2Native.LoadUri(_webView, WebWindowResource.GetWindowIndexUrl(_options.WindowPath));
+            WebKit2Native.LoadUri(_webView, WebWindowResource.GetWindowIndexUrl(Options.WindowPath));
         });
+    }
+
+    /// <summary>
+    /// 模态显示：显示窗口后跑嵌套 GLib 主循环直到本窗口关闭（GTK 模态语义）。对话框关闭结果经 Close(result) 传入。
+    /// </summary>
+    public override void ShowDialog(WebWindow? Parent = null)
+    {
+        Show(Parent);
+        var nested = MainLoop.New(null, false);
+        Closed += (_, _) => nested.Quit();
+        nested.RunWithSynchronizationContext();
     }
 
     /// <summary>
     /// 隐藏窗口（不关闭、不销毁）。
     /// </summary>
-    public void Hide() => RunOnUiThread(() => _window.Hide());
+    public override void Hide() => RunOnUiThread(() => _window.Hide());
 
     /// <summary>
     /// 关闭窗口。gtk_window_close → 默认 close-request 处理器 destroy → OnDestroyed。
     /// </summary>
-    public void Close()
+    /// <param name="result">对话框关闭结果（当前平台未使用）。</param>
+    public override void Close(object? result)
     {
         RunOnUiThread(() =>
         {
@@ -104,28 +279,25 @@ public sealed class LinuxWindow : IWindowBackend
     /// <summary>
     /// 把窗口带到前台并聚焦。
     /// </summary>
-    public void Activate() => RunOnUiThread(() => _window.Activate());
-
-    /// <summary>
-    /// 修改窗口标题（立即同步到标题栏）。
-    /// </summary>
-    public void SetTitle(string title) => RunOnUiThread(() => _window.SetTitle(title));
+    public override void Activate() => RunOnUiThread(() => _window.Activate());
 
     /// <summary>
     /// 设置窗口图标。GTK3 虽有 gtk_window_set_icon 但 CSD/Wayland 不显示 per-window 图标，无操作。
     /// </summary>
-    public void SetIcon(WindowIcon icon)
+    /// <param name="icon">窗口图标；null 不操作。</param>
+    public override void SetIcon(WindowIcon? icon)
     {
         // CSD/Wayland 只用主题图标（gtk_window_set_icon 实际不生效）。平台限制，文档注明。
     }
 
     /// <summary>
-    /// 向页面 JS 发送一条消息。protobuf 字节经 <see cref="WebView2StringCodec"/> 转成不含 NUL 的
+    /// 向页面 JS 发送一条消息。protobuf 字节经 <see cref="StringCodec"/> 转成不含 NUL 的
     /// Latin-1 字符串，再用 <see cref="JsStringLiteral.Quote"/> 嵌进 <c>window.wwuiReceive("...")</c>
     /// 经 evaluateJavascript 注入。JS 端 wwuiReceive 还原后 protobufjs 解码。
     /// 与 Windows 一致：WebKit 对象只能主线程访问，属性变更可能发生在任意线程，先投递回主线程。
     /// </summary>
-    public void PostMessage(byte[] message)
+    /// <param name="message">protobuf 字节。</param>
+    internal override void PostMessage(byte[] message)
     {
         try
         {
@@ -141,7 +313,7 @@ public sealed class LinuxWindow : IWindowBackend
             // _controller?.CoreWebView2 空条件等效的护栏：_closed 后直接跳过。
             if (_closed)
                 return;
-            var js = "window.wwuiReceive(" + JsStringLiteral.Quote(WebView2StringCodec.Encode(message)) + ")";
+            var js = "window.wwuiReceive(" + JsStringLiteral.Quote(StringCodec.Encode(message)) + ")";
             _ = WebKit2Native.EvaluateJavascriptAsync(_webView, js)
                 .ContinueWith(t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
         }
@@ -155,7 +327,9 @@ public sealed class LinuxWindow : IWindowBackend
     /// 在页面里执行一段 JavaScript 并返回结果（与 WebView2 一样是 JSON 编码的字符串；best-effort）。
     /// 与 <see cref="PostMessage"/> 一样：WebKit 只能主线程访问，非主线程调用时先投递回主线程再执行，并等待结果。
     /// </summary>
-    public async Task<string> ExecuteScriptAsync(string script)
+    /// <param name="script">要执行的 JS。</param>
+    /// <returns>JS 执行结果（JSON 字符串）。</returns>
+    internal override async Task<string> ExecuteScriptAsync(string script)
     {
         if (Environment.CurrentManagedThreadId != LinuxMessageLoopSynchronizationContext.UiThreadId)
         {
@@ -176,17 +350,7 @@ public sealed class LinuxWindow : IWindowBackend
     }
 
     /// <summary>
-    /// 页面导航完成时触发（用于在页面就绪后推送 Model 初始快照）。
-    /// </summary>
-    public event Action? NavigationCompleted;
-
-    /// <summary>
-    /// 页面 JS 通过 script message handler 回传的消息（protobuf 字节，由 NUL 转义串还原）。
-    /// </summary>
-    public event Action<byte[]>? MessageReceived;
-
-    /// <summary>
-    /// script message 回调：解码 NUL 转义 Latin-1 字符串为 protobuf 字节并触发 MessageReceived。
+    /// script message 回调：解码 NUL 转义 Latin-1 字符串为 protobuf 字节并交给基类分派。
     /// </summary>
     /// <param name="message">桥回传的 NUL 转义字符串。</param>
     private void OnScriptMessageReceived(string message)
@@ -196,18 +360,23 @@ public sealed class LinuxWindow : IWindowBackend
             WebWindowLog.Debug("空 script message 收到");
             return;
         }
-        MessageReceived?.Invoke(WebView2StringCodec.Decode(message));
+        OnBackendMessageReceived(StringCodec.Decode(message));
     }
 
     /// <summary>
-    /// 加载进度回调：主 frame 加载完成触发 NavigationCompleted。
+    /// 加载进度回调：主 frame 加载完成触发 Loaded 并补发 Model 快照。
     /// </summary>
     /// <param name="loadEvent">加载事件枚举值。</param>
     private void OnLoadChanged(int loadEvent)
     {
         WebWindowLog.Debug($"load-changed: {loadEvent}");
         if (loadEvent == (int)WebKit2Native.LoadEvent.Finished)
-            NavigationCompleted?.Invoke();
+        {
+            _isLoaded = true;
+            RaiseLoaded();
+            if (_model is not null)
+                PostMessage(_model.BuildSnapshotEnvelope());
+        }
     }
 
     /// <summary>
@@ -219,7 +388,8 @@ public sealed class LinuxWindow : IWindowBackend
             return;
         _closed = true;
         WebWindowLog.Debug($"window closed (view={_webView})");
-        Closed?.Invoke();
+        _model?.UnsubscribePushed(_modelPushHandler);
+        RaiseClosed();
         // 断开信号、释放 .NET 侧持有的 webview 引用（窗口仍持有其子级引用，至此引用计数归零 → 销毁）
         _signals?.Dispose();
         _signals = null;
@@ -227,6 +397,12 @@ public sealed class LinuxWindow : IWindowBackend
         _window.Dispose(); // 断开 destroy 信号并释放路由 GCHandle
         LinuxPlatform.WindowClose(this); // 注销窗口表 + 通知框架关闭 + 最后窗口退出主循环
     }
+
+    /// <summary>
+    /// 模型推送回调：把变化信封转发给页面。
+    /// </summary>
+    /// <param name="envelope">模型变化信封（protobuf 字节）。</param>
+    private void ModelPushed(byte[] envelope) => PostMessage(envelope);
 
     /// <summary>
     /// 把动作 marshal 到主线程同步执行：主线程直接运行；非主线程经

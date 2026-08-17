@@ -1,25 +1,33 @@
-﻿using WebWindowUI.Core;
+using WebWindowUI.Core;
 using WebWindowUI.Sample.Items;
 
 namespace WebWindowUI.Sample;
 
 /// <summary>
-/// 列表嵌套窗口（前端 src/window/nested-list/）：演示「List&lt;Model&gt; 嵌套 + 列表项详情子窗口」。
+/// 列表嵌套窗口控制器：经 <see cref="WebWindowPlatform.Current.CreateWindow"/> 建窗。
+/// 对应前端 src/window/nested-list/：演示「List&lt;Model&gt; 嵌套 + 列表项详情子窗口」。
 /// 前端 OpenItem(index) 命令 → 打开绑定父列表同一元素实例的 NestedListItemWindow（master-detail）；
 /// 子窗口编辑后父窗口列表实时跟随。
 /// </summary>
-internal sealed class NestedListWindow : WebWindow
+internal sealed class NestedListWindow
 {
     private readonly NestedListModel _model;
     private readonly Dictionary<NestedListItemModel, NestedListItemWindow> _detailWindows = [];
 
-    public NestedListWindow() : base(new WebWindowOptions("nested-list")
+    /// <summary>
+    /// 框架窗口（构造即创建；Model 绑定与 Show 由宿主负责）。
+    /// </summary>
+    public WebWindow Window { get; }
+
+    public NestedListWindow()
     {
-        Title = "List<>嵌套窗口",
-        Width = 860,
-        Height = 660
-    })
-    {
+        Window = WebWindowPlatform.Current.CreateWindow(new WebWindowOptions("nested-list")
+        {
+            Title = "List<>嵌套窗口",
+            Width = 860,
+            Height = 660
+        });
+
         _model = new NestedListModel
         {
             Title = "List<>嵌套示例",
@@ -42,9 +50,9 @@ internal sealed class NestedListWindow : WebWindow
                 new NestedListItemModel { Title = "文档整理", Priority = 3 },
             },
         };
-        Model = _model;
+        Window.Model = _model;
         _model.OpenItemRequested += OnOpenItem;
-        Closed += () => _model.OpenItemRequested -= OnOpenItem;
+        Window.Closed += (_, _) => _model.OpenItemRequested -= OnOpenItem;
     }
 
     private void OnOpenItem(int index)
@@ -55,16 +63,16 @@ internal sealed class NestedListWindow : WebWindow
         NestedListItemModel item = _model.Items[index];
         if (_detailWindows.TryGetValue(item, out NestedListItemWindow? win))
         {
-            win.Show();
-            win.Activate();
+            win.Window.Show();
+            win.Window.Activate();
             return;
         }
 
         // 绑定父列表里的同一个元素实例（master-detail）；关闭后移除记录，下次可重建。
         NestedListItemWindow created = new(item);
-        created.Closed += () => _detailWindows.Remove(item);
+        created.Window.Closed += (_, _) => _detailWindows.Remove(item);
         _detailWindows[item] = created;
-        created.Show();
-        created.Activate();
+        created.Window.Show();
+        created.Window.Activate();
     }
 }
