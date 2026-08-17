@@ -111,6 +111,13 @@ internal static partial class GtkNative
     public const int GdkWindowStateMaximized = 1 << 2;
     public const int GdkWindowStateFullscreen = 1 << 4;
 
+    // GdkWMFunction（gdkwindow.h）：WM 可提供的窗口功能位，供 gdk_window_set_functions 组装
+    public const int GdkFuncResize = 1 << 1;
+    public const int GdkFuncMove = 1 << 2;
+    public const int GdkFuncMinimize = 1 << 3;
+    public const int GdkFuncMaximize = 1 << 4;
+    public const int GdkFuncClose = 1 << 5;
+
     // GdkWindowHints（gdkgeometry.h）：GDK_HINT_MIN_SIZE / GDK_HINT_MAX_SIZE
     public const int GdkHintMinSize = 1 << 1;
     public const int GdkHintMaxSize = 1 << 2;
@@ -203,6 +210,9 @@ internal static partial class GtkNative
 
     [LibraryImport(GdkLib, EntryPoint = "gdk_window_get_state")]
     private static partial int gdk_window_get_state(IntPtr window);
+
+    [LibraryImport(GdkLib, EntryPoint = "gdk_window_set_functions")]
+    private static partial void gdk_window_set_functions(IntPtr window, int functions);
 
     /// <summary>
     /// 设置窗口装饰（None 无标题栏；GTK3 装饰是二元，Border/Full 均为带标题栏）。
@@ -311,6 +321,43 @@ internal static partial class GtkNative
     /// 取 GdkWindow 当前状态位（GdkWindowState 标志）。
     /// </summary>
     public static int GetWindowState(IntPtr gdkWindow) => gdk_window_get_state(gdkWindow);
+
+    /// <summary>
+    /// 设置 WM 可提供的窗口功能（GdkWMFunction 位组合，最小化/最大化/缩放开关）。
+    /// 提示须在窗口 map 前设置；realize 信号时应用最可靠。
+    /// </summary>
+    public static void SetWmFunctions(IntPtr gdkWindow, int functions) => gdk_window_set_functions(gdkWindow, functions);
+
+    // ------------------------------------------------------------------
+    // 窗口图标（libgtk-3 / libgdk_pixbuf-2.0 / libgobject-2.0）：gtk_window_set_icon。
+    // CSD 下 GTK 用该图标画标题栏图标；X11 下同时给 WM 任务栏。先解码成 GdkPixbuf。
+    // ------------------------------------------------------------------
+
+    private const string GdkPixbufLib = "libgdk_pixbuf-2.0.so.0";
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_window_set_icon")]
+    private static partial void gtk_window_set_icon(IntPtr window, IntPtr icon);
+
+    [LibraryImport(GdkPixbufLib, EntryPoint = "gdk_pixbuf_new_from_file")]
+    private static partial IntPtr gdk_pixbuf_new_from_file([MarshalAs(UnmanagedType.LPUTF8Str)] string filename, IntPtr error);
+
+    [LibraryImport(GObjectLib, EntryPoint = "g_object_unref")]
+    private static partial void g_object_unref(IntPtr obj);
+
+    /// <summary>
+    /// 从文件解码 GdkPixbuf（gdk-pixbuf 支持的格式：PNG/JPEG 等）；失败返回零。
+    /// </summary>
+    public static IntPtr LoadPixbufFromFile(string path) => gdk_pixbuf_new_from_file(path, IntPtr.Zero);
+
+    /// <summary>
+    /// 设置窗口图标。gtk_window_set_icon 会 ref 传入的 pixbuf，调用方随后须 unref 自己的引用。
+    /// </summary>
+    public static void SetWindowIcon(IntPtr window, IntPtr pixbuf) => gtk_window_set_icon(window, pixbuf);
+
+    /// <summary>
+    /// 释放 GObject 引用。
+    /// </summary>
+    public static void ObjectUnref(IntPtr obj) => g_object_unref(obj);
 
     // ------------------------------------------------------------------
     // 对话框（消息框 + 文件选择）
@@ -801,6 +848,9 @@ internal static partial class GtkNative
     [LibraryImport(GObjectLib, EntryPoint = "g_signal_handler_disconnect")]
     private static partial void g_signal_handler_disconnect(IntPtr instance, ulong handlerId);
 
+    // GConnectFlags：G_CONNECT_AFTER = 1（回调在默认处理器之后运行）
+    private const uint GConnectAfter = 1;
+
     /// <summary>
     /// 连接 GObject 信号到托管回调。data 是调用方预先分配的 GCHandle（由调用方释放）；
     /// handler 委托必须被强引用保活。detail 支持 "signal::detail"。
@@ -811,8 +861,20 @@ internal static partial class GtkNative
     /// <param name="data">路由 GCHandle。</param>
     /// <returns>信号处理器 id。</returns>
     public static ulong ConnectSignal(IntPtr instance, string detailedSignal, Delegate handler, GCHandle data)
+        => ConnectSignal(instance, detailedSignal, handler, data, after: false);
+
+    /// <summary>
+    /// 连接 GObject 信号到托管回调，可选 after（G_CONNECT_AFTER：回调在类默认处理器之后运行）。
+    /// </summary>
+    /// <param name="instance">信号源实例。</param>
+    /// <param name="detailedSignal">信号名（可带 detail）。</param>
+    /// <param name="handler">托管回调。</param>
+    /// <param name="data">路由 GCHandle。</param>
+    /// <param name="after">是否在默认处理器之后运行。</param>
+    /// <returns>信号处理器 id。</returns>
+    public static ulong ConnectSignal(IntPtr instance, string detailedSignal, Delegate handler, GCHandle data, bool after)
         => g_signal_connect_data(instance, detailedSignal,
-            Marshal.GetFunctionPointerForDelegate(handler), GCHandle.ToIntPtr(data), IntPtr.Zero, 0);
+            Marshal.GetFunctionPointerForDelegate(handler), GCHandle.ToIntPtr(data), IntPtr.Zero, after ? GConnectAfter : 0u);
 
     /// <summary>
     /// 断开信号。实例已销毁时忽略错误。

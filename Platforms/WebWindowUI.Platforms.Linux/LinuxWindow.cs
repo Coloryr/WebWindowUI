@@ -282,12 +282,14 @@ public sealed class LinuxWindow : WebWindow
     public override void Activate() => RunOnUiThread(() => _window.Activate());
 
     /// <summary>
-    /// 设置窗口图标。GTK3 虽有 gtk_window_set_icon 但 CSD/Wayland 不显示 per-window 图标，无操作。
+    /// 设置窗口图标（gtk_window_set_icon；CSD 画标题栏图标，X11 同时给 WM 任务栏）。
     /// </summary>
     /// <param name="icon">窗口图标；null 不操作。</param>
     public override void SetIcon(WindowIcon? icon)
     {
-        // CSD/Wayland 只用主题图标（gtk_window_set_icon 实际不生效）。平台限制，文档注明。
+        if (icon is null)
+            return;
+        RunOnUiThread(() => _window.SetIcon(icon));
     }
 
     /// <summary>

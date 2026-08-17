@@ -5,13 +5,15 @@
     <DocumentationFile />
   </PropertyGroup>
 
+  <!-- 构建不自动产包（WebWindowUI 仓库消费方经 ProjectReference 拉进本树，构建即产 Nuget\output 下 nupkg）；
+       需要包时显式 dotnet pack（Pack target 不受 GeneratePackageOnBuild 影响）。 -->
   <PropertyGroup Condition="'$(PackageId)' == ''">
     <PackageId>$(CefGluePackageNamePrefix)$(AssemblyName.Replace('Xilium.CefGlue.', ''))</PackageId>
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
-  
+
   <PropertyGroup Condition="'$(PackageId)' != ''">
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
 </Project>

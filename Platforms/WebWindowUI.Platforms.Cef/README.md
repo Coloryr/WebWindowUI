@@ -36,6 +36,7 @@
 - **Win32 窗口必须由 UI（主）线程创建（2026-08-15 双窗口死锁根因）**：命令路径（scheme POST）在 **CEF IO 线程**——非主线程 `new CefWindow` 时 `Win32NativeWindow` 的 CreateWindowExW 把 HWND 绑到 IO 线程消息队列 → 主线程 `SetWindowTextW`/`SetForegroundWindow` 等 SendMessage 跨线程等待 → 主线程与 IO 线程**互锁死锁**（两窗口全卡死；dotnet-stack 可见主线程卡 SetWindowTextW、后台线程卡 ManualResetEventSlim.Wait）。**修复 = `CefPlatform.CreateWindow` 用 `_message.RunOnUiThread` marshal 到主线程创建**（WebWindow 后续 SetTitle 等也经 RunOnUiThread，主线程拥有窗口后无跨线程 SendMessage）。
 - **CEF 回调里访问 CefFrame/CefBrowser 属性 → fastfail 崩溃**：`OnAfterCreated` 里 `GetMainFrame().Url`、`OnLoadStart` 里 `frame.Url` 等诊断日志会崩 libcef（0xC0000409）。CEF 回调内不得访问 frame/browser 的 URL 属性。
 - **CEF 初始化后才能建窗口**：`CefWindow` 构造断言 `CefRuntime.IsInitialized`，未调 `WebWindowUIPlatform.Init(args)`（触发 `CefPlatform.Init`）就开窗会抛 `InvalidOperationException`——加载链不再是旧 CommonBrowserAdapter 的「窗口触发延迟 Load」。
+- **durable：`dotnet` CLI 对非解决方案构建把 `SolutionDir` 置为字面量 `*Undefined*`**（不是未定义/空串）——`'$(SolutionDir)' == ''` 恒假、按「非空即跳过」写的 target 直接不执行（`PackCefGlueTogether` 首版即栽在这，包永远没连带上）。判定「是否直接打包而非 slnx」要写 `'$(SolutionDir)' == '*Undefined*' Or '$(SolutionDir)' == ''`（`msbuild.exe` 直构建才是真空串，两态都收）。
 
 ## 平台选择
 
@@ -43,4 +44,4 @@
 
 ## 打包
 
-Windows 上 `dotnet pack`（先打 `WebWindowUI.Natives.Windows`）。
+Windows 上 `dotnet pack`（先打 `WebWindowUI.Natives.Windows`）。**CefGlue 四包随 CEF 平台包一起打进 `artifacts`**：vendored 源码（`third-party/CefGlue`）的 `PackageOutputPath` 指向仓库根 `artifacts`，直接 `dotnet pack WebWindowUI.Platforms.Cef.csproj` 时 csproj 内 `PackCefGlueTogether` 目标先把 4 个 CefGlue 工程也打包进同一 `artifacts`（nuspec 声明 `CefGlue.Next.*` 依赖，消费方还原需要这些包）；`dotnet pack WebWindowUI.slnx` 时 CefGlue 由解决方案自身打包（SolutionDir 为真实路径，`PackCefGlueTogether` 跳过免并发重复打包）。CefGlue 工程 `GeneratePackageOnBuild=false`，普通构建不产包。

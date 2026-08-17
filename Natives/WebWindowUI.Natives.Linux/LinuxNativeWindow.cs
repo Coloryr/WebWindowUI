@@ -17,6 +17,7 @@ public sealed class LinuxNativeWindow : INativeWindow
     private static readonly SignalNotifyCallback _positionTrampoline = OnPositionChanged;
     private static readonly SignalNotifyCallback _activeTrampoline = OnActiveChanged;
     private static readonly SignalStateCallback _stateTrampoline = OnWindowStateEvent;
+    private static readonly SignalDestroyCallback _realizeTrampoline = OnRealized;
 
     private readonly IntPtr _window;
     private readonly GCHandle _handle;
@@ -25,12 +26,13 @@ public sealed class LinuxNativeWindow : INativeWindow
     private ulong _positionHandlerId;
     private ulong _activeHandlerId;
     private ulong _stateHandlerId;
+    private ulong _realizeHandlerId;
 
     // 窗口状态跟踪字段（setter 应用原生 API；getter 读字段或系统状态推导）。
     private SystemDecorations _decorations = SystemDecorations.Full;
     private bool _canResize = true;
-    private bool _canMinimize = true; // GTK3 无独立 per-window 最小化开关，仅跟踪（no-op，文档注明）
-    private bool _canMaximize = true; // GTK3 无独立 per-window 最大化开关，仅跟踪（no-op，文档注明）
+    private bool _canMinimize = true; // 经 gdk_window_set_functions 关最小化按钮（X11；Wayland/CSD best-effort）
+    private bool _canMaximize = true; // 经 gdk_window_set_functions 关最大化按钮
     private bool _showInTaskbar = true;
     private bool _dialog;
     private bool _fullScreen;
@@ -74,7 +76,7 @@ public sealed class LinuxNativeWindow : INativeWindow
     public event Action<SystemDecorations>? SystemDecorationsChange;
 
     /// <summary>
-    /// 创建 GTK 窗口并连接 destroy/configure/position/is-active/window-state-event 信号。
+    /// 创建 GTK 窗口并连接 destroy/configure/position/is-active/window-state-event/realize 信号。
     /// </summary>
     /// <param name="options">窗口选项（标题/尺寸）。</param>
     public LinuxNativeWindow(WebWindowOptions options)
@@ -86,6 +88,8 @@ public sealed class LinuxNativeWindow : INativeWindow
         _positionHandlerId = GtkNative.ConnectSignal(_window, "notify::position", _positionTrampoline, _handle);
         _activeHandlerId = GtkNative.ConnectSignal(_window, "notify::is-active", _activeTrampoline, _handle);
         _stateHandlerId = GtkNative.ConnectSignal(_window, "window-state-event", _stateTrampoline, _handle);
+        // realize 在 map 前触发，after 确保盖过 GTK 自身 realize 设置的 WM 功能位
+        _realizeHandlerId = GtkNative.ConnectSignal(_window, "realize", _realizeTrampoline, _handle, after: true);
     }
 
     /// <summary>
@@ -119,9 +123,35 @@ public sealed class LinuxNativeWindow : INativeWindow
     /// <param name="title">新标题。</param>
     public void SetTitle(string title) => GtkNative.SetTitle(_window, title);
 
+    /// <summary>
+    /// 设置窗口图标：图标流写临时文件 → gdk_pixbuf_new_from_file 解码 → gtk_window_set_icon。
+    /// GTK 会 ref pixbuf，应用后 unref 调用方引用；解码失败（不支持的格式）静默跳过。
+    /// </summary>
+    /// <param name="icon">窗口图标。</param>
     public void SetIcon(WindowIcon icon)
     {
-        // GTK3 的 gtk_window_set_icon 在 CSD/Wayland 下不显示 per-window 图标，平台限制，无操作。
+        var tmp = Path.Combine(Path.GetTempPath(), "webwindowui_" + Guid.NewGuid().ToString("N") + ".png");
+        try
+        {
+            icon.Stream.Seek(0, SeekOrigin.Begin);
+            using (FileStream fs = File.Create(tmp))
+                icon.Stream.CopyTo(fs);
+            IntPtr pixbuf = GtkNative.LoadPixbufFromFile(tmp);
+            if (pixbuf == IntPtr.Zero)
+                return;
+            try
+            {
+                GtkNative.SetWindowIcon(_window, pixbuf);
+            }
+            finally
+            {
+                GtkNative.ObjectUnref(pixbuf);
+            }
+        }
+        finally
+        {
+            File.Delete(tmp);
+        }
     }
 
     /// <summary>
@@ -258,7 +288,7 @@ public sealed class LinuxNativeWindow : INativeWindow
     }
 
     /// <summary>
-    /// 是否可调整大小：set 走 gtk_window_set_resizable。
+    /// 是否可调整大小：set 走 gtk_window_set_resizable，并同步 WM 功能位。
     /// </summary>
     public bool CanResize
     {
@@ -269,25 +299,38 @@ public sealed class LinuxNativeWindow : INativeWindow
                 return;
             _canResize = value;
             GtkNative.SetResizable(_window, value);
+            ApplyWmFunctions();
         }
     }
 
     /// <summary>
-    /// 是否可最小化：GTK3 无独立 per-window API，仅跟踪取值（no-op，文档注明）。
+    /// 是否可最小化：经 gdk_window_set_functions 关最小化按钮（X11；Wayland/CSD best-effort）。
     /// </summary>
     public bool CanMinimize
     {
         get => _canMinimize;
-        set => _canMinimize = value;
+        set
+        {
+            if (_canMinimize == value)
+                return;
+            _canMinimize = value;
+            ApplyWmFunctions();
+        }
     }
 
     /// <summary>
-    /// 是否可最大化：GTK3 无独立 per-window API，仅跟踪取值（no-op，文档注明）。
+    /// 是否可最大化：经 gdk_window_set_functions 关最大化按钮。
     /// </summary>
     public bool CanMaximize
     {
         get => _canMaximize;
-        set => _canMaximize = value;
+        set
+        {
+            if (_canMaximize == value)
+                return;
+            _canMaximize = value;
+            ApplyWmFunctions();
+        }
     }
 
     /// <summary>
@@ -338,6 +381,25 @@ public sealed class LinuxNativeWindow : INativeWindow
         if ((gdkState & GtkNative.GdkWindowStateMaximized) != 0)
             return WindowState.Maximize;
         return WindowState.Normal;
+    }
+
+    /// <summary>
+    /// 把可缩放/最小化/最大化状态组装成 GdkWMFunction 掩码应用到 WM（Move/Close 恒开）。
+    /// 未 realize（GdkWindow 尚不存在）时跳过，realize 信号会按最新字段应用。
+    /// </summary>
+    private void ApplyWmFunctions()
+    {
+        IntPtr gdk = GtkNative.GetGdkWindow(_window);
+        if (gdk == IntPtr.Zero)
+            return;
+        int mask = GtkNative.GdkFuncMove | GtkNative.GdkFuncClose;
+        if (_canResize)
+            mask |= GtkNative.GdkFuncResize;
+        if (_canMinimize)
+            mask |= GtkNative.GdkFuncMinimize;
+        if (_canMaximize)
+            mask |= GtkNative.GdkFuncMaximize;
+        GtkNative.SetWmFunctions(gdk, mask);
     }
 
     /// <summary>
@@ -397,11 +459,13 @@ public sealed class LinuxNativeWindow : INativeWindow
         GtkNative.DisconnectSignal(_window, _positionHandlerId);
         GtkNative.DisconnectSignal(_window, _activeHandlerId);
         GtkNative.DisconnectSignal(_window, _stateHandlerId);
+        GtkNative.DisconnectSignal(_window, _realizeHandlerId);
         _destroyHandlerId = 0;
         _configureHandlerId = 0;
         _positionHandlerId = 0;
         _activeHandlerId = 0;
         _stateHandlerId = 0;
+        _realizeHandlerId = 0;
         if (_handle.IsAllocated)
             _handle.Free();
     }
@@ -414,6 +478,21 @@ public sealed class LinuxNativeWindow : INativeWindow
         try
         {
             (GCHandle.FromIntPtr(userData).Target as LinuxNativeWindow)?.Destory?.Invoke();
+        }
+        catch
+        {
+            // 窗口已销毁 / GCHandle 已释放等，忽略
+        }
+    }
+
+    /// <summary>
+    /// realize 信号 trampoline（after 默认处理器）：GdkWindow 已建、尚未 map，应用 WM 功能掩码。
+    /// </summary>
+    private static void OnRealized(IntPtr widget, IntPtr userData)
+    {
+        try
+        {
+            (GCHandle.FromIntPtr(userData).Target as LinuxNativeWindow)?.ApplyWmFunctions();
         }
         catch
         {

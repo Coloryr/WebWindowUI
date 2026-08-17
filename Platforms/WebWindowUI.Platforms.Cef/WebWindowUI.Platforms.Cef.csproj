@@ -13,14 +13,25 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Core\WebWindowUI.Core\WebWindowUI.Core.csproj" PrivateAssets="all" />
-    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.BrowserProcess.Core\CefGlue.BrowserProcess.Core.csproj" />
-    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.Common.Shared\CefGlue.Common.Shared.csproj" />
-    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.Common\CefGlue.Common.csproj" />
-    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue\CefGlue.csproj" />
+    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.BrowserProcess.Core\CefGlue.BrowserProcess.Core.csproj" CefGlue="true" />
+    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.Common.Shared\CefGlue.Common.Shared.csproj" CefGlue="true" />
+    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue.Common\CefGlue.Common.csproj" CefGlue="true" />
+    <ProjectReference Include="..\..\third-party\CefGlue\CefGlue\CefGlue.csproj" CefGlue="true" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows'">
     <ProjectReference Include="..\..\Natives\WebWindowUI.Natives.Windows\WebWindowUI.Natives.Windows.csproj" />
   </ItemGroup>
+
+  <!-- 直接打包 CEF 平台时先把 vendored CefGlue 四工程也打进同一 artifacts（nuspec 声明 CefGlue.Next.* 依赖，
+       消费方还原需要这些包）；slnx 打包时 CefGlue 由解决方案自身打包，跳过免重复并发打同一包。
+       dotnet CLI 对非解决方案构建把 SolutionDir 置为字面量 "*Undefined*"，两种"直接打包"都命中。 -->
+  <Target Name="PackCefGlueTogether" BeforeTargets="Pack"
+          Condition="'$(SolutionDir)' == '*Undefined*' Or '$(SolutionDir)' == ''">
+    <ItemGroup>
+      <_CefGlueProject Include="@(ProjectReference)" Condition="'%(ProjectReference.CefGlue)' == 'true'" />
+    </ItemGroup>
+    <MSBuild Projects="@(_CefGlueProject)" Targets="Pack" Properties="Configuration=$(Configuration)" />
+  </Target>
 
 </Project>

@@ -66,6 +66,27 @@ internal static class WebKitTestHarness
     public static Task RunMainWindowAsync(MainWindowModel model, Func<TestWindow, Task> body, TimeSpan? timeout = null)
         => RunWindowAsync("main", "测试", model, body, timeout);
 
+    /// <summary>
+    /// 只建窗不绑模型、不等桥接、不 show：窗口状态面（SetIcon/CanMinimize/CanMaximize 等）
+    /// 不依赖页面/桥，仅验证公开 WebWindow 状态 API 在真实 GTK 平台上的往返与异常安全。
+    /// </summary>
+    public static Task RunWindowAsync(string windowPath, string title, Func<TestWindow, Task> body, TimeSpan? timeout = null)
+    {
+        TimeSpan t = timeout ?? TimeSpan.FromSeconds(60);
+        return GtkPump.Instance.RunAsync(async () =>
+        {
+            var win = new TestWindow(windowPath, title);
+            try
+            {
+                await body(win);
+            }
+            finally
+            {
+                win.Close();
+            }
+        });
+    }
+
     public static Task RunWindowAsync(string windowPath, string title, WebWindowModel model, Func<TestWindow, Task> body, TimeSpan? timeout = null)
     {
         TimeSpan t = timeout ?? TimeSpan.FromSeconds(60);

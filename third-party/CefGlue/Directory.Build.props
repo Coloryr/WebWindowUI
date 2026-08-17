@@ -14,7 +14,8 @@
     </PropertyGroup>
     
     <PropertyGroup>
-        <PackageOutputPath>$(MSBuildThisFileDirectory)Nuget\output</PackageOutputPath>
+        <!-- WebWindowUI 仓库内打包打进根 artifacts（webwindowui-local 本地源），不打进 Nuget\output -->
+        <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
         <VersionPrefix>$(CefGlueVersion)</VersionPrefix>
         <Authors>XiliumHQ,OutSystems,DEON</Authors>
         <Product>CefGlue</Product>

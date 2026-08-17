@@ -1,6 +1,6 @@
 # WebWindowUI.Tests.Linux
 
-**WebKitGTK 4.1 平台 E2E**（19 用例，xunit，与 Windows/macOS 齐平）：`WebKitModelBridgeTests.cs` 覆盖模型桥全场景。**无条件**引用 `WebWindowUI.Platforms.Linux`，跨主机可编译、只在 Linux 主机跑（`IsTestProject` 按 `WWUIPlatform=='Linux'` 门控）。
+**WebKitGTK 4.1 平台 E2E**（25 用例，xunit，与 Windows/macOS 齐平）：`WebKitModelBridgeTests.cs`（19）覆盖模型桥全场景 + `LinuxWindowStateTests.cs`（6）覆盖窗口状态面（CanMinimize/CanMaximize/CanResize/SetIcon 公开 API 往返与异常安全）。**无条件**引用 `WebWindowUI.Platforms.Linux`，跨主机可编译、只在 Linux 主机跑（`IsTestProject` 按 `WWUIPlatform=='Linux'` 门控）。
 
 ## Support
 
@@ -21,4 +21,4 @@
 
 ## 回归
 
-Linux 主机 `dotnet test WebWindowUI.slnx -c Debug` → 124（协议 105 + 本套件 19）。
+Linux 主机 `dotnet test WebWindowUI.slnx -c Debug` → 130（协议 105 + 本套件 25）。

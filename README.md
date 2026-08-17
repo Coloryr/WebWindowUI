@@ -131,10 +131,10 @@ dotnet publish Demos/WebWindowUI.Demo.ImageGallery/WebWindowUI.Demo.ImageGallery
 |------|------|------|
 | Windows | WebView2（Microsoft.Web.WebView2） | ✅ 已验证 |
 | Windows (CEF) | CEF 150（CefGlue.Next NuGet 包，Chromium 内核；`UseCEF=true` 切换） | ✅ 已验证（chrome://gpu 全硬件加速 + F12 DevTools） |
-| Linux | WebKit2GTK 4.1 / GTK3（手写 P/Invoke） | 实现完成，运行时待验证 |
+| Linux | WebKit2GTK 4.1 / GTK3（手写 P/Invoke） | ✅ 已验证（Linux 主机 E2E） |
 | macOS | WKWebView | ✅ 已验证（net10.0-macos + macos workload） |
 
-平台由 `WebWindowUI.Platform.props` 的 `$(WWUIPlatform)` 统一选择（TFM + 编译符号）；CEF 平台由应用工程 `UseCEF=true` 切换（Windows 上替代 WebView2）。平台限制：`SetIcon` no-op（macOS 窗口图标属 App Bundle）；跨平台 E2E 测试目前覆盖 Windows/Linux（macOS 测试工程待补）。
+平台由 `WebWindowUI.Platform.props` 的 `$(WWUIPlatform)` 统一选择（TFM + 编译符号）；CEF 平台由应用工程 `UseCEF=true` 切换（Windows 上替代 WebView2）。平台限制：macOS `SetIcon` no-op（窗口图标属 App Bundle）；Linux `SetIcon`（`gtk_window_set_icon`）与 `CanMinimize`/`CanMaximize`（`gdk_window_set_functions` 控制 WM 按钮）已真实现，Wayland 下 per-window 图标/按钮 best-effort。跨平台 E2E 测试目前覆盖 Windows/Linux（macOS 测试工程待补）。
 
 > **CEF 平台注意**：应用工程必须嵌 `app.manifest`（`requestedExecutionLevel asInvoker` + `supportedOS` Win7/8/8.1/10 GUID）——缺应用清单时 chrome://gpu 渲染进程确定性 0xC0000409 崩溃（详见 `Platforms/WebWindowUI.Platforms.Cef/README.md`）。CEF 150 运行时由 `CefGlue.Next.Common` 包依赖链自动部署（chromiumembeddedframework.runtime.win-x64 150.0.11）。
 
@@ -171,7 +171,7 @@ CefDemo/                      # CEF 直连测试应用（验证 chrome://gpu 全
 
 ```bash
 dotnet build WebWindowUI.slnx -c Debug   # 0 错误（MSB3277 WebView2 WindowsBase 为无害警告）
-dotnet test  WebWindowUI.slnx -c Debug   # 129 通过：协议 111 + 平台 18（含 WebView2 E2E）
+dotnet test  WebWindowUI.slnx -c Debug   # 按主机：Linux 130（协议 105 + Linux E2E 25）/ Windows 131（协议 105 + WebView2 19 + 剪贴板 7）
 ```
 
 ## 依赖
@@ -179,5 +179,5 @@ dotnet test  WebWindowUI.slnx -c Debug   # 129 通过：协议 111 + 平台 18�
 - .NET 10 SDK
 - Node.js / npm（前端 vite 构建，rolldown 内核 vite 8）
 - Windows：WebView2 Runtime（Win11 自带）；Linux：`libwebkit2gtk-4.1-0`（Ubuntu，WebKit2GTK 4.1 / GTK3）；macOS：`dotnet workload install macos` + Xcode（Apple SDK 依赖其编译工具链）
-- CEF 平台：`CefGlue.Next` NuGet 包（CEF 150 代，本地补丁源 `E:\temp_code\CefGlue\Nuget\output`）+ `chromiumembeddedframework.runtime.win-x64`（150.0.11，包链自动部署运行时）
+- CEF 平台：`CefGlue.Next` NuGet 包（CEF 150 代，由 vendored 源码 `third-party/CefGlue` 打包进 `artifacts` 本地源，随 CEF 平台包一起产出）+ `chromiumembeddedframework.runtime.win-x64`（150.0.11，包链自动部署运行时）
 - NuGet：protobuf-net、CommunityToolkit.Mvvm（CPM 集中版本，见 `Directory.Packages.props`）
