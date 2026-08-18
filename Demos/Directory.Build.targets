@@ -1,8 +1,0 @@
-<Project>
-  <!-- Demos 是包模式消费方（PackageReference 到 WebWindowUI 系包），遮蔽仓库根 Directory.Build.targets：
-       根 targets 会在 restore 期导入仓库 WebWindowUI.targets，把仓库平台工程/生成器工程引用烤进 restore 图
-       （dgspec 里 WebWindowUI.Core/Platforms.MacOS 变 type=project、包 lib 退化成 bin/placeholder，
-       应用工程编译缺 Platforms.MacOS 引用）。包模式只需包内 buildTransitive targets/props（NuGet 自动导入），
-       本文件留空即切断仓库 targets 导入。仓库根 Directory.Build.props 仍生效（Version + WebWindowUI.Platform.props
-       提供 TFM/平台选择，Demo 首 restore 正需要它）。 -->
-</Project>

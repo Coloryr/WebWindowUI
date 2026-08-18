@@ -1,26 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- 配置键控：Debug=Exe（开发控制台看日志）、Release=WinExe（无控制台窗口）。 -->
     <OutputType Condition="'$(Configuration)' == 'Debug'">Exe</OutputType>
     <OutputType Condition="'$(Configuration)' == 'Release'">WinExe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <!-- macOS 打包需要 bundle identifier（.NET Apple SDK 生成 .app 必需；Windows/Linux 忽略该属性）。
-         换成你自己的反域标识，如 com.yourcompany.<AppName>。 -->
+	<UseCEF>false</UseCEF>
+	<ApplicationManifest Condition="'$(WWUIPlatform)' == 'Windows' And '$(UseCEF)' == 'true'">app.manifest</ApplicationManifest>
     <ApplicationId Condition="'$(WWUIPlatform)' == 'MacOS'">com.webwindowui.sample</ApplicationId>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="WebWindowUI" />
+    <PackageReference Include="WebWindowUI" Version="0.1.0" />
     <ProjectReference Include="..\WebWindowUI.Sample.Backend\WebWindowUI.Sample.Backend.csproj" />
-    <ProjectReference Include="..\WebWindowUI.Sample.Frontend\WebWindowUI.Sample.Frontend.csproj" />
+    <ProjectReference Include="..\WebWindowUI.Sample.Frontend\WebWindowUI.Sample.Frontend.csproj"  />
   </ItemGroup>
 
-
-  <!-- PDB 内嵌策略显式化：Debug=portable（独立 .pdb）、Release=embedded（符号随程序集，无独立 .pdb 文件）。
-       仓库工程与根 Directory.Build.props 的 Release=embedded 重复但无害（自包含）；模板生成工程无根 props，靠这里保证。 -->
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <DebugType>portable</DebugType>
   </PropertyGroup>

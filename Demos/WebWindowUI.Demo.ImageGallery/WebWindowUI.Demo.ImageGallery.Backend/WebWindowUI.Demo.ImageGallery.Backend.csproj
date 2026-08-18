@@ -4,12 +4,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- WPF 文件选择对话框（Microsoft.Win32.OpenFileDialog）需要 -windows TFM：Windows 上覆盖为
+         net10.0-windows（消费方应用同步覆盖，见 App csproj）；Linux/macOS 保持 net10.0，模型内
+         #if WINDOWS 分支编译掉、UseWPF 也不启用。 -->
+    <TargetFramework Condition="'$(WWUIPlatform)' == 'Windows'">net10.0-windows</TargetFramework>
     <UseWPF Condition="'$(WWUIPlatform)' == 'Windows'">true</UseWPF>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- 只引用 WebWindowUI 角色标记包：CommunityToolkit.Mvvm 经包依赖图自动传递。 -->
     <PackageReference Include="WebWindowUI.Backend" />
-    <PackageReference Include="CommunityToolkit.Mvvm" />
   </ItemGroup>
 
 

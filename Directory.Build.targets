@@ -2,9 +2,9 @@
   <Import Project="$(MSBuildThisFileDirectory)WebWindowUI.targets"
           Condition="'$(_WebWindowUITargetsLoaded)' == ''" />
   <ItemGroup>
-    <_WWUI_RepoBackendRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Backend'))" />
+    <_WWUI_RepoAnalyzerRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Backend'));@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI'))" />
   </ItemGroup>
-  <ItemGroup Condition="'@(_WWUI_RepoBackendRef)' != ''">
+  <ItemGroup Condition="'@(_WWUI_RepoAnalyzerRef)' != ''">
     <Analyzer Include="$(MSBuildThisFileDirectory)Generator\WebWindowUI.Generator.SourceGen\bin\$(Configuration)\netstandard2.0\WebWindowUI.Generator.SourceGen.dll" />
   </ItemGroup>
 

@@ -7,8 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- 只引用 WebWindowUI 角色标记包：CommunityToolkit.Mvvm 经包依赖图自动传递。 -->
     <PackageReference Include="WebWindowUI.Backend" />
-    <PackageReference Include="CommunityToolkit.Mvvm" />
   </ItemGroup>
 
 

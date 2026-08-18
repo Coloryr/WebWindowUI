@@ -8,7 +8,7 @@
 
 - 空标记类 `Marker.cs`（角色证明）。
 - 依赖入口包 `WebWindowUI`。
-- **内嵌源生成器到 `analyzers/dotnet/cs/`**：`WebWindowUI.Generator.SourceGen.dll`（WriteBackGenerator + ProtoGenerator，见 Generator 层 README）沿包依赖图传给引用链上所有模型库，模型库零手写分析器引用。
+- 源生成器由**入口包**内嵌（`analyzers/dotnet/cs/` 的 `WebWindowUI.Generator.SourceGen.dll`，WriteBackGenerator + ProtoGenerator，见 Generator 层 README），沿包依赖图经本包传给引用链上所有模型库，模型库零手写分析器引用。
 
 ## 用法
 

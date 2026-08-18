@@ -100,13 +100,23 @@
        故角色不落属性、直接以项列表信号贯穿：_WWUI_BackendRef / _WWUI_FrontendMarkerRef 非空即命中角色。
        精确匹配（而非子串）保证 WebWindowUI.Sample.Backend 这类「名字里带 Backend」的工程不误判为标记库。
        _WWUI_EntryRef = 直接引用入口（WebWindowUI 工程/包）的工程——应用 exe 独有信号
-       （标记库工程也引用入口，但会被各自的 marker 信号排除）。 -->
+       （标记库工程也引用入口，但会被各自的 marker 信号排除）。
+       _WWUI_ModelRoleRef = BackendRef ∪ EntryRef，模型生成管线（ModelProtoFile 扫描 /
+       GenerateModelProto 等）以此判定：引 Backend 标记的模型库与只引入口的单包自包含消费方都触发。 -->
   <ItemGroup>
     <!-- 项目引用按 Filename（工程文件名）；包引用按 Identity（包名，Identity 精确匹配，
          因为包名无扩展名时 Filename 会把 .Backend 剥掉）。两个信号并集即角色证明。 -->
     <_WWUI_BackendRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Backend'));@(PackageReference->WithMetadataValue('Identity', 'WebWindowUI.Backend'))" />
     <_WWUI_FrontendMarkerRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Frontend'));@(PackageReference->WithMetadataValue('Identity', 'WebWindowUI.Frontend'))" />
     <_WWUI_EntryRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI'));@(PackageReference->WithMetadataValue('Identity', 'WebWindowUI'))" />
+  </ItemGroup>
+
+  <!-- 模型生成角色 = 后端标记 ∪ 直接引入口：引用入口 WebWindowUI（包/工程）单独即触发完整
+       模型→proto/descriptor/TS 管线（单包自包含消费方）；应用 exe / 标记库工程也命中 EntryRef
+       但无 *Model.cs → 扫描为空、各目标短路。 -->
+  <ItemGroup>
+    <_WWUI_ModelRoleRef Include="@(_WWUI_BackendRef)" />
+    <_WWUI_ModelRoleRef Include="@(_WWUI_EntryRef)" />
   </ItemGroup>
 
   <!-- 平台实现（WebWindowUI.Platforms.{Windows,Linux,MacOS,Cef} 独立包）的选择与分派在应用工程侧完成
@@ -160,13 +170,14 @@
 
   </PropertyGroup>
 
-  <!-- 模型自动发现：仅后端模型库（引用 WebWindowUI.Backend 标记 → _WWUI_BackendRef 非空）扫描工程目录下
-       以 Model.cs 结尾的源码（文件名即类名，递归含子目录，如 Items\NestedListItemModel.cs），ProtoBase 由类名
-       推导（PascalCase → snake_case：MainWindowModel → main_window_model）。显式排除 obj/bin 下的中间产物
+  <!-- 模型自动发现：模型角色工程（_WWUI_ModelRoleRef 非空 = 引 Backend 标记的模型库 ∪ 直接引入口的
+       单包自包含消费方）扫描工程目录下以 Model.cs 结尾的源码（文件名即类名，递归含子目录，
+       如 Items\NestedListItemModel.cs），ProtoBase 由类名推导（PascalCase → snake_case：
+       MainWindowModel → main_window_model）。显式排除 obj/bin 下的中间产物
        （自定义 item 不套用 SDK 默认 Exclude，否则 ** 递归会把 bin/obj 里的拷贝也收进来）。
        显式声明过 ModelProtoFile 时不再自动扫描（可覆盖命名约定）。
-       ItemGroup 条件可引用 item 列表（PropertyGroup 不行），故用 @(_WWUI_BackendRef) 判定角色。 -->
-  <ItemGroup Condition="'@(_WWUI_BackendRef)' != '' And '@(ModelProtoFile)' == ''">
+       应用 exe / 标记库工程命中 EntryRef 但无 *Model.cs → 扫描结果为空、后续目标短路。 -->
+  <ItemGroup Condition="'@(_WWUI_ModelRoleRef)' != '' And '@(ModelProtoFile)' == ''">
     <ModelProtoFile Include="**\*Model.cs" Exclude="obj\**\*Model.cs;bin\**\*Model.cs">
       <ProtoBase>$([System.Text.RegularExpressions.Regex]::Replace('%(ModelProtoFile.Filename)', '([a-z0-9])([A-Z])', '$1_$2').ToLowerInvariant())</ProtoBase>
     </ModelProtoFile>
@@ -175,7 +186,7 @@
   <!-- 数据路由候选扫描：仅后端模型库，收集全部 .cs 源码（路由类无命名约束——DataProvider.cs 也可，
        不能用 *Model.cs 式 glob；生成器按 DataRoute 基类过滤，见 ModelProtoGenerator.GenerateDataRoutes）。
        与 ModelProtoFile 一样显式排除 obj/bin 中间产物。 -->
-  <ItemGroup Condition="'@(_WWUI_BackendRef)' != '' And '@(DataRouteFile)' == ''">
+  <ItemGroup Condition="'@(_WWUI_ModelRoleRef)' != '' And '@(DataRouteFile)' == ''">
     <DataRouteFile Include="**\*.cs" Exclude="obj\**\*.cs;bin\**\*.cs" />
   </ItemGroup>
 
@@ -364,7 +375,7 @@
        all-models 参数若用同一 transform 只会传单个路径，typed List<模型> 检测会因缺元素模型源码而回退 ModelValue。
        故先在独立目标（无批处理元数据引用）把全量路径 transform 转成项、再以裸 @(Item) 进属性，
        Exec 里引用属性（属性不参与批处理作用域）。裸 @(Item) 进属性求值期展开，与前端路径定位同一约定。 -->
-  <Target Name="_WWUI_ComputeAllModels" Condition="'@(_WWUI_BackendRef)' != '' And '@(ModelProtoFile)' != ''">
+  <Target Name="_WWUI_ComputeAllModels" Condition="'@(_WWUI_ModelRoleRef)' != '' And '@(ModelProtoFile)' != ''">
     <ItemGroup>
       <_WWUI_AllModelPaths Include="@(ModelProtoFile->'$(MSBuildProjectDirectory)/%(Identity)')" />
     </ItemGroup>
@@ -374,7 +385,7 @@
   </Target>
   <!-- 全路由清单落成属性：与 _WWUI_ComputeAllModels 同理——独立目标（无批处理元数据引用）+ 裸 @(Item) 进属性，
        避 GenerateModelProto 批处理作用域（否则 %(DataRouteFile.Identity) 变换被限定到当前模型批次）。 -->
-  <Target Name="_WWUI_ComputeAllRoutes" Condition="'@(_WWUI_BackendRef)' != '' And '@(DataRouteFile)' != ''">
+  <Target Name="_WWUI_ComputeAllRoutes" Condition="'@(_WWUI_ModelRoleRef)' != '' And '@(DataRouteFile)' != ''">
     <ItemGroup>
       <_WWUI_AllRoutePaths Include="@(DataRouteFile->'$(MSBuildProjectDirectory)/%(Identity)')" />
     </ItemGroup>
@@ -392,7 +403,7 @@
        （见 WebWindowUI.Generator/Program.cs PruneStaleTs，仅 all-models 参数缺失时不剪）。未命中的文件即孤儿，
        Delete 清除（空 glob 无害）。 -->
   <Target Name="_WWUI_CleanBridgeOutputs"
-          Condition="'@(_WWUI_BackendRef)' != ''">
+          Condition="'@(_WWUI_ModelRoleRef)' != '' And '@(ModelProtoFile)' != ''">
     <ItemGroup>
       <_WWUI_StaleBridge Include="$(WebWindowUIBridgeDir)\src\bridge\*.json"
                          Exclude="@(ModelProtoFile->'$(WebWindowUIBridgeDir)\src\bridge\%(ProtoBase).json')" />
@@ -401,7 +412,7 @@
   </Target>
 
   <Target Name="GenerateModelProto"
-          Condition="'@(_WWUI_BackendRef)' != '' And '@(ModelProtoFile)' != ''"
+          Condition="'@(_WWUI_ModelRoleRef)' != '' And '@(ModelProtoFile)' != ''"
           DependsOnTargets="_WWUI_DiscoverFrontend;_WWUI_ComputeAllModels;_WWUI_ComputeAllRoutes;_WWUI_CleanBridgeOutputs"
           BeforeTargets="CoreCompile">
     <Exec Command="dotnet &quot;$(WebWindowUIGeneratorDll)&quot; --model &quot;$(MSBuildProjectDirectory)/%(ModelProtoFile.Identity)&quot; --json-out &quot;$(WebWindowUIBridgeDir)/src/bridge/%(ModelProtoFile.ProtoBase).json&quot; --ts-out-dir &quot;$(WebWindowUIBridgeDir)/src/models&quot; --all-models &quot;$(WebWindowUIAllModelSources)&quot; --routes &quot;$(WebWindowUIAllRouteSources)&quot;" />

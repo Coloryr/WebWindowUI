@@ -9,9 +9,10 @@
        本工程唯一源码是 WebWindowUIPlatform.cs（WebWindowUIPlatform.Init：惰性加载委托驱动的
        AOT 安全平台加载，见该文件与 WebWindowUI.targets），无平台实现代码；对外发布：
        build/ 共享 targets（模型生成/前端编排/平台分派）、tools/ 模型生成器
-       （WebWindowUI.Generator.dll）。平台实现包依赖 Core（而非本入口）→ 依赖单向无环，
-       打包顺序：先平台包、再本包（本包 nuspec 声明 Core + 平台依赖，包模式消费方只引 WebWindowUI
-       即自动带回 Core + 平台包 + 平台自身依赖如 WebView2）。
+       （WebWindowUI.Generator.dll）、analyzers/dotnet/cs/ 源生成器
+       （WebWindowUI.Generator.SourceGen.dll，沿包依赖图传给模型库）。平台实现包依赖 Core
+       （而非本入口）→ 依赖单向无环，打包顺序：先平台包、再本包（本包 nuspec 声明 Core + 平台依赖，
+       包模式消费方只引 WebWindowUI 即自动带回 Core + 平台包 + 平台自身依赖如 WebView2）。
        平台选择（TFM）由 WebWindowUI.Platform.props 自动提供：仓库模式根 Directory.Build.props 导入，
        包模式本文件被打包成 build\;buildTransitive\WebWindowUI.props（见下）。 -->
 
@@ -86,9 +87,14 @@
   </ItemGroup>
 
   <!-- 生成器（模型 → proto/descriptor/TS 控制台程序）构建后打包进 tools/net10.0/。
-       不引用其程序集（ReferenceOutputAssembly=false 只阻止主 dll 进引用），只保证先构建好。 -->
+       不引用其程序集（ReferenceOutputAssembly=false 只阻止主 dll 进引用），只保证先构建好。
+       源生成器（WebWindowUI.Generator.SourceGen）构建后打包进 analyzers/dotnet/cs/——
+       入口包自带分析器，包模式沿包依赖图传给引用链上所有模型库（Backend 标记包消费方经
+       WebWindowUI.Backend → WebWindowUI 依赖链同样吃到）；仓库模式由根 Directory.Build.targets
+       对 ProjectReference 命中者注入 @(Analyzer)（ProjectReference 不透传 OutputItemType=Analyzer）。 -->
   <ItemGroup>
     <ProjectReference Include="..\..\Generator\WebWindowUI.Generator\WebWindowUI.Generator.csproj" ReferenceOutputAssembly="false" Private="false" />
+    <ProjectReference Include="..\..\Generator\WebWindowUI.Generator.SourceGen\WebWindowUI.Generator.SourceGen.csproj" ReferenceOutputAssembly="false" Private="false" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -99,6 +105,18 @@
       <TfmSpecificPackageFile Include="..\..\Generator\WebWindowUI.Generator\bin\$(Configuration)\net10.0\**"
                               Exclude="..\..\Generator\WebWindowUI.Generator\bin\$(Configuration)\net10.0\*\*">
         <PackagePath>tools/net10.0/</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
+
+  <!-- 源生成器内嵌（analyzers/dotnet/cs/）：包模式消费方只引 WebWindowUI 即得模型→proto/写回生成。 -->
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_PackSourceGenAnalyzer</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <Target Name="_PackSourceGenAnalyzer">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="..\..\Generator\WebWindowUI.Generator.SourceGen\bin\$(Configuration)\netstandard2.0\WebWindowUI.Generator.SourceGen.dll">
+        <PackagePath>analyzers/dotnet/cs/</PackagePath>
       </TfmSpecificPackageFile>
     </ItemGroup>
   </Target>

@@ -3,7 +3,7 @@ bin/
 node_modules/
 wwwroot/
 artifacts/
-/.vs
+**/.vs
 *.user
 **/src/bridge/
 **/src/models/

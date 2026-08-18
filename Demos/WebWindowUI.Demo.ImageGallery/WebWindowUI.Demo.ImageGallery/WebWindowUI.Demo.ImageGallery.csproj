@@ -4,6 +4,9 @@
     <!-- 配置键控：Debug=Exe（开发控制台看日志）、Release=WinExe（无控制台窗口）。
          WinExe 的 WindowsSubsystem 仅 Windows 生效；Linux 上等效 Exe，macOS 由 WebWindowUI.targets 覆盖回
          Exe（.NET Apple SDK 硬拒 WinExe）。 -->
+    <!-- Backend 用 WPF 对话框 → Windows 上整个应用链须 -windows TFM（net10.0-windows 消费 net10.0 库兼容，
+         反向不兼容）；Linux/macOS 保持 net10.0/net10.0-macos。 -->
+    <TargetFramework Condition="'$(WWUIPlatform)' == 'Windows'">net10.0-windows</TargetFramework>
     <OutputType Condition="'$(Configuration)' == 'Debug'">Exe</OutputType>
     <OutputType Condition="'$(Configuration)' == 'Release'">WinExe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>

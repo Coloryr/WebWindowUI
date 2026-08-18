@@ -4,7 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-	  <UseCEF>true</UseCEF>
+    <UseCEF>false</UseCEF>
     <OutputType Condition="'$(Configuration)' == 'Debug'">Exe</OutputType>
     <OutputType Condition="'$(Configuration)' == 'Release'">WinExe</OutputType>
     <ApplicationManifest Condition="'$(WWUIPlatform)' == 'Windows' And '$(UseCEF)' == 'true'">app.manifest</ApplicationManifest>
