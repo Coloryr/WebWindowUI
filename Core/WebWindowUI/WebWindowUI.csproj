@@ -1,21 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- WebWindowUI：入口包（聚合 + 平台引导）。依赖链：
-         WebWindowUI（入口）
-           ├── WebWindowUI.Core（运行时代码本体，ProjectReference）
-           └── WebWindowUI.Platforms.{Windows,Linux,MacOS}（平台实现：包模式按系统条件
-               PackageReference 转 nuspec 依赖；仓库模式平台选择由 WebWindowUI.targets 在
-               应用工程侧完成，本工程不直接引平台工程）
-       本工程唯一源码是 WebWindowUIPlatform.cs（WebWindowUIPlatform.Init：惰性加载委托驱动的
-       AOT 安全平台加载，见该文件与 WebWindowUI.targets），无平台实现代码；对外发布：
-       build/ 共享 targets（模型生成/前端编排/平台分派）、tools/ 模型生成器
-       （WebWindowUI.Generator.dll）、analyzers/dotnet/cs/ 源生成器
-       （WebWindowUI.Generator.SourceGen.dll，沿包依赖图传给模型库）。平台实现包依赖 Core
-       （而非本入口）→ 依赖单向无环，打包顺序：先平台包、再本包（本包 nuspec 声明 Core + 平台依赖，
-       包模式消费方只引 WebWindowUI 即自动带回 Core + 平台包 + 平台自身依赖如 WebView2）。
-       平台选择（TFM）由 WebWindowUI.Platform.props 自动提供：仓库模式根 Directory.Build.props 导入，
-       包模式本文件被打包成 build\;buildTransitive\WebWindowUI.props（见下）。 -->
-
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
@@ -26,30 +10,9 @@
     <PackageOutputPath>$(MSBuildThisFileDirectory)..\..\artifacts</PackageOutputPath>
   </PropertyGroup>
 
-  <!-- 运行时代码本体在 Core；入口只编译 Platform.cs，平台类型经平台包/平台工程的编译期引用（见下） -->
   <ItemGroup>
     <ProjectReference Include="..\WebWindowUI.Core\WebWindowUI.Core.csproj" />
   </ItemGroup>
-
-  <!-- 平台实现已拆为独立包 WebWindowUI.Platforms.{Windows,Linux,MacOS,Cef}（各自带 WebView2 /
-       GirCore.GLib-2.0 / CefGlue 依赖）。入口按 WWUIPlatform（=构建/运行系统）+ UseCEF 条件引用
-       对应平台【包】，pack 时转成 nuspec 依赖，包模式消费方只引 WebWindowUI 即按系统自动带回
-       平台包 + 平台自身依赖（WebView2 等），零额外配置（CEF 消费方另显式引用
-       WebWindowUI.Platforms.Cef）。
-       运行时加载由 WebWindowUI.targets 注入应用工程的 PlatformBootstrap.g.cs 惰性委托触发
-       （WebWindowUIPlatform.Init），平台程序集 [ModuleInitializer] 自注册（AOT 安全，无 Assembly.Load）。
-       平台包反向引用的是 WebWindowUI.Core（不是本入口）→ 依赖单向无环，无工程引用环、无包级环。
-       不能用 core→platform 的 ProjectReference：平台包反向引用核心的 ProjectReference 会构成双向
-       工程引用环（MSB4006，restore 路径遍历不过滤任何元数据）。
-
-       包引用用 $(WWUI_PlatformRef)=='true' 门控（仅框架打包时传 -p:WWUI_PlatformRef=true）：
-       仓库内构建/测试（默认不传）本入口不需要平台包（平台工程引用由 targets 注入应用工程 /
-       测试工程直接引用提供）；只有打包整个框架时才引入平台依赖，pack 顺序 =
-       先打平台包、再打本入口。
-       注意：不要对包引用加 ExcludeRestorePackageImports 门控（早期尝试）——restore 图遍历会连被还原
-       项目自身也用 ExcludeRestorePackageImports=true 重新求值、其 assets 反映该遍历求值，加了会把本入口
-       自己的平台依赖也抑制掉（deps 空、nuspec 丢平台依赖）。Core 拆分后平台工程不引用本入口，
-       无任何环路径，也不需要靠它挡循环。 -->
 
   <ItemGroup Condition="'$(WWUIPlatform)' == 'Windows' And '$(WWUI_PlatformRef)' == 'true' And '$(UseCEF)' != 'true'">
     <PackageReference Include="WebWindowUI.Platforms.Windows" />
@@ -64,34 +27,16 @@
     <PackageReference Include="WebWindowUI.Platforms.MacOS" />
   </ItemGroup>
 
-  <!-- 仓库模式（构建/测试，不传 WWUI_PlatformRef）不再在本工程引用平台工程：本工程是共享 dll，
-       UseCEF 只对消费方应用可见（MSBuild 属性不跨 ProjectReference 传播），平台选择与分派
-       改由 WebWindowUI.targets 在应用工程侧完成（应用工程补平台 ProjectReference + 注入
-       PlatformBootstrap.g.cs 惰性加载委托，见 WebWindowUIPlatform）。依赖图仍单向无环：
-       app→platform、platform→Core、entry→Core。 -->
-
   <ItemGroup>
     <None Include="..\..\WebWindowUI.targets" Pack="true" PackagePath="build\;buildTransitive\" />
-    <!-- 平台选择 props：打包名 = 包名（NuGet 约定 build/<PackageId>.props 自动导入），
-         包模式消费方（含透过后端/前端标记包间接引用）无需手写 Import 即得 WWUIPlatform/TFM/平台符号。
-         与 targets 同一模式：build\（直接引用）+ buildTransitive\（透传）两份，_WWUI_PlatformPropsLoaded 守卫幂等。 -->
     <None Include="..\..\WebWindowUI.Platform.props" Pack="true" PackagePath="build\WebWindowUI.props" />
     <None Include="..\..\WebWindowUI.Platform.props" Pack="true" PackagePath="buildTransitive\WebWindowUI.props" />
-    <!-- 前端宿主标记源文件：供 targets 注入前端工程/应用工程编译（Release，见 targets 的
-         _WWUI_InjectFrontendHost/_WWUI_InjectFrontendLoad），不进本入口 dll 编译、只随包分发。
-         buildTransitive 也要（同 targets：透过后端/前端标记包间接引用只吃 buildTransitive/）。 -->
     <Compile Remove="FrontendHost.cs" />
     <Compile Remove="FrontendLoad.cs" />
     <None Include="FrontendHost.cs" Pack="true" PackagePath="build\;buildTransitive\" />
     <None Include="FrontendLoad.cs" Pack="true" PackagePath="build\;buildTransitive\" />
   </ItemGroup>
 
-  <!-- 生成器（模型 → proto/descriptor/TS 控制台程序）构建后打包进 tools/net10.0/。
-       不引用其程序集（ReferenceOutputAssembly=false 只阻止主 dll 进引用），只保证先构建好。
-       源生成器（WebWindowUI.Generator.SourceGen）构建后打包进 analyzers/dotnet/cs/——
-       入口包自带分析器，包模式沿包依赖图传给引用链上所有模型库（Backend 标记包消费方经
-       WebWindowUI.Backend → WebWindowUI 依赖链同样吃到）；仓库模式由根 Directory.Build.targets
-       对 ProjectReference 命中者注入 @(Analyzer)（ProjectReference 不透传 OutputItemType=Analyzer）。 -->
   <ItemGroup>
     <ProjectReference Include="..\..\Generator\WebWindowUI.Generator\WebWindowUI.Generator.csproj" ReferenceOutputAssembly="false" Private="false" />
     <ProjectReference Include="..\..\Generator\WebWindowUI.Generator.SourceGen\WebWindowUI.Generator.SourceGen.csproj" ReferenceOutputAssembly="false" Private="false" />
@@ -109,7 +54,6 @@
     </ItemGroup>
   </Target>
 
-  <!-- 源生成器内嵌（analyzers/dotnet/cs/）：包模式消费方只引 WebWindowUI 即得模型→proto/写回生成。 -->
   <PropertyGroup>
     <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_PackSourceGenAnalyzer</TargetsForTfmSpecificContentInPackage>
   </PropertyGroup>
