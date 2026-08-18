@@ -45,6 +45,11 @@ public sealed class CefPlatform : IPlatform
     public IClipboard Clipboard => Win32Clipboard.Instance;
 
     /// <summary>
+    /// 平台系统通知（CEF 宿主在 Windows，复用 Win32 气泡实现）。
+    /// </summary>
+    public INotification Notification => Win32Notification.Instance;
+
+    /// <summary>
     /// 初始化 CEF 运行时：子进程分发（CefSubProcess）→ CefRuntime.Load/Initialize
     /// （AppCefApp 注册自定义 scheme）→ 逐 scheme 注册处理器工厂 → Win32 消息循环。
     /// 须在 UI 线程调用一次。
@@ -174,6 +179,13 @@ public sealed class CefPlatform : IPlatform
         _message.RunOnUiThread(() => window = new CefWindow(options));
         return window!;
     }
+
+    /// <summary>
+    /// 创建窗口系统托盘（CEF 宿主在 Windows，复用 Win32 托盘实现）。
+    /// </summary>
+    /// <param name="window">所属窗口。</param>
+    public ITrayIcon CreateTrayIcon(WebWindow window)
+        => window.NativeWindow.CreateTrayIcon(window.Title);
 
     /// <summary>
     /// 运行主消息循环（末窗关闭后返回），随后同线程关闭 CEF 运行时。

@@ -49,6 +49,13 @@ public sealed class LinuxPlatform : IPlatform
         => LinuxWindow.Create(options);
 
     /// <summary>
+    /// 创建窗口系统托盘（GTK 未实现，抛 NotSupportedException）。
+    /// </summary>
+    /// <param name="window">所属窗口。</param>
+    public ITrayIcon CreateTrayIcon(WebWindow window)
+        => window.NativeWindow.CreateTrayIcon(window.Title);
+
+    /// <summary>
     /// 运行 GLib 主循环，直到最后一个窗口关闭退出。
     /// </summary>
     public void RunMessageLoop()
@@ -174,4 +181,10 @@ public sealed class LinuxPlatform : IPlatform
     /// 平台剪贴板（GTK 实现）。
     /// </summary>
     public IClipboard Clipboard => LinuxClipboard.Clipboard;
+
+    /// <summary>
+    /// 平台系统通知（Linux 通知服务未实现，抛异常明示）。
+    /// </summary>
+    public INotification Notification
+        => throw new NotSupportedException("Linux 平台暂不支持系统通知（libnotify 未实现）。");
 }

@@ -887,4 +887,161 @@ internal static partial class GtkNative
             catch { /* 实例已销毁 */ }
         }
     }
+
+    // ------------------------------------------------------------------
+    // 系统托盘（libgtk-3 / libgobject-2.0 / libglib-2.0 / libgdk-3）：
+    // GtkStatusIcon 托盘图标 + GtkMenu 菜单树 + 主循环延迟调度（单击双击判定）。
+    // GtkStatusIcon 不是 widget（无 gtk_widget_destroy），创建返回浮动引用，须 ref_sink 强持有、unref 释放。
+    // ------------------------------------------------------------------
+
+    // GSourceFunc：gboolean (*)(gpointer data)，g_timeout_add 回调。返回 0 一次性、非 0 继续。
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I4)]
+    internal delegate int GSourceFunc(IntPtr data);
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_status_icon_new")]
+    private static partial IntPtr gtk_status_icon_new();
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_status_icon_set_from_pixbuf")]
+    private static partial void gtk_status_icon_set_from_pixbuf(IntPtr statusIcon, IntPtr pixbuf);
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_status_icon_set_tooltip_text")]
+    private static partial void gtk_status_icon_set_tooltip_text(IntPtr statusIcon, [MarshalAs(UnmanagedType.LPUTF8Str)] string text);
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_status_icon_set_visible")]
+    private static partial void gtk_status_icon_set_visible(IntPtr statusIcon, [MarshalAs(UnmanagedType.I4)] bool visible);
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_menu_new")]
+    private static partial IntPtr gtk_menu_new();
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_menu_shell_append")]
+    private static partial void gtk_menu_shell_append(IntPtr menu, IntPtr child);
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_menu_item_new_with_label")]
+    private static partial IntPtr gtk_menu_item_new_with_label([MarshalAs(UnmanagedType.LPUTF8Str)] string label);
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_separator_menu_item_new")]
+    private static partial IntPtr gtk_separator_menu_item_new();
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_check_menu_item_new_with_label")]
+    private static partial IntPtr gtk_check_menu_item_new_with_label([MarshalAs(UnmanagedType.LPUTF8Str)] string label);
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_check_menu_item_set_active")]
+    private static partial void gtk_check_menu_item_set_active(IntPtr checkMenuItem, [MarshalAs(UnmanagedType.I4)] bool active);
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_menu_item_set_sensitive")]
+    private static partial void gtk_menu_item_set_sensitive(IntPtr menuItem, [MarshalAs(UnmanagedType.I4)] bool sensitive);
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_menu_item_set_submenu")]
+    private static partial void gtk_menu_item_set_submenu(IntPtr menuItem, IntPtr submenu);
+
+    [LibraryImport(GtkLib, EntryPoint = "gtk_menu_popup_at_pointer")]
+    private static partial void gtk_menu_popup_at_pointer(IntPtr menu, IntPtr triggerEvent);
+
+    [LibraryImport(GObjectLib, EntryPoint = "g_object_ref_sink")]
+    private static partial IntPtr g_object_ref_sink(IntPtr obj);
+
+    [LibraryImport(GLibLib, EntryPoint = "g_timeout_add")]
+    private static partial uint g_timeout_add(uint interval, GSourceFunc callback, IntPtr data);
+
+    [LibraryImport(GLibLib, EntryPoint = "g_source_remove")]
+    [return: MarshalAs(UnmanagedType.I4)]
+    private static partial bool g_source_remove(uint tag);
+
+    [LibraryImport(GdkLib, EntryPoint = "gdk_display_get_default")]
+    private static partial IntPtr gdk_display_get_default();
+
+    [LibraryImport(GdkLib, EntryPoint = "gdk_display_get_pointer")]
+    private static partial void gdk_display_get_pointer(IntPtr display, out IntPtr screen, out int x, out int y);
+
+    /// <summary>
+    /// 创建系统托盘图标（GtkStatusIcon，浮动引用经 ref_sink 转强引用；释放走 <see cref="ObjectUnref"/>）。
+    /// </summary>
+    public static IntPtr CreateStatusIcon()
+    {
+        var icon = gtk_status_icon_new();
+        return icon == IntPtr.Zero ? IntPtr.Zero : g_object_ref_sink(icon);
+    }
+
+    /// <summary>
+    /// 设置托盘图标（pixbuf；set_from_pixbuf 会 ref，调用方随后 unref 自己的引用）。
+    /// </summary>
+    public static void StatusIconSetIcon(IntPtr statusIcon, IntPtr pixbuf) => gtk_status_icon_set_from_pixbuf(statusIcon, pixbuf);
+
+    /// <summary>
+    /// 设置托盘提示文本。
+    /// </summary>
+    public static void StatusIconSetTooltip(IntPtr statusIcon, string text) => gtk_status_icon_set_tooltip_text(statusIcon, text);
+
+    /// <summary>
+    /// 显示/隐藏托盘图标。
+    /// </summary>
+    public static void StatusIconSetVisible(IntPtr statusIcon, bool visible) => gtk_status_icon_set_visible(statusIcon, visible);
+
+    /// <summary>
+    /// 创建空菜单（GtkMenu）。
+    /// </summary>
+    public static IntPtr CreateMenu() => gtk_menu_new();
+
+    /// <summary>
+    /// 追加子项到菜单（GtkMenuShell）。
+    /// </summary>
+    public static void MenuAppend(IntPtr menu, IntPtr child) => gtk_menu_shell_append(menu, child);
+
+    /// <summary>
+    /// 创建文本菜单项。
+    /// </summary>
+    public static IntPtr CreateMenuItem(string label) => gtk_menu_item_new_with_label(label);
+
+    /// <summary>
+    /// 创建分隔符菜单项。
+    /// </summary>
+    public static IntPtr CreateSeparatorMenuItem() => gtk_separator_menu_item_new();
+
+    /// <summary>
+    /// 创建可勾选菜单项（勾选状态见 <see cref="CheckMenuItemSetActive"/>）。
+    /// </summary>
+    public static IntPtr CreateCheckMenuItem(string label) => gtk_check_menu_item_new_with_label(label);
+
+    /// <summary>
+    /// 设置勾选菜单项选中状态。
+    /// </summary>
+    public static void CheckMenuItemSetActive(IntPtr checkMenuItem, bool active) => gtk_check_menu_item_set_active(checkMenuItem, active);
+
+    /// <summary>
+    /// 设置菜单项可用状态（false 置灰不可点击）。
+    /// </summary>
+    public static void MenuItemSetSensitive(IntPtr menuItem, bool sensitive) => gtk_menu_item_set_sensitive(menuItem, sensitive);
+
+    /// <summary>
+    /// 给菜单项挂子菜单。
+    /// </summary>
+    public static void MenuItemSetSubmenu(IntPtr menuItem, IntPtr submenu) => gtk_menu_item_set_submenu(menuItem, submenu);
+
+    /// <summary>
+    /// 在指针位置弹出菜单（GTK ≥ 3.22；右键信号触发时按钮事件即右键）。
+    /// </summary>
+    public static void MenuPopupAtPointer(IntPtr menu) => gtk_menu_popup_at_pointer(menu, IntPtr.Zero);
+
+    /// <summary>
+    /// 销毁菜单（顶层菜单销毁时 GTK 递归销毁子菜单与菜单项）。
+    /// </summary>
+    public static void WidgetDestroy(IntPtr widget) => gtk_widget_destroy(widget);
+
+    /// <summary>
+    /// 取鼠标屏幕坐标。
+    /// </summary>
+    public static void GetCursorPos(out int x, out int y)
+        => gdk_display_get_pointer(gdk_display_get_default(), out _, out x, out y);
+
+    /// <summary>
+    /// 调度回调延迟到主循环执行（单击双击判定）。回调返回 0 一次性；返回 source id（<see cref="SourceRemove"/> 取消）。
+    /// </summary>
+    public static uint AddTimeout(uint intervalMs, GSourceFunc callback, IntPtr data)
+        => g_timeout_add(intervalMs, callback, data);
+
+    /// <summary>
+    /// 取消已调度的延迟回调。
+    /// </summary>
+    public static void SourceRemove(uint tag) => g_source_remove(tag);
 }

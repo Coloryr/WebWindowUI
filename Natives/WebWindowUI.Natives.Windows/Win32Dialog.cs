@@ -38,9 +38,8 @@ public class Win32Dialog : IPlatformDialog
         if (option.AllowMultiSelect)
             flags |= Win32.OFN_ALLOWMULTISELECT;
 
-        var ofn = new Win32.OPENFILENAME
+        var ofn = new OPENFILENAME
         {
-            lStructSize = Marshal.SizeOf<Win32.OPENFILENAME>(),
             lpstrTitle = option.Title,
             lpstrFilter = option.Filter,
             lpstrInitialDir = option.InitialDirectory,
@@ -74,7 +73,7 @@ public class Win32Dialog : IPlatformDialog
     /// <returns>选中的目录路径；取消为 null。</returns>
     public List<string>? OpenFolderDialog(SelectDialogOption option)
     {
-        var bi = new Win32.BROWSEINFOW
+        var bi = new BROWSEINFOW
         {
             lpszTitle = option.Title,
             ulFlags = Win32.BIF_RETURNONLYFSDIRS | Win32.BIF_NEWDIALOGSTYLE,
@@ -111,9 +110,8 @@ public class Win32Dialog : IPlatformDialog
     /// <returns>选中的文件路径；取消为 null。</returns>
     public string? SaveFileDialog(SelectDialogOption option)
     {
-        var ofn = new Win32.OPENFILENAME
+        var ofn = new OPENFILENAME
         {
-            lStructSize = Marshal.SizeOf<Win32.OPENFILENAME>(),
             lpstrTitle = option.Title,
             lpstrFilter = option.Filter,
             nMaxFile = Win32.OFN_SINGLE_SELECT_BUFFER,

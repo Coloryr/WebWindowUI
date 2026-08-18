@@ -42,3 +42,19 @@ public record Screen
         Size = size;
     }
 }
+
+public enum PointDataType
+{ 
+    LeftDown,
+    RightDown,
+    LeftUp,
+    RightUp,
+    MinDown,
+    MinUp,
+}
+
+public record PointData
+{
+    public PointDataType Type { get; }
+    public Point2I Pos { get; }
+}

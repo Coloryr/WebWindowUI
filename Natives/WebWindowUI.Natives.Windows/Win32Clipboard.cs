@@ -99,7 +99,8 @@ public class Win32Clipboard : IClipboard
                     return new ClipboardUrlData { Url = url, Type = ClipboardDataType.Url };
                 return new ClipboardTextData { Text = text, Type = ClipboardDataType.Text };
             }
-            foreach (var (key, format) in _customFormats)
+
+            foreach (var (_, format) in _customFormats)
             {
                 if (Win32.IsClipboardFormatAvailable(format))
                     return new ClipboardCustomData { Custom = GetCustom(format), Type = ClipboardDataType.Custom };
@@ -140,7 +141,7 @@ public class Win32Clipboard : IClipboard
     /// 读取 CF_UNICODETEXT 字符串。
     /// </summary>
     /// <returns>文本。</returns>
-    private string GetUnicodeText()
+    private static string GetUnicodeText()
     {
         IntPtr h = Win32.GetClipboardData(Win32.CF_UNICODETEXT);
         return ReadHGlobalString(h);
@@ -188,7 +189,7 @@ public class Win32Clipboard : IClipboard
     /// <param name="files">文件路径列表。</param>
     private static void SetFiles(List<string> files)
     {
-        int offset = Marshal.SizeOf<Win32.DROPFILES>();
+        int offset = Marshal.SizeOf<DROPFILES>();
         int totalChars = 1; // 结束双 NUL
         foreach (var f in files)
             totalChars += f.Length + 1;

@@ -28,6 +28,8 @@ public sealed class LinuxNativeWindow : INativeWindow
     private ulong _stateHandlerId;
     private ulong _realizeHandlerId;
 
+    private LinuxTrayIcon? _trayIcon;
+
     // 窗口状态跟踪字段（setter 应用原生 API；getter 读字段或系统状态推导）。
     private SystemDecorations _decorations = SystemDecorations.Full;
     private bool _canResize = true;
@@ -153,6 +155,14 @@ public sealed class LinuxNativeWindow : INativeWindow
             File.Delete(tmp);
         }
     }
+
+    /// <summary>
+    /// 创建窗口系统托盘（GtkStatusIcon）：图标/提示/右键菜单/气泡通知/可见性，点击经事件回传。
+    /// GTK 调用须在主线程（调用方 marshal）。窗口销毁时自动移除（见 <see cref="Dispose"/>）。
+    /// </summary>
+    /// <param name="name">托盘提示文本。</param>
+    public ITrayIcon CreateTrayIcon(string name)
+        => _trayIcon = new LinuxTrayIcon(name);
 
     /// <summary>
     /// 取窗口当前尺寸。
@@ -454,6 +464,7 @@ public sealed class LinuxNativeWindow : INativeWindow
     /// </summary>
     public void Dispose()
     {
+        _trayIcon?.Delete();
         GtkNative.DisconnectSignal(_window, _destroyHandlerId);
         GtkNative.DisconnectSignal(_window, _configureHandlerId);
         GtkNative.DisconnectSignal(_window, _positionHandlerId);
@@ -477,7 +488,11 @@ public sealed class LinuxNativeWindow : INativeWindow
     {
         try
         {
-            (GCHandle.FromIntPtr(userData).Target as LinuxNativeWindow)?.Destory?.Invoke();
+            var w = GCHandle.FromIntPtr(userData).Target as LinuxNativeWindow;
+            if (w is null)
+                return;
+            w._trayIcon?.Delete(); // 窗口销毁时移除托盘（镜像 Win32 WM_DESTROY 的 Delete）
+            w.Destory?.Invoke();
         }
         catch
         {

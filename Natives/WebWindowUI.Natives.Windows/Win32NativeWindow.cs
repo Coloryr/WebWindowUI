@@ -20,6 +20,8 @@ public class Win32NativeWindow : INativeWindow
 
     private readonly IntPtr _hwnd;
 
+    private Win32TrayIcon _trayIcon;
+
     // 窗口状态跟踪字段（真实现：setter 应用原生样式位/显示命令，getter 读字段或系统状态推导）。
     private SystemDecorations _decorations = SystemDecorations.Full;
     private bool _canResize = true;
@@ -31,7 +33,7 @@ public class Win32NativeWindow : INativeWindow
     private bool _borderlessFull;
     private Point2I _minSize;
     private Point2I _maxSize;
-    private Win32.RECT _savedRect; // 全屏前的窗口矩形（ExitFullScreen 恢复用）
+    private RECT _savedRect; // 全屏前的窗口矩形（ExitFullScreen 恢复用）
     private bool _savedRectKnown;
 
     /// <summary>
@@ -155,7 +157,7 @@ public class Win32NativeWindow : INativeWindow
     /// <returns>客户区尺寸。</returns>
     public Point2I GetSize()
     {
-        Win32.GetClientRect(_hwnd, out Win32.RECT rc);
+        Win32.GetClientRect(_hwnd, out RECT rc);
         return new Point2I { X = rc.Right, Y = rc.Bottom };
     }
 
@@ -225,12 +227,12 @@ public class Win32NativeWindow : INativeWindow
     {
         get
         {
-            Win32.GetWindowRect(_hwnd, out Win32.RECT rc);
+            Win32.GetWindowRect(_hwnd, out RECT rc);
             return new Point2I { X = rc.Left, Y = rc.Top };
         }
         set
         {
-            Win32.GetWindowRect(_hwnd, out Win32.RECT rc);
+            Win32.GetWindowRect(_hwnd, out RECT rc);
             Win32.MoveWindow(_hwnd, value.X, value.Y, rc.Right - rc.Left, rc.Bottom - rc.Top, true);
         }
     }
@@ -243,7 +245,7 @@ public class Win32NativeWindow : INativeWindow
         get => GetSize();
         set
         {
-            var rc = new Win32.RECT { Left = 0, Top = 0, Right = value.X, Bottom = value.Y };
+            var rc = new RECT { Left = 0, Top = 0, Right = value.X, Bottom = value.Y };
             int style = Win32.GetWindowLongPtrW(_hwnd, Win32.GWL_STYLE).ToInt32();
             uint ex = (uint)Win32.GetWindowLongPtrW(_hwnd, Win32.GWL_EXSTYLE);
             Win32.AdjustWindowRectEx(ref rc, style, false, ex);
@@ -360,7 +362,7 @@ public class Win32NativeWindow : INativeWindow
             var hMonitor = Win32.MonitorFromWindow(_hwnd, Win32.MONITOR_DEFAULTTONEAREST);
             int index = 0;
             var size = new Point2I();
-            Win32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr mon, IntPtr dc, ref Win32.RECT rc, IntPtr data) =>
+            Win32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (mon, dc, ref rc, data) =>
             {
                 if (mon == hMonitor)
                 {
@@ -436,7 +438,7 @@ public class Win32NativeWindow : INativeWindow
         ApplyStyle();
         Win32.GetWindowRect(_hwnd, out _savedRect); // 重取：样式变更后矩形可能微调
         var hMonitor = Win32.MonitorFromWindow(_hwnd, Win32.MONITOR_DEFAULTTONEAREST);
-        var mi = new Win32.MONITORINFO { cbSize = Marshal.SizeOf<Win32.MONITORINFO>() };
+        var mi = new MONITORINFO();
         if (Win32.GetMonitorInfoW(hMonitor, ref mi))
         {
             Win32.SetWindowPos(_hwnd, IntPtr.Zero, mi.rcMonitor.Left, mi.rcMonitor.Top,
@@ -494,6 +496,10 @@ public class Win32NativeWindow : INativeWindow
     {
         switch (msg)
         {
+            case Win32.WM_TRAYICON:
+                _trayIcon?.OnTrayMessage(wParam, lParam);
+                return IntPtr.Zero;
+
             case Win32.WM_CLOSE:
                 Win32.DestroyWindow(_hwnd);
                 return IntPtr.Zero;
@@ -505,6 +511,7 @@ public class Win32NativeWindow : INativeWindow
                     _hIcon = IntPtr.Zero;
                 }
                 Destory?.Invoke();
+                _trayIcon?.Delete();
                 Win32MessageLoop.WindowClose(this);
                 return IntPtr.Zero;
 
@@ -539,11 +546,20 @@ public class Win32NativeWindow : INativeWindow
     {
         if (lParam == IntPtr.Zero)
             return;
-        var mmi = Marshal.PtrToStructure<Win32.MINMAXINFO>(lParam);
+        var mmi = Marshal.PtrToStructure<MINMAXINFO>(lParam);
         if (_minSize.X > 0 && _minSize.Y > 0)
-            mmi.ptMinTrackSize = new Win32.POINT { X = _minSize.X, Y = _minSize.Y };
+            mmi.ptMinTrackSize = new POINT { X = _minSize.X, Y = _minSize.Y };
         if (_maxSize.X > 0 && _maxSize.Y > 0)
-            mmi.ptMaxTrackSize = new Win32.POINT { X = _maxSize.X, Y = _maxSize.Y };
+            mmi.ptMaxTrackSize = new POINT { X = _maxSize.X, Y = _maxSize.Y };
         Marshal.StructureToPtr(mmi, lParam, false);
+    }
+
+    /// <summary>
+    /// 创建窗口托盘（WM_TRAYICON 消息自动路由到该实例）。
+    /// </summary>
+    /// <param name="name">托盘提示文本。</param>
+    public ITrayIcon CreateTrayIcon(string name)
+    {
+        return _trayIcon = new Win32TrayIcon(_hwnd, name);
     }
 }

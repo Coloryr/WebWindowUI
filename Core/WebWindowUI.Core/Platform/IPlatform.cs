@@ -16,6 +16,11 @@ public interface IPlatform
     IClipboard Clipboard { get; }
 
     /// <summary>
+    /// 平台系统通知（独立于托盘的气泡/通知中心）。
+    /// </summary>
+    INotification Notification { get; }
+
+    /// <summary>
     /// 初始化
     /// </summary>
     void Init(string[] args);
@@ -25,6 +30,12 @@ public interface IPlatform
     /// <param name="options">窗口选项。</param>
     /// <returns>平台窗口。</returns>
     WebWindow CreateWindow(WebWindowOptions options);
+
+    /// <summary>
+    /// 创建一个系统托盘
+    /// </summary>
+    /// <returns></returns>
+    ITrayIcon CreateTrayIcon(WebWindow window);
 
     /// <summary>
     /// 运行平台的消息循环，直到所有窗口关闭后返回。

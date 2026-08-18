@@ -83,6 +83,13 @@ public sealed class MacOSPlatform : IPlatform
     }
 
     /// <summary>
+    /// 创建窗口系统托盘（NSStatusItem 未实现，抛 NotSupportedException）。
+    /// </summary>
+    /// <param name="window">所属窗口。</param>
+    public ITrayIcon CreateTrayIcon(WebWindow window)
+        => window.NativeWindow.CreateTrayIcon(window.Title);
+
+    /// <summary>
     /// 运行主事件循环，直到最后一个窗口关闭（Terminate → Run() 返回）。
     /// </summary>
     public void RunMessageLoop()
@@ -117,4 +124,10 @@ public sealed class MacOSPlatform : IPlatform
     /// 平台剪贴板（NSPasteboard 实现）。
     /// </summary>
     public IClipboard Clipboard => OsxClipboard.Clipboard;
+
+    /// <summary>
+    /// 平台系统通知（NSUserNotification 未实现，抛异常明示）。
+    /// </summary>
+    public INotification Notification
+        => throw new NotSupportedException("macOS 平台暂不支持系统通知（NSUserNotification 未实现）。");
 }

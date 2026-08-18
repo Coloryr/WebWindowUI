@@ -38,9 +38,8 @@ public static class Win32BrowserHost
     {
         if (!_classRegistered)
         {
-            var wc = new Win32.WNDCLASSEXW
+            var wc = new WNDCLASSEXW
             {
-                cbSize = (uint)Marshal.SizeOf<Win32.WNDCLASSEXW>(),
                 style = 0,
                 lpfnWndProc = HiddenHostWndProc,
                 hInstance = Win32.GetModuleHandleW(null),

@@ -37,6 +37,12 @@ public interface INativeWindow
     event Action<SystemDecorations>? SystemDecorationsChange;
 
     /// <summary>
+    /// 创建窗口托盘
+    /// </summary>
+    /// <returns></returns>
+    ITrayIcon CreateTrayIcon(string name);
+
+    /// <summary>
     /// 平台窗口句柄。
     /// </summary>
     IntPtr WindowHandle { get; }

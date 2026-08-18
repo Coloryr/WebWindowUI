@@ -26,9 +26,8 @@ public class Win32MessageLoop : IMessageLoop
     /// </summary>
     private static void InitWindowClass()
     {
-        var wc = new Win32.WNDCLASSEXW
+        var wc = new WNDCLASSEXW
         {
-            cbSize = (uint)Marshal.SizeOf<Win32.WNDCLASSEXW>(),
             style = Win32.CS_HREDRAW | Win32.CS_VREDRAW,
             lpfnWndProc = WndProc,
             hInstance = Win32.GetModuleHandleW(null),
@@ -103,7 +102,7 @@ public class Win32MessageLoop : IMessageLoop
     {
         while (!isDone())
         {
-            if (Win32.GetMessageW(out Win32.MSG msg, IntPtr.Zero, 0, 0) == 0)
+            if (Win32.GetMessageW(out MSG msg, IntPtr.Zero, 0, 0) == 0)
                 break; // WM_QUIT
             Win32.TranslateMessage(ref msg);
             Win32.DispatchMessageW(ref msg);

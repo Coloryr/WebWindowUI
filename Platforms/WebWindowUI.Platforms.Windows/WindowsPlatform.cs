@@ -23,6 +23,11 @@ public sealed class WindowsPlatform : IPlatform
     public IClipboard Clipboard => Win32Clipboard.Instance;
 
     /// <summary>
+    /// 平台系统通知（Win32 NIF_INFO 气泡，单例）。
+    /// </summary>
+    public INotification Notification => Win32Notification.Instance;
+
+    /// <summary>
     /// 初始化 Win32 消息循环并异步创建 WebView2 环境。
     /// </summary>
     public WindowsPlatform()
@@ -170,5 +175,14 @@ public sealed class WindowsPlatform : IPlatform
     public void RunMessageLoop()
     {
         _message.MessageLoop();
+    }
+
+    /// <summary>
+    /// 创建窗口系统托盘（图标/菜单/气泡经 ITrayIcon 操作，点击消息由所属窗口路由）。
+    /// </summary>
+    /// <param name="window">所属窗口。</param>
+    public ITrayIcon CreateTrayIcon(WebWindow window)
+    {
+        return window.NativeWindow.CreateTrayIcon(window.Title);
     }
 }

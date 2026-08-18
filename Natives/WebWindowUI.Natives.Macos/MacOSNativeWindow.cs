@@ -124,6 +124,14 @@ public sealed class MacOSNativeWindow : INativeWindow
     }
 
     /// <summary>
+    /// 创建窗口托盘（NSStatusItem 未实现，抛异常明示）。
+    /// </summary>
+    /// <param name="name">托盘提示文本。</param>
+    /// <exception cref="NotSupportedException">macOS 平台尚未实现托盘。</exception>
+    public ITrayIcon CreateTrayIcon(string name)
+        => throw new NotSupportedException("macOS 平台暂不支持系统托盘（NSStatusItem 未实现）。");
+
+    /// <summary>
     /// 取窗口当前尺寸（Frame 外框尺寸）。
     /// </summary>
     public Point2I GetSize()

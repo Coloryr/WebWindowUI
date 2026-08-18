@@ -49,9 +49,23 @@ public class NullPlatform : IPlatform
     public IClipboard Clipboard => throw new NotImplementedException();
 
     /// <summary>
+    /// 平台系统通知（未实现）。
+    /// </summary>
+    public INotification Notification => throw new NotImplementedException();
+
+    /// <summary>
     /// 运行消息循环（未实现）。
     /// </summary>
     public void RunMessageLoop()
+    {
+        throw new NotImplementedException();
+    }
+
+    /// <summary>
+    /// 创建托盘（未实现）。
+    /// </summary>
+    /// <param name="window">所属窗口。</param>
+    public ITrayIcon CreateTrayIcon(WebWindow window)
     {
         throw new NotImplementedException();
     }
