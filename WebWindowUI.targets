@@ -20,6 +20,7 @@
     <_WWUI_BackendRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Backend'));@(PackageReference->WithMetadataValue('Identity', 'WebWindowUI.Backend'))" />
     <_WWUI_FrontendMarkerRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI.Frontend'));@(PackageReference->WithMetadataValue('Identity', 'WebWindowUI.Frontend'))" />
     <_WWUI_EntryRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI'));@(PackageReference->WithMetadataValue('Identity', 'WebWindowUI'))" />
+    <_WWUI_EntryProjectRef Include="@(ProjectReference->WithMetadataValue('Filename', 'WebWindowUI'))" />
   </ItemGroup>
 
   <ItemGroup>
@@ -27,7 +28,7 @@
     <_WWUI_ModelRoleRef Include="@(_WWUI_EntryRef)" />
   </ItemGroup>
 
-  <ItemGroup Condition="'@(_WWUI_EntryRef)' != '' And '$(OutputType)' != 'Library'">
+  <ItemGroup Condition="'@(_WWUI_EntryProjectRef)' != '' And '$(OutputType)' != 'Library'">
     <ProjectReference Include="$(MSBuildThisFileDirectory)Platforms\WebWindowUI.Platforms.Cef\WebWindowUI.Platforms.Cef.csproj"
                       Condition="'$(UseCEF)' == 'true' And Exists('$(MSBuildThisFileDirectory)Platforms\WebWindowUI.Platforms.Cef\WebWindowUI.Platforms.Cef.csproj')" />
     <ProjectReference Include="$(MSBuildThisFileDirectory)Platforms\WebWindowUI.Platforms.Windows\WebWindowUI.Platforms.Windows.csproj"

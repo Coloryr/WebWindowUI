@@ -49,4 +49,12 @@
     <Project Path="third-party/CefGlue/CefGlue.Common/CefGlue.Common.csproj" />
     <Project Path="third-party/CefGlue/CefGlue/CefGlue.csproj" />
   </Folder>
+  <Folder Name="/third-party/CefGlue/Files/">
+    <File Path="third-party/CefGlue/cef-version.json" />
+    <File Path="third-party/CefGlue/CefGlue.Packages.props" />
+    <File Path="third-party/CefGlue/CefVersion.props" />
+    <File Path="third-party/CefGlue/Directory.Build.props" />
+    <File Path="third-party/CefGlue/Directory.Build.targets" />
+    <File Path="third-party/CefGlue/Directory.Packages.props" />
+  </Folder>
 </Solution>
