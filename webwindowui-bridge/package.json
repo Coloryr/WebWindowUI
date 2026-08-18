@@ -1,6 +1,6 @@
 {
   "name": "webwindowui-bridge",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "type": "module",
   "license": "MIT",
   "description": "WebWindowUI 前后端 protobuf 双向绑定桥（Vue + WebView2 / WebKitGTK / WKWebView）。",
@@ -16,7 +16,7 @@
   ],
   "sideEffects": false,
   "peerDependencies": {
-    "vue": "^3.2.0",
-    "protobufjs": "^7.6.0"
+    "vue": "^3.5.41",
+    "protobufjs": "^8.7.2"
   }
 }

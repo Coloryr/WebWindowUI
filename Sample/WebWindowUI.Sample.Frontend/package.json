@@ -10,16 +10,16 @@
     "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
-    "protobufjs": "^7.6.0",
+    "protobufjs": "^8.7.2",
     "vue": "^3.5.41",
     "webwindowui-bridge": "^0.1.6"
   },
   "devDependencies": {
-    "@types/node": "^22.15.0",
+    "@types/node": "^26.2.0",
     "@vitejs/plugin-vue": "^6.0.8",
     "eslint": "^10.8.1",
-    "typescript": "^5.9.2",
+    "typescript": "^7.0.2",
     "vite": "^8.2.1",
-    "vue-tsc": "^3.0.5"
+    "vue-tsc": "^3.3.10"
   }
 }
