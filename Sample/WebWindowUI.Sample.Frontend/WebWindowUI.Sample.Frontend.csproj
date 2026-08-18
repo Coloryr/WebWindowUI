@@ -16,7 +16,6 @@
     <None Include="src\**\*" />
     <None Include="public\**\*" />
     <None Include="package.json" />
-    <None Include="package-lock.json" />
     <None Include="tsconfig.json" />
     <None Include="vite.config.ts" />
   </ItemGroup>
