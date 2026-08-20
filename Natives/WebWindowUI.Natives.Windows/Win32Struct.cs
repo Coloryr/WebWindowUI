@@ -298,7 +298,9 @@ public struct OPENFILENAME
 
     public OPENFILENAME()
     {
-        lStructSize = Marshal.SizeOf<NOTIFYICONDATA>();
+        // 原生 OPENFILENAMEW 尺寸（含 lpEditInfo/lpstrPrompt 两个保留占位，x64=168）；曾误用 NOTIFYICONDATA
+        // 尺寸（976）导致 GetOpenFileNameW/GetSaveFileNameW 校验 lStructSize 失败、对话框直接按取消返回。
+        lStructSize = Marshal.SizeOf<OpenFileNameMarshaller.Native>();
     }
 }
 
@@ -418,12 +420,21 @@ internal static class NotifyIconDataMarshaller
         public uint dwState;
         public uint dwStateMask;
         public fixed char szInfo[256];
-        public uint uTimeout;
-        public uint uVersion;
+        public NativeTimeVersion timeVersion;   // 联合（uTimeout/uVersion 共 4 字节）：分开会虚增 4 字节、后置字段右移
         public fixed char szInfoTitle[64];
         public uint dwInfoFlags;
         public fixed byte guidItem[16];
         public IntPtr hBalloonIcon;
+
+        /// <summary>
+        /// NOTIFYICONDATAW 的 uTimeout/uVersion 联合（同一偏移；V3 尺寸=976，分开即虚增到 984）。
+        /// </summary>
+        [StructLayout(LayoutKind.Explicit)]
+        internal struct NativeTimeVersion
+        {
+            [FieldOffset(0)] public uint uTimeout;
+            [FieldOffset(0)] public uint uVersion;
+        }
     }
 
     public unsafe static Native ConvertToUnmanaged(NOTIFYICONDATA managed)
@@ -434,11 +445,11 @@ internal static class NotifyIconDataMarshaller
             hWnd = managed.hWnd,
             uID = managed.uID,
             uFlags = managed.uFlags,
+            uCallbackMessage = managed.uCallbackMessage,
             hIcon = managed.hIcon,
             dwState = managed.dwState,
             dwStateMask = managed.dwStateMask,
-            uTimeout = managed.uTimeout,
-            uVersion = managed.uVersion,
+            timeVersion = new Native.NativeTimeVersion { uTimeout = managed.uTimeout, uVersion = managed.uVersion },
             dwInfoFlags = managed.dwInfoFlags,
             hBalloonIcon = managed.hBalloonIcon,
         };
@@ -486,8 +497,8 @@ internal static class NotifyIconDataMarshaller
             dwState = unmanaged.dwState,
             dwStateMask = unmanaged.dwStateMask,
             szInfo = new string(unmanaged.szInfo),
-            uTimeout = unmanaged.uTimeout,
-            uVersion = unmanaged.uVersion,
+            uTimeout = unmanaged.timeVersion.uTimeout,
+            uVersion = unmanaged.timeVersion.uVersion,
             szInfoTitle = new string(unmanaged.szInfoTitle),
             dwInfoFlags = unmanaged.dwInfoFlags,
             guidItem = new Guid(guid),

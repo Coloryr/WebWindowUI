@@ -369,12 +369,9 @@ public class WebView2ModelBridgeTests
                 await WebView2TestHarness.WaitJsAsync(demoWindow, "window.__model.trayVisible === true", "创建托盘→trayVisible true");
                 await WebView2TestHarness.WaitJsAsync(demoWindow, "window.__model.lastEvent.includes('托盘已创建')", "创建托盘→LastEvent");
 
-                // 隐藏托盘（toggle-tray）→ TrayVisible=false（按钮文本含插值空白，须 trim）
+                // 隐藏托盘（toggle-tray）→ TrayVisible=false（按钮文本含插值空白，须 trim；
+                // 默认值 false 的增量推送靠 descriptor field_presence=EXPLICIT 保留 own property）
                 await demoWindow.ExecuteScriptAsync("(function(){var b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='隐藏托盘'); if(b) b.click(); return b?1:0;})(); 0");
-                await Task.Delay(2000);
-                string dump = await demoWindow.ExecuteScriptAsync(
-                    "JSON.stringify({trayVisible: window.__model.trayVisible, lastEvent: window.__model.lastEvent})");
-                Assert.Fail($"DIAG after toggle-click: {dump}");
                 await WebView2TestHarness.WaitJsAsync(demoWindow, "window.__model.trayVisible === false", "隐藏托盘→trayVisible false");
 
                 // 复制（剪贴板内容为空）→ LastEvent 提示

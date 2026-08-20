@@ -730,6 +730,14 @@ public static class ModelProtoGenerator
             if (f.IsRepeated)
                 entry["rule"] = "repeated";
             entry["type"] = f.ProtoType == "ModelValue" ? "webwindowui.model.ModelValue" : f.ProtoType;
+            // 标量字段显式 presence：protobufjs 对 proto3 默认值（false/0/""）解码时丢弃 own property，
+            // 桥 hasOwnProperty/undefined 判空会漏过默认值字段（增量「改成默认值」不收敛）。EXPLICIT 让
+            // 线上字段值即使等于默认值也保留 own property，与 .NET 侧可空 DTO 的 presence 语义对齐。
+            if (!f.IsRepeated)
+                entry["options"] = new Dictionary<string, object?>
+                {
+                    ["features"] = new Dictionary<string, object?> { ["field_presence"] = "EXPLICIT" },
+                };
             fieldJson[f.WireName] = entry;
         }
         return new Dictionary<string, object?> { ["fields"] = fieldJson };
@@ -747,6 +755,12 @@ public static class ModelProtoGenerator
             {
                 ["id"] = f.Number,
                 ["type"] = f.UpdProtoType == "ModelValue" ? "webwindowui.model.ModelValue" : f.UpdProtoType,
+                // 增量字段显式 presence（同 BuildMessageFields）：默认值字段即使等于 false/0/"" 也保留 own
+                // property，桥 updateEntries 的 hasOwnProperty 判空不会漏过「改成默认值」的增量更新。
+                ["options"] = new Dictionary<string, object?>
+                {
+                    ["features"] = new Dictionary<string, object?> { ["field_presence"] = "EXPLICIT" },
+                },
             };
         }
         return new Dictionary<string, object?> { ["fields"] = updFieldJson };
