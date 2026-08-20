@@ -18,6 +18,10 @@ public record WebWindowOptions
     /// </summary>
     public string WindowPath;
     /// <summary>
+    /// 附加到首页 URL 的 query（如 "model=settings"；null/空则不加）
+    /// </summary>
+    public string? Query;
+    /// <summary>
     /// 窗口启动宽度
     /// </summary>
     public int Width = 1280;

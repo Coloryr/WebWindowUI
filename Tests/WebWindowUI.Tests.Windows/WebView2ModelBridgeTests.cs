@@ -210,7 +210,7 @@ public class WebView2ModelBridgeTests
             await win.ExecuteScriptAsync("window.__model.request = 'todos'; 0");
             await WebView2TestHarness.WaitDotNetAsync(() => model.Request == "todos", ".NET Request 被前端回写");
 
-            // 再次点击同一按钮（值未变）不触发 watch —— 这就是 LauncherWindow 开窗后清空 Request 的原因
+            // 再次点击同一按钮（值未变）不触发 watch —— 值相同前端不重发，Request 保持 "todos"
         }, Timeout);
     }
 
@@ -240,6 +240,152 @@ public class WebView2ModelBridgeTests
             await win.ExecuteScriptAsync("window.__model.commandWithArg('todos'); 0");
             await WebView2TestHarness.WaitDotNetAsync(() => opened == "todos", "带参命令触发 .NET");
         }, Timeout);
+    }
+
+    [Fact]
+    public async Task DemoWindow_MultiModelHost_RoutesRegisteredInstance_WhenNotCurrent()
+    {
+        var demo = new DemoModel();
+        string? switched = null;
+        demo.SwitchRequested += name => switched = name; // 路由目标：已注册、非当前实例
+
+        await WebView2TestHarness.RunWindowAsync("demo", "综合演示", demo, async win =>
+        {
+            // 综合页测试模式 ?model=demo：绑定 DemoModel 并捕获注入实例 id
+            await WebView2TestHarness.WaitJsAsync(win, "window.__model.switchModel !== undefined", "demo 命令就绪");
+
+            // 关键：注册实例 + 当前 Model 置空（置空不推快照 → 桥保持 demo 实例 id 不变）
+            win.Window.RegisterModel(demo);
+            win.Model = null;
+
+            // switchModel invoke 带 demo 实例 id（已注册但不再是当前 Model）→ 必须经 _routedModels 路由回 demo，
+            // 否则实例守卫会把它当旧实例在途消息丢弃 → tab 切换机制失效（合并窗口最高风险链路）
+            await win.ExecuteScriptAsync("window.__model.switchModel('todos'); 0");
+            await WebView2TestHarness.WaitDotNetAsync(() => switched == "todos", "已注册非当前实例命令经路由执行");
+        }, Timeout);
+    }
+
+    [Fact]
+    public async Task DemoPage_ManualMode_TabBar_CommandsRouteAndShowModelData()
+    {
+        // 人工模式（无 ?model query）：demoModel 绑定后须先捕获 .NET 实例 id 再切首页。
+        // 若同步 init 立刻重绑覆盖 demoModel 的 onReceive → 其 invoke 不带实例 id →
+        // tab 切换 / openMulti 命令路由到当前模型而非 demo 实例（合并窗口用户报告「多窗口和
+        // 平台特性用不了、嵌套窗口打不开」的根因）。本测试驱动真实 tab 栏验证路由。
+        var demo = new DemoModel();
+        var launcher = new LauncherModel();
+        var platform = new PlatformModel();
+        var multi = new MultiWindowModel("共享实例");
+
+        await StaThreadPump.Instance.RunAsync(async () =>
+        {
+            var win = new TestWindow("demo", "综合演示"); // 无 selector → 人工模式
+            try
+            {
+                win.Model = demo; // 当前模型 = demo，首张快照携带 demo 实例 id
+                win.Window.RegisterModel(demo);
+                win.Window.RegisterModel(launcher);
+                win.Window.RegisterModel(platform);
+                win.Window.RegisterModel(multi);
+
+                demo.SwitchRequested += name =>
+                {
+                    switch (name)
+                    {
+                        case "launcher": win.Model = launcher; break;
+                        case "platform": win.Model = platform; break;
+                        case "multi": win.Model = multi; break;
+                    }
+                };
+                bool multiOpened = false;
+                demo.MultiRequested += () => multiOpened = true;
+
+                var nav = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                win.Loaded += (_, _) => nav.TrySetResult(true);
+                win.Show();
+                await nav.Task.WaitAsync(Timeout);
+
+                await WebView2TestHarness.WaitJsAsync(win, "typeof window.__model === 'object'", "桥接就绪");
+                // 目录 tab 就绪（= demoModel 已捕获实例 id 后 switchTo('launcher') 完成）
+                await WebView2TestHarness.WaitJsAsync(win, "typeof window.__model.request === 'string'", "目录 tab 就绪");
+
+                // 关键断言：tab 栏切「平台特性」→ switchModel 带 demo 实例 id 路由到 demo →
+                // win.Model=platform → 快照 → 前端显示 .NET 实例默认数据（路由正确；否则空快照）
+                await win.ExecuteScriptAsync("[...document.querySelectorAll('.tab')].find(b => b.textContent === '平台特性').click(); 0");
+                await WebView2TestHarness.WaitJsAsync(win,
+                    "window.__model.notificationText === '来自 WebWindowUI 的系统通知'",
+                    "tab 栏切平台特性显示 .NET 实例数据");
+
+                // 平台命令（platformAction）路由到已注册实例执行
+                string? platformAction = null;
+                platform.PlatformRequested += a => platformAction = a;
+                await win.ExecuteScriptAsync("window.__model.platformAction('notify'); 0");
+                await WebView2TestHarness.WaitDotNetAsync(() => platformAction == "notify", "平台命令路由执行");
+
+                // 切「多窗口」→ 共享实例数据到达（tab 栏路由再次验证）
+                await win.ExecuteScriptAsync("[...document.querySelectorAll('.tab')].find(b => b.textContent === '多窗口').click(); 0");
+                await WebView2TestHarness.WaitJsAsync(win,
+                    "window.__model.instanceId === '共享实例'",
+                    "多窗口 tab 显示共享实例数据");
+
+                // openMulti 命令（demoModel 非当前绑定实例）→ 路由到 demo 实例
+                await win.ExecuteScriptAsync("[...document.querySelectorAll('button')].find(b => b.textContent.includes('打开多窗口共享演示')).click(); 0");
+                await WebView2TestHarness.WaitDotNetAsync(() => multiOpened, "openMulti 路由到 demo 实例");
+            }
+            finally
+            {
+                win.Close();
+            }
+        });
+    }
+
+    [Fact]
+    public async Task DemoWindow_PlatformActions_Execute()
+    {
+        // 真实 DemoWindow（headless）端到端：平台 tab 按钮 → platformAction 命令路由到
+        // _platformModel → OnPlatformAction 执行真实 IPlatform 调用 → 状态属性增量推送前端。
+        // 从 JS 断言 trayVisible / lastEvent，证明「创建托盘/隐藏托盘/复制」整条链在真实控制器里可用
+        // （用户报告平台特性全断：旧窗口的托盘/对话框按钮在合并后由本 tab 承接，路由修复后仍须验证执行）。
+        await StaThreadPump.Instance.RunAsync(async () =>
+        {
+            var demo = new DemoWindow(headless: true);
+            try
+            {
+                var demoWindow = demo.Window;
+                var nav = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                demoWindow.Loaded += (_, _) => nav.TrySetResult(true);
+                demoWindow.Show();
+                await nav.Task.WaitAsync(Timeout);
+
+                await WebView2TestHarness.WaitJsAsync(demoWindow, "typeof window.__model === 'object'", "桥接就绪");
+                await WebView2TestHarness.WaitJsAsync(demoWindow, "typeof window.__model.request === 'string'", "目录 tab 就绪");
+
+                // 平台 tab（真实人工模式路由）
+                await demoWindow.ExecuteScriptAsync("[...document.querySelectorAll('.tab')].find(b => b.textContent === '平台特性').click(); 0");
+                await WebView2TestHarness.WaitJsAsync(demoWindow, "window.__model.trayVisible === false", "平台 tab 就绪");
+
+                // 创建托盘 → OnPlatformAction('create-tray') → CreateTray → TrayVisible=true + LastEvent 回推
+                await demoWindow.ExecuteScriptAsync("[...document.querySelectorAll('button')].find(b => b.textContent === '创建托盘').click(); 0");
+                await WebView2TestHarness.WaitJsAsync(demoWindow, "window.__model.trayVisible === true", "创建托盘→trayVisible true");
+                await WebView2TestHarness.WaitJsAsync(demoWindow, "window.__model.lastEvent.includes('托盘已创建')", "创建托盘→LastEvent");
+
+                // 隐藏托盘（toggle-tray）→ TrayVisible=false（按钮文本含插值空白，须 trim）
+                await demoWindow.ExecuteScriptAsync("(function(){var b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='隐藏托盘'); if(b) b.click(); return b?1:0;})(); 0");
+                await Task.Delay(2000);
+                string dump = await demoWindow.ExecuteScriptAsync(
+                    "JSON.stringify({trayVisible: window.__model.trayVisible, lastEvent: window.__model.lastEvent})");
+                Assert.Fail($"DIAG after toggle-click: {dump}");
+                await WebView2TestHarness.WaitJsAsync(demoWindow, "window.__model.trayVisible === false", "隐藏托盘→trayVisible false");
+
+                // 复制（剪贴板内容为空）→ LastEvent 提示
+                await demoWindow.ExecuteScriptAsync("[...document.querySelectorAll('button')].find(b => b.textContent === '复制到剪贴板').click(); 0");
+                await WebView2TestHarness.WaitJsAsync(demoWindow, "window.__model.lastEvent.includes('剪贴板：内容为空')", "复制空内容→LastEvent");
+            }
+            finally
+            {
+                demo.Window.Close(null);
+            }
+        });
     }
 
     [Fact]

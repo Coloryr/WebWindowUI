@@ -235,7 +235,7 @@ public sealed class MacOSWindow : WebWindow
             {
                 _nativeWindow.Show();
             }
-            var url = WebWindowResource.GetWindowIndexUrl(Options.WindowPath);
+            var url = WebWindowResource.GetWindowIndexUrl(Options.WindowPath, Options.Query);
             WebWindowLog.Debug($"macos show {url}");
             _webView.LoadRequest(NSUrlRequest.FromUrl(NSUrl.FromString(url)!));
         });

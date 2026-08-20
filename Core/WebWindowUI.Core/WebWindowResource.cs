@@ -28,13 +28,15 @@ public static class WebWindowResource
     }
 
     /// <summary>
-    /// 获取窗口页面路径
+    /// 获取窗口页面路径（可选 query 附加到 URL，测试经 ?model= 直达指定模型绑定）
     /// </summary>
     /// <param name="path">窗口路径</param>
+    /// <param name="query">附加 query（如 "model=settings"）；null/空则不加</param>
     /// <returns>页面路径</returns>
-    public static string GetWindowIndexUrl(string path)
+    public static string GetWindowIndexUrl(string path, string? query = null)
     {
-        return $"{Scheme}://localhost/window/{path}/{DefaultDocument}";
+        var url = $"{Scheme}://localhost/window/{path}/{DefaultDocument}";
+        return string.IsNullOrEmpty(query) ? url : $"{url}?{query}";
     }
 
     /// <summary>

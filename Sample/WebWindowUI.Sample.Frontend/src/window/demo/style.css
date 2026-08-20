@@ -1,0 +1,412 @@
+:root {
+  --bg: #f3f5f9;
+  --card: #ffffff;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --border: #e5e7eb;
+  --code-bg: #f9fafb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.shell {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.logo {
+  width: 56px;
+  height: 56px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.subtitle code,
+p code {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.9em;
+}
+
+/* tab 栏（人工模式） */
+.tabs {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 0 12px;
+  background: var(--bg);
+}
+
+.tab {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tab:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.tab.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.card h2 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+
+.card p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.badge {
+  margin-left: 8px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+}
+
+.badge.done {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.btn {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  background: var(--primary-dark);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+  margin-top: 10px;
+}
+
+.row:first-of-type {
+  border-top: none;
+  margin-top: 0;
+}
+
+.row strong,
+.row code {
+  font-family: Consolas, "Courier New", monospace;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.input {
+  font: inherit;
+  width: 60%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.select {
+  font: inherit;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+}
+
+input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+}
+
+.code {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 0;
+  overflow-x: auto;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 70%;
+  word-break: break-all;
+}
+
+/* 目录（launcher）网格 */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.item {
+  font: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.item:hover {
+  border-color: var(--primary);
+  background: var(--code-bg);
+}
+
+.item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: var(--border);
+  background: var(--card);
+}
+
+.item strong {
+  font-size: 14px;
+  color: var(--primary-dark);
+}
+
+.item span {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  font-weight: 600;
+  color: var(--primary-dark);
+  cursor: pointer;
+}
+
+/* 待办列表 */
+.todo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.todo-row:first-of-type {
+  border-top: none;
+}
+
+.todo-row .input {
+  flex: 1;
+  width: auto;
+}
+
+.todo-check {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* 关于 */
+.info {
+  margin: 0;
+  font-size: 14px;
+}
+
+.info dt {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.info dt:first-child {
+  margin-top: 0;
+}
+
+.info dd {
+  margin: 2px 0 0;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+}
+
+/* 列表嵌套：元素卡片 */
+.item-card {
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+}
+
+.item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.item-sub {
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+.tags {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: 12px;
+}
+
+.item-actions {
+  margin-top: 8px;
+}
+
+.count-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+/* 平台特性 */
+.field {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.field input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--code-bg);
+  color: var(--text);
+}
+
+.hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.event {
+  margin: 0;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 14px;
+  color: var(--primary);
+}

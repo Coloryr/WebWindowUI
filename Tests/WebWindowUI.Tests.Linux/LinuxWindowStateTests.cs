@@ -21,7 +21,7 @@ public class LinuxWindowStateTests
     [Fact]
     public async Task WindowState_Defaults_AllEnabled()
     {
-        await WebKitTestHarness.RunWindowAsync("main", "窗口状态", async win =>
+        await WebKitTestHarness.RunWindowAsync("demo", "窗口状态", async win =>
         {
             Assert.True(win.Window.CanResize);
             Assert.True(win.Window.CanMinimize);
@@ -36,7 +36,7 @@ public class LinuxWindowStateTests
     [Fact]
     public async Task CanMinimize_CanMaximize_RoundTrip()
     {
-        await WebKitTestHarness.RunWindowAsync("main", "窗口状态", async win =>
+        await WebKitTestHarness.RunWindowAsync("demo", "窗口状态", async win =>
         {
             win.Window.CanMinimize = false;
             win.Window.CanMaximize = false;
@@ -56,7 +56,7 @@ public class LinuxWindowStateTests
     [Fact]
     public async Task CanResize_RoundTrip()
     {
-        await WebKitTestHarness.RunWindowAsync("main", "窗口状态", async win =>
+        await WebKitTestHarness.RunWindowAsync("demo", "窗口状态", async win =>
         {
             win.Window.CanResize = false;
             Assert.False(win.Window.CanResize);
@@ -76,7 +76,7 @@ public class LinuxWindowStateTests
         Assert.NotNull(iconStream);
         var icon = WindowIcon.FromStream(iconStream);
 
-        await WebKitTestHarness.RunWindowAsync("main", "窗口状态", async win =>
+        await WebKitTestHarness.RunWindowAsync("demo", "窗口状态", async win =>
         {
             win.Window.SetIcon(icon);
             // 二次设置同一实例：SetIcon 内部 Seek(0) 重置流位置，否则第二次解码空文件
@@ -91,7 +91,7 @@ public class LinuxWindowStateTests
     [Fact]
     public async Task SetIcon_Null_NoThrow()
     {
-        await WebKitTestHarness.RunWindowAsync("main", "窗口状态", async win =>
+        await WebKitTestHarness.RunWindowAsync("demo", "窗口状态", async win =>
         {
             win.Window.SetIcon(null);
         }, Timeout);
@@ -105,7 +105,7 @@ public class LinuxWindowStateTests
     {
         var icon = WindowIcon.FromStream(new MemoryStream(new byte[] { 1, 2, 3, 4, 5 }));
 
-        await WebKitTestHarness.RunWindowAsync("main", "窗口状态", async win =>
+        await WebKitTestHarness.RunWindowAsync("demo", "窗口状态", async win =>
         {
             win.Window.SetIcon(icon);
             Assert.True(icon.Stream.Position > 0, "SetIcon 应读取图标流（临时文件已写入）");

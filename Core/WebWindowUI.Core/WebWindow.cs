@@ -156,6 +156,18 @@ public abstract class WebWindow
         => SystemDecorationsChange?.Invoke(this, decorations);
 
     /// <summary>
+    /// 多模型宿主窗口的已注册模型（按实例 id 路由前端消息；普通单模型窗口为空）。
+    /// </summary>
+    private readonly Dictionary<long, WebWindowModel> _routedModels = [];
+
+    /// <summary>
+    /// 注册一个可路由模型实例：宿主多个模型的窗口（如 Sample 综合演示窗口）注册全部实例，
+    /// 使非当前绑定实例的在途消息也能正确路由；单模型窗口无需调用。控制器模式（非继承）窗口经此公开。
+    /// </summary>
+    /// <param name="model">要注册的模型实例。</param>
+    public void RegisterModel(WebWindowModel model) => _routedModels[model.ModelInstanceId] = model;
+
+    /// <summary>
     /// 处理前端 postMessage 回传的 protobuf 消息（Ready/Set/Invoke 分派）。
     /// </summary>
     /// <param name="bytes">前端回传的 protobuf 字节。</param>
@@ -167,38 +179,58 @@ public abstract class WebWindow
             if (msg is null)
                 return;
 
-            // 实例守卫：前端消息必须来自当前绑定实例（0 = 未携带，容忍），防旧实例在途消息串写。
-            if (msg.ModelInstanceId != 0 && Model is not null && msg.ModelInstanceId != Model.ModelInstanceId)
-                return;
-
-            // 前端桥接就绪：补发初始快照（防快照早于监听器到达而丢失）
-            if (msg.Ready is not null && Model is not null)
+            // 实例守卫 + 路由：消息携带的实例 id 命中注册表 → 路由到该模型；未命中注册表则
+            // 必须与当前绑定实例一致（0 = 旧桥未携带，容忍），防旧实例在途消息串写。
+            if (msg.ModelInstanceId != 0)
             {
-                PostMessage(Model.BuildSnapshotEnvelope());
-                return;
+                if (_routedModels.TryGetValue(msg.ModelInstanceId, out WebWindowModel? routed))
+                {
+                    Dispatch(routed, msg);
+                    return;
+                }
+                if (Model is not null && msg.ModelInstanceId != Model.ModelInstanceId)
+                    return;
             }
 
-            // 前端双向绑定回写：ModelSet。ElementProperty 非空 = 元素级写回（按 ModelInstanceId 定位元素，保实例）。
-            if (msg.Set is not null && Model is { } model)
-            {
-                if (string.IsNullOrEmpty(msg.Set.ElementProperty))
-                {
-                    if (model.TrySetProperty(msg.Set.Property, msg.Set.Value))
-                        model.BroadcastPropertyUpdate(msg.Set.Property, PostMessage);
-                }
-                else if (model.TrySetElementProperty(msg.Set.Property, msg.Set.ElementInstanceId, msg.Set.ElementProperty, msg.Set.Value))
-                {
-                    model.BroadcastElementUpdate(msg.Set.Property, msg.Set.ElementInstanceId, msg.Set.ElementProperty, PostMessage);
-                }
-            }
-
-            // 前端命令调用：ModelInvoke，执行模型上的 ICommand（[RelayCommand] 源生成）。
-            if (msg.Invoke is not null && Model is { } model1)
-                model1.TryInvokeCommand(msg.Invoke.CommandId, msg.Invoke.Value);
+            if (Model is { } current)
+                Dispatch(current, msg);
         }
         catch
         {
             // 无法解析或未知消息，忽略
         }
+    }
+
+    /// <summary>
+    /// 把前端消息分派到指定模型（Ready 补快照 / Set 双向回写 / Invoke 命令）。
+    /// </summary>
+    /// <param name="model">目标模型。</param>
+    /// <param name="msg">解码后的前端消息。</param>
+    private void Dispatch(WebWindowModel model, WebMessage msg)
+    {
+        // 前端桥接就绪：补发初始快照（防快照早于监听器到达而丢失）
+        if (msg.Ready is not null)
+        {
+            PostMessage(model.BuildSnapshotEnvelope());
+            return;
+        }
+
+        // 前端双向绑定回写：ModelSet。ElementProperty 非空 = 元素级写回（按 ModelInstanceId 定位元素，保实例）。
+        if (msg.Set is not null)
+        {
+            if (string.IsNullOrEmpty(msg.Set.ElementProperty))
+            {
+                if (model.TrySetProperty(msg.Set.Property, msg.Set.Value))
+                    model.BroadcastPropertyUpdate(msg.Set.Property, PostMessage);
+            }
+            else if (model.TrySetElementProperty(msg.Set.Property, msg.Set.ElementInstanceId, msg.Set.ElementProperty, msg.Set.Value))
+            {
+                model.BroadcastElementUpdate(msg.Set.Property, msg.Set.ElementInstanceId, msg.Set.ElementProperty, PostMessage);
+            }
+        }
+
+        // 前端命令调用：ModelInvoke，执行模型上的 ICommand（[RelayCommand] 源生成）。
+        if (msg.Invoke is not null)
+            model.TryInvokeCommand(msg.Invoke.CommandId, msg.Invoke.Value);
     }
 }

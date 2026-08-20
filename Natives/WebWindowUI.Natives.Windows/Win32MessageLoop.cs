@@ -22,10 +22,17 @@ public class Win32MessageLoop : IMessageLoop
     }
 
     /// <summary>
+    /// 注册窗口类（进程级单例；多 WindowsPlatform 构造（应用 bootstrap + 测试泵）只注册一次，二次直接返回）。
+    /// </summary>
+    private static bool _windowClassRegistered;
+
+    /// <summary>
     /// 注册窗口类。
     /// </summary>
     private static void InitWindowClass()
     {
+        if (_windowClassRegistered)
+            return;
         var wc = new WNDCLASSEXW
         {
             style = Win32.CS_HREDRAW | Win32.CS_VREDRAW,
@@ -39,6 +46,7 @@ public class Win32MessageLoop : IMessageLoop
         };
         if (Win32.RegisterClassExW(ref wc) == 0)
             throw new Win32Exception(Marshal.GetLastWin32Error(), "注册窗口类失败 (RegisterClassExW)");
+        _windowClassRegistered = true;
     }
 
     private static IntPtr? HandleMarshalMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam)

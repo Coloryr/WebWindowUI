@@ -7,8 +7,8 @@ namespace WebWindowUI.Natives.Linux;
 /// <summary>
 /// Linux 系统托盘图标：GtkStatusIcon + GtkMenu 菜单树。左键单击（activate 信号，带单击/双击
 /// 间隔判定，双击窗口内被二次 activate 消费）、右键（popup-menu 信号，上报后弹菜单）；气泡通知
-/// 经 <see cref="LinuxNotification"/>（libnotify）。GtkStatusIcon 无中键信号，Middle 不上报。
-/// GTK 非线程安全，所有调用须在主线程。
+/// 经 <see cref="LinuxNotification"/>（libnotify）。GtkStatusIcon 无中键信号，Middle 不上报；
+/// 多数桌面环境把双击合并为一次 activate（双击判定不命中、只报单击）。GTK 非线程安全，所有调用须在主线程。
 /// </summary>
 public sealed class LinuxTrayIcon : ITrayIcon
 {
@@ -49,7 +49,8 @@ public sealed class LinuxTrayIcon : ITrayIcon
     public event Action<TrayClickEvent>? Click;
 
     /// <summary>
-    /// 双击（左键，两次 activate 间隔小于 <see cref="DoubleClickWindowMs"/>）。
+    /// 双击（左键，两次 activate 间隔小于 <see cref="DoubleClickWindowMs"/>；GtkStatusIcon
+    /// 多数桌面合并双击为一次 activate，此时不触发）。
     /// </summary>
     public event Action<TrayClickEvent>? DoubleClick;
 

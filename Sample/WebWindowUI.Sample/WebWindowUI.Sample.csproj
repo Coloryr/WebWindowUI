@@ -16,4 +16,10 @@
     <ProjectReference Include="..\WebWindowUI.Sample.Frontend\WebWindowUI.Sample.Frontend.csproj" />
     <ProjectReference Include="..\..\Core\WebWindowUI\WebWindowUI.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WebWindowUI.Tests.Windows" />
+    <InternalsVisibleTo Include="WebWindowUI.Tests.Linux" />
+    <InternalsVisibleTo Include="WebWindowUI.Tests.Macos" />
+  </ItemGroup>
 </Project>

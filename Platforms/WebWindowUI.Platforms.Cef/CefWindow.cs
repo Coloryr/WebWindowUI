@@ -49,7 +49,7 @@ public sealed class CefWindow : WebWindow
         _nativeWindow = new Win32NativeWindow(options);
 
         // 浏览器托管：隐藏宿主创建浏览器 → OnAfterCreated 重挂载进本窗口并导航初始 URL。
-        _hosting = new CefBrowserHosting(WebWindowResource.GetWindowIndexUrl(Options.WindowPath));
+        _hosting = new CefBrowserHosting(WebWindowResource.GetWindowIndexUrl(Options.WindowPath, Options.Query));
         _hosting.Initialized += OnBrowserInitialized;
         _hosting.BrowserClosed += OnBrowserClosed;
         _hosting.LoadEnd += OnLoadEnd;

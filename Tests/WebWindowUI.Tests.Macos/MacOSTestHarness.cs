@@ -27,14 +27,15 @@ internal sealed class TestWindow
     /// </summary>
     public event EventHandler? Loaded;
 
-    public TestWindow(string windowPath, string title)
+    public TestWindow(string windowPath, string title, string? modelSelector = null)
     {
         Window = WebWindowPlatform.Current.CreateWindow(new WebWindowOptions(windowPath)
         {
             Title = title,
             Headless = true,
             Width = 720,
-            Height = 480
+            Height = 480,
+            Query = modelSelector is null ? null : $"model={modelSelector}"
         });
         Window.Loaded += (_, _) => Loaded?.Invoke(this, EventArgs.Empty);
     }
@@ -70,7 +71,9 @@ internal static class MacOSTestHarness
     public static async Task RunWindowAsync(string windowPath, string title, WebWindowModel model, Func<TestWindow, Task> body, TimeSpan? timeout = null)
     {
         TimeSpan t = timeout ?? TimeSpan.FromSeconds(60);
-        var win = new TestWindow(windowPath, title);
+        string? selector = ModelSelector(model);
+        string path = selector is null ? windowPath : "demo"; // 已删独立页 → 综合演示窗口 test 模式（?model=）直达
+        var win = new TestWindow(path, title, selector);
         try
         {
             win.Model = model; // 必须在 Show() 前设置，快照才含初始值
@@ -102,8 +105,10 @@ internal static class MacOSTestHarness
         where T : WebWindowModel
     {
         TimeSpan t = timeout ?? TimeSpan.FromSeconds(60);
-        var winA = new TestWindow(windowPath, titleA);
-        var winB = new TestWindow(windowPath, titleB);
+        string? selector = ModelSelector(model);
+        string path = selector is null ? windowPath : "demo"; // 已删独立页 → 综合演示窗口 test 模式（?model=）直达
+        var winA = new TestWindow(path, titleA, selector);
+        var winB = new TestWindow(path, titleB, selector);
         try
         {
             winA.Model = model;
@@ -130,6 +135,24 @@ internal static class MacOSTestHarness
             winB.Close();
         }
     }
+
+    /// <summary>
+    /// 模型实例 → 综合演示页 query 选择器：独立页面已删除的模型映射到 demo?model=&lt;选择器&gt; 直达；
+    /// 仍保留真实子窗口页面的模型（multi / nested-detail / nested-list-item）返回 null 维持原路径。
+    /// </summary>
+    /// <param name="model">注入窗口的模型实例。</param>
+    /// <returns>query 选择器；无对应综合页 tab 返回 null。</returns>
+    private static string? ModelSelector(WebWindowModel model) => model switch
+    {
+        MainWindowModel => "main",
+        TodoListModel => "todos",
+        SettingsModel => "settings",
+        LauncherModel => "launcher",
+        DemoModel => "demo",
+        NestedParentModel => "nested",
+        NestedListModel => "nested-list",
+        _ => null,
+    };
 
     /// <summary>
     /// 轮询直到页面脚本桥接（window.__model）就绪。ExecuteScriptAsync 在 macOS 包一层 JSON.stringify：

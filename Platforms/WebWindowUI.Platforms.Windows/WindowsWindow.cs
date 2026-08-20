@@ -396,7 +396,7 @@ public sealed class WindowsWindow : WebWindow
 
             var core = _controller.CoreWebView2;
 
-            core.Navigate(WebWindowResource.GetWindowIndexUrl(Options.WindowPath));
+            core.Navigate(WebWindowResource.GetWindowIndexUrl(Options.WindowPath, Options.Query));
 
             // Model 双向绑定通道：页面就绪通知 + JS 回传消息
             core.NavigationCompleted += (_, _) =>

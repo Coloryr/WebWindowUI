@@ -944,6 +944,9 @@ internal static partial class GtkNative
     [LibraryImport(GLibLib, EntryPoint = "g_timeout_add")]
     private static partial uint g_timeout_add(uint interval, GSourceFunc callback, IntPtr data);
 
+    [LibraryImport(GLibLib, EntryPoint = "g_idle_add")]
+    private static partial uint g_idle_add(GSourceFunc callback, IntPtr data);
+
     [LibraryImport(GLibLib, EntryPoint = "g_source_remove")]
     [return: MarshalAs(UnmanagedType.I4)]
     private static partial bool g_source_remove(uint tag);
@@ -1039,6 +1042,12 @@ internal static partial class GtkNative
     /// </summary>
     public static uint AddTimeout(uint intervalMs, GSourceFunc callback, IntPtr data)
         => g_timeout_add(intervalMs, callback, data);
+
+    /// <summary>
+    /// 调度回调到主循环空闲时执行（跨线程 marshal GTK 调用用）。回调返回 0 一次性。
+    /// </summary>
+    public static uint AddIdle(GSourceFunc callback, IntPtr data)
+        => g_idle_add(callback, data);
 
     /// <summary>
     /// 取消已调度的延迟回调。

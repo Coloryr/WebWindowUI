@@ -222,7 +222,7 @@ internal static class MacOSBridgeSuite
             await win.ExecuteScriptAsync("window.__model.request = 'todos'");
             await MacOSTestHarness.WaitDotNetAsync(() => model.Request == "todos", ".NET Request 被前端回写");
 
-            // 再次点击同一按钮（值未变）不触发 watch —— 这就是 LauncherWindow 开窗后清空 Request 的原因
+            // 再次点击同一按钮（值未变）不触发 watch —— 值相同前端不重发，Request 保持 "todos"
         }, Timeout);
     }
 

@@ -183,8 +183,7 @@ public sealed class LinuxPlatform : IPlatform
     public IClipboard Clipboard => LinuxClipboard.Clipboard;
 
     /// <summary>
-    /// 平台系统通知（Linux 通知服务未实现，抛异常明示）。
+    /// 平台系统通知（libnotify 实现，.so.7/.so.4 自动探测，不可用时静默跳过）。
     /// </summary>
-    public INotification Notification
-        => throw new NotSupportedException("Linux 平台暂不支持系统通知（libnotify 未实现）。");
+    public INotification Notification => LinuxNotification.Instance;
 }

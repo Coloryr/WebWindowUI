@@ -242,7 +242,7 @@ public sealed class LinuxWindow : WebWindow
         {
             if (!Options.Headless)
                 _window.Show();
-            WebKit2Native.LoadUri(_webView, WebWindowResource.GetWindowIndexUrl(Options.WindowPath));
+            WebKit2Native.LoadUri(_webView, WebWindowResource.GetWindowIndexUrl(Options.WindowPath, Options.Query));
         });
     }
 

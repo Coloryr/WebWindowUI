@@ -12,8 +12,9 @@ internal static class Program
 
         WebWindowResource.RegisterCustomRoute("bin", new DataProvider());
 
-        LauncherWindow launcher = new();
-        launcher.Window.Show();
+        // 主窗口 = 综合演示窗口（无独立入口，应用启动直接进 demo）
+        DemoWindow demo = new();
+        demo.Window.Show();
 
         WebWindowUIPlatform.Run();
     }

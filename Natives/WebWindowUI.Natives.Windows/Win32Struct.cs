@@ -443,17 +443,17 @@ internal static class NotifyIconDataMarshaller
             hBalloonIcon = managed.hBalloonIcon,
         };
 
-        var temp = managed.szTip.ToCharArray();
+        var temp = managed.szTip == null ? [] : managed.szTip.ToCharArray();
         for (int i = 0; i < Math.Min(temp.Length, 128); i++)
         { 
             native.szTip[i] = temp[i];
         }
-        temp = managed.szInfo.ToCharArray();
+        temp = managed.szInfo == null ? [] : managed.szInfo.ToCharArray();
         for (int i = 0; i < Math.Min(temp.Length, 256); i++)
         {
             native.szInfo[i] = temp[i];
         }
-        temp = managed.szInfoTitle.ToCharArray();
+        temp = managed.szInfoTitle == null ? [] : managed.szInfoTitle.ToCharArray();
         for (int i = 0; i < Math.Min(temp.Length, 64); i++)
         {
             native.szInfoTitle[i] = temp[i];
